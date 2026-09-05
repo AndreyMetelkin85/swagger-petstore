@@ -1,12 +1,28 @@
+FROM maven:3.9-eclipse-temurin-17-alpine AS build
+
+WORKDIR /build
+
+COPY pom.xml ./
+COPY inflector.yaml ./
+COPY src ./src
+RUN --mount=type=cache,target=/root/.m2 mvn -B clean package
+
 FROM eclipse-temurin:8-jre-alpine
 
-WORKDIR /swagger-petstore
+RUN addgroup -S petstore && adduser -S petstore -G petstore
+WORKDIR /app
 
-COPY target/lib/jetty-runner.jar /swagger-petstore/jetty-runner.jar
-COPY target/*.war /swagger-petstore/server.war
-COPY src/main/resources/openapi.yaml /swagger-petstore/openapi.yaml
-COPY inflector.yaml /swagger-petstore/
+COPY --from=build /build/target/lib/jetty-runner.jar ./jetty-runner.jar
+COPY --from=build /build/target/*.war ./server.war
+COPY --from=build /build/src/main/resources/openapi.yaml ./openapi.yaml
+COPY --from=build /build/inflector.yaml ./inflector.yaml
+
+ENV PETSTORE_TOKEN_SECRET=local-petstore-secret-change-me
 
 EXPOSE 8080
+USER petstore
 
-CMD ["java", "-jar", "-DswaggerUrl=openapi.yaml", "/swagger-petstore/jetty-runner.jar", "--log", "/var/log/yyyy_mm_dd-requests.log", "/swagger-petstore/server.war"]
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
+  CMD wget -q -O - http://localhost:8080/api/v3/health >/dev/null || exit 1
+
+CMD ["java", "-Dconfig=/app/inflector.yaml", "-DswaggerUrl=/app/openapi.yaml", "-jar", "/app/jetty-runner.jar", "/app/server.war"]

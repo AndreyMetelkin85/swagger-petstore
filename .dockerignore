@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.vscode
+target
+*.iml
+*.log
+.pytest_cache
+__pycache__
+.venv
+tests
+CI
+Dockerfile-telemetry

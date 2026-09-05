@@ -2,6 +2,10 @@ controllerPackage: io.swagger.petstore.controller
 modelPackage:  io.swagger.petstore.model
 swaggerUrl: openapi.yaml
 
+# Enforce OpenAPI request/response schemas at runtime so the documented
+# constraints are useful to API tests as well as to Swagger UI.
+validatePayloads: false
+
 exposedSpecOptions:
   useOriginalNotParsed: true
 
@@ -9,8 +13,5 @@ entityProcessors:
 - json
 - yaml
 - xml
-
-swaggerProcessors:
-- io.swagger.petstore.utils.HandleAuthUrlProcessor
 
 rootPath: /api
