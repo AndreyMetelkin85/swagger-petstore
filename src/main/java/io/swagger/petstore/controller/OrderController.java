@@ -5,9 +5,12 @@ import io.swagger.oas.inflector.models.ResponseContext;
 import io.swagger.petstore.data.OrderData;
 import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.Order;
+import io.swagger.petstore.model.OrderCreateRequest;
+import io.swagger.petstore.model.OrderStatus;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.service.AuthResult;
 import io.swagger.petstore.service.AuthService;
+import io.swagger.petstore.service.OrderException;
 import io.swagger.petstore.service.ValidationService;
 import io.swagger.petstore.utils.Responses;
 import io.swagger.petstore.utils.Util;
@@ -56,7 +59,7 @@ public class OrderController {
         }
         if (auth.getUser().getRole() != Role.ADMIN
                 && !Objects.equals(auth.getUser().getUsername(), ORDER_DATA.getOrderOwner(orderId))) {
-            return Responses.error(Response.Status.FORBIDDEN, "FORBIDDEN",
+            return Responses.error(Response.Status.FORBIDDEN, "ORDER_ACCESS_DENIED",
                     "Users may access only their own orders");
         }
         return new ResponseContext()
@@ -64,7 +67,7 @@ public class OrderController {
                 .entity(order);
     }
 
-    public ResponseContext placeOrder(final RequestContext request, final Order order) {
+    public ResponseContext placeOrder(final RequestContext request, final OrderCreateRequest order) {
         final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
@@ -73,11 +76,31 @@ public class OrderController {
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
-        ORDER_DATA.addOrder(order, auth.getUser().getUsername());
-        return new ResponseContext()
-                .status(Response.Status.CREATED)
-                .contentType(Util.getMediaType(request))
-                .entity(order);
+        try {
+            final Order created = ORDER_DATA.placeOrder(order, auth.getUser().getUsername());
+            return new ResponseContext()
+                    .status(Response.Status.CREATED)
+                    .contentType(Util.getMediaType(request))
+                    .entity(created);
+        } catch (OrderException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        }
+    }
+
+    public ResponseContext approveOrder(final RequestContext request, final UUID orderId) {
+        return transition(request, orderId, OrderStatus.APPROVED, true);
+    }
+
+    public ResponseContext shipOrder(final RequestContext request, final UUID orderId) {
+        return transition(request, orderId, OrderStatus.SHIPPED, true);
+    }
+
+    public ResponseContext deliverOrder(final RequestContext request, final UUID orderId) {
+        return transition(request, orderId, OrderStatus.DELIVERED, true);
+    }
+
+    public ResponseContext cancelOrder(final RequestContext request, final UUID orderId) {
+        return transition(request, orderId, OrderStatus.CANCELLED, false);
     }
 
     public ResponseContext deleteOrder(final RequestContext request, final UUID orderId) {
@@ -93,6 +116,29 @@ public class OrderController {
             return Responses.error(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND", "Order was not found");
         }
         return new ResponseContext().status(Response.Status.NO_CONTENT);
+    }
+
+    private ResponseContext transition(final RequestContext request, final UUID orderId,
+                                       final OrderStatus target, final boolean adminOnly) {
+        final AuthResult auth = adminOnly
+                ? authService.authorize(request, Role.ADMIN)
+                : authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (orderId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Order id must be a valid UUID");
+        }
+        try {
+            final Order updated = ORDER_DATA.transition(orderId, target,
+                    auth.getUser().getUsername(), auth.getUser().getRole() == Role.ADMIN);
+            return new ResponseContext()
+                    .contentType(Util.getMediaType(request))
+                    .entity(updated);
+        } catch (OrderException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        }
     }
 
 }

@@ -16,6 +16,10 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - смена пароля и блокировка немедленно отзывают ранее выданные Bearer tokens;
 - новые пароли хранятся как BCrypt, старые обновляются при успешной авторизации;
 - добавлены self-service методы `/user/me` и просмотр собственных заказов;
+- ID новых питомцев и заказов создаются сервером, create-модели отделены от update-моделей;
+- один питомец может иметь только один активный заказ, резервирование выполняется атомарно;
+- заказ проходит состояния `placed`, `approved`, `shipped`, `delivered` или `cancelled`;
+- создание заказа резервирует питомца, отмена снимает резерв, доставка переводит его в `sold`;
 - операции изменения pets и управления пользователями защищены ролью `ADMIN`;
 - отсутствие/ошибка/истечение токена дают `401`, недостаточная роль — `403`;
 - ошибки имеют единый JSON-контракт `status`, `error`, `message`, `details`;
@@ -26,6 +30,7 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - добавлена серверная runtime-валидация с единым ответом `422` и `details[]`;
 - in-memory хранилища заменены JDBC-репозиториями PostgreSQL;
 - идентификаторы users, pets, categories, tags и orders имеют формат UUID;
+- статусы аккаунтов, питомцев и заказов представлены PostgreSQL ENUM;
 - Flyway применяет версионированные миграции без удаления существующих данных;
 - Dockerfile стал multi-stage и не требует заранее выполнять Maven на хосте;
 - Compose поднимает отдельные API и PostgreSQL containers с healthcheck и volume;
@@ -200,6 +205,7 @@ USER/ADMIN:
 - `POST /store/order`;
 - `GET /store/order`;
 - `GET /store/order/{orderId}` (USER видит только свой заказ).
+- `POST /store/order/{orderId}/cancel` (USER отменяет только свой заказ).
 
 ADMIN:
 
@@ -207,6 +213,9 @@ ADMIN:
 - `DELETE /pet/{petId}`;
 - `GET /store/inventory`;
 - `DELETE /store/order/{orderId}`;
+- `POST /store/order/{orderId}/approve`;
+- `POST /store/order/{orderId}/ship`;
+- `POST /store/order/{orderId}/deliver`;
 - `GET`, `DELETE /user/{username}`.
 - `POST /admin/users/{userId}/block`;
 - `POST /admin/users/{userId}/unblock`.
@@ -283,10 +292,17 @@ ADMIN_TOKEN=$(curl -sS -X POST http://localhost:8080/api/v3/auth/login \
 curl -i -X POST http://localhost:8080/api/v3/pet \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":"7c1d1b70-f31e-42cd-9f78-6a5d87ed8620","name":"Luna","status":"available"}'
+  -d '{"name":"Luna","status":"available"}'
 ```
 
-Ожидается `201 Created`.
+Ожидается `201 Created`; UUID питомца создаётся сервером.
+
+### Жизненный цикл заказа
+
+Новый заказ создаётся в состоянии `placed`, после чего администратор последовательно
+переводит его в `approved`, `shipped` и `delivered`. Заказ можно отменить из состояний
+`placed` и `approved`. Питомец в активном заказе имеет статус `reserved`; после отмены
+он снова становится `available`, после доставки — `sold`.
 
 ## Проверки
 
@@ -309,10 +325,11 @@ python -m pytest tests/smoke -v
 BASE_URL=http://localhost:8080/api/v3 python -m pytest tests/smoke -v
 ```
 
-22 smoke-сценария проверяют health, авторизацию, регистрацию и подтверждение,
+28 smoke-сценариев проверяют health, авторизацию, регистрацию и подтверждение,
 восстановление пароля, блокировку, отзыв старых tokens, роли, питомцев, заказы и
 единый формат ошибок для некорректных входных данных. Параллельные запросы отдельно
-проверяют атомарность подтверждения, сброса пароля, блокировки и разблокировки.
+проверяют атомарность подтверждения, сброса пароля, блокировки, разблокировки и
+резервирования одного питомца.
 
 Для ручной проверки persistence создайте пользователя или pet, перезапустите только API и
 повторите GET-запрос — запись останется в PostgreSQL:

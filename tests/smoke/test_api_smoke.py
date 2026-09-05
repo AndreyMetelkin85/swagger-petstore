@@ -32,6 +32,26 @@ def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> dict:
+    response = client.post(
+        "/pet",
+        json={
+            "name": f"{prefix} Pet {uuid4().hex[:8]}",
+            "category": {"name": "Automated tests"},
+            "tags": [{"name": "aqa"}],
+            "photoUrls": [],
+            "status": "available",
+        },
+        headers=bearer(admin_token),
+    )
+    assert response.status_code == 201, response.text
+    pet = response.json()
+    UUID(pet["id"])
+    UUID(pet["category"]["id"])
+    UUID(pet["tags"][0]["id"])
+    return pet
+
+
 def api_path(url: str) -> str:
     parsed = urlsplit(url)
     path = parsed.path
@@ -144,34 +164,222 @@ def test_password_reset_validation_names_new_password_field(
 def test_user_cannot_create_pet_but_admin_can(client: httpx.Client) -> None:
     user_token = login(client, "user1", "password123")
     admin_token = login(client, "admin", "admin123")
-    pet = {"id": str(uuid4()), "name": "Smoke Test Dog", "status": "available"}
+    pet = {"name": "Smoke Test Dog", "status": "available"}
 
     forbidden = client.post("/pet", json=pet, headers=bearer(user_token))
     assert_error(forbidden, 403, "FORBIDDEN")
 
     created = client.post("/pet", json=pet, headers=bearer(admin_token))
     assert created.status_code == 201, created.text
-    assert created.json()["id"] == pet["id"]
+    UUID(created.json()["id"])
+
+
+def test_pet_create_and_update_models_have_separate_validation(
+    client: httpx.Client,
+) -> None:
+    admin_token = login(client, "admin", "admin123")
+    nested = client.post(
+        "/pet",
+        json={"name": "Invalid nested fields", "category": {}, "tags": [{}]},
+        headers=bearer(admin_token),
+    )
+    assert_error(nested, 422, "VALIDATION_ERROR")
+    fields = {detail["field"] for detail in nested.json()["details"]}
+    assert {"category.name", "tags[0].name"}.issubset(fields)
+
+    invalid_status = client.post(
+        "/pet",
+        json={"name": "Invalid status", "status": "unknown"},
+        headers=bearer(admin_token),
+    )
+    assert_error(invalid_status, 422, "VALIDATION_ERROR")
+    assert invalid_status.json()["details"][0]["field"] == "status"
+
+    missing_id = client.put(
+        "/pet",
+        json={"name": "Missing id"},
+        headers=bearer(admin_token),
+    )
+    assert_error(missing_id, 422, "VALIDATION_ERROR")
+    assert "id" in {detail["field"] for detail in missing_id.json()["details"]}
 
 
 def test_user_can_create_and_read_own_order(client: httpx.Client) -> None:
     token = login(client, "user1", "password123")
-    pets = client.get("/pet/findByStatus", params={"status": "available"})
-    assert pets.status_code == 200, pets.text
-    pet_id = pets.json()[0]["id"]
-    UUID(pet_id)
+    admin_token = login(client, "admin", "admin123")
+    pet_id = create_pet(client, admin_token)["id"]
     created = client.post(
         "/store/order",
-        json={"petId": pet_id, "quantity": 1, "status": "placed", "complete": False},
+        json={"petId": pet_id, "quantity": 1},
         headers=bearer(token),
     )
     assert created.status_code == 201, created.text
     order_id = created.json()["id"]
     UUID(order_id)
+    assert created.json()["status"] == "placed"
+    assert created.json()["complete"] is False
+    assert created.json().get("shipDate") is None
+
+    reserved = client.get(f"/pet/{pet_id}")
+    assert reserved.status_code == 200, reserved.text
+    assert reserved.json()["status"] == "reserved"
 
     fetched = client.get(f"/store/order/{order_id}", headers=bearer(token))
     assert fetched.status_code == 200, fetched.text
     assert fetched.json()["id"] == order_id
+
+
+def test_order_reservation_is_atomic_and_cancellation_releases_pet(
+    client: httpx.Client,
+) -> None:
+    token = login(client, "user1", "password123")
+    admin_token = login(client, "admin", "admin123")
+    pet_id = create_pet(client, admin_token, "Concurrent")["id"]
+
+    def place_order(_: int) -> httpx.Response:
+        return client.post(
+            "/store/order",
+            json={"petId": pet_id, "quantity": 1},
+            headers=bearer(token),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(place_order, range(2)))
+    assert sorted(response.status_code for response in results) == [201, 409]
+    assert_error(
+        next(response for response in results if response.status_code == 409),
+        409,
+        "PET_NOT_AVAILABLE",
+    )
+
+    order = next(response.json() for response in results if response.status_code == 201)
+    cancelled = client.post(
+        f"/store/order/{order['id']}/cancel", headers=bearer(token)
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["complete"] is True
+
+    released = client.get(f"/pet/{pet_id}")
+    assert released.status_code == 200, released.text
+    assert released.json()["status"] == "available"
+
+    protected = client.delete(f"/pet/{pet_id}", headers=bearer(admin_token))
+    assert_error(protected, 409, "PET_HAS_ORDERS")
+
+
+def test_order_lifecycle_requires_admin_and_follows_state_machine(
+    client: httpx.Client,
+) -> None:
+    token = login(client, "user1", "password123")
+    admin_token = login(client, "admin", "admin123")
+    pet_id = create_pet(client, admin_token, "Lifecycle")["id"]
+    created = client.post(
+        "/store/order",
+        json={"petId": pet_id, "quantity": 1},
+        headers=bearer(token),
+    )
+    assert created.status_code == 201, created.text
+    order_id = created.json()["id"]
+
+    forbidden = client.post(
+        f"/store/order/{order_id}/approve", headers=bearer(token)
+    )
+    assert_error(forbidden, 403, "FORBIDDEN")
+
+    approved = client.post(
+        f"/store/order/{order_id}/approve", headers=bearer(admin_token)
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+
+    repeated = client.post(
+        f"/store/order/{order_id}/approve", headers=bearer(admin_token)
+    )
+    assert_error(repeated, 409, "INVALID_STATUS_TRANSITION")
+
+    shipped = client.post(
+        f"/store/order/{order_id}/ship", headers=bearer(admin_token)
+    )
+    assert shipped.status_code == 200, shipped.text
+    assert shipped.json()["status"] == "shipped"
+    assert shipped.json()["shipDate"] is not None
+
+    delivered = client.post(
+        f"/store/order/{order_id}/deliver", headers=bearer(admin_token)
+    )
+    assert delivered.status_code == 200, delivered.text
+    assert delivered.json()["status"] == "delivered"
+    assert delivered.json()["complete"] is True
+
+    sold = client.get(f"/pet/{pet_id}")
+    assert sold.status_code == 200, sold.text
+    assert sold.json()["status"] == "sold"
+
+    too_late = client.post(
+        f"/store/order/{order_id}/cancel", headers=bearer(token)
+    )
+    assert_error(too_late, 409, "INVALID_STATUS_TRANSITION")
+
+
+def test_user_cannot_access_or_cancel_another_users_order(
+    client: httpx.Client,
+) -> None:
+    user_token = login(client, "user1", "password123")
+    admin_token = login(client, "admin", "admin123")
+    pet_id = create_pet(client, admin_token, "Ownership")["id"]
+    created = client.post(
+        "/store/order",
+        json={"petId": pet_id, "quantity": 1},
+        headers=bearer(admin_token),
+    )
+    assert created.status_code == 201, created.text
+    order_id = created.json()["id"]
+
+    forbidden_get = client.get(
+        f"/store/order/{order_id}", headers=bearer(user_token)
+    )
+    assert_error(forbidden_get, 403, "ORDER_ACCESS_DENIED")
+
+    forbidden_cancel = client.post(
+        f"/store/order/{order_id}/cancel", headers=bearer(user_token)
+    )
+    assert_error(forbidden_cancel, 403, "ORDER_ACCESS_DENIED")
+
+    cancelled = client.post(
+        f"/store/order/{order_id}/cancel", headers=bearer(admin_token)
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+
+
+def test_order_rejects_unknown_pet(client: httpx.Client) -> None:
+    token = login(client, "user1", "password123")
+    response = client.post(
+        "/store/order",
+        json={"petId": str(uuid4()), "quantity": 1},
+        headers=bearer(token),
+    )
+    assert_error(response, 404, "PET_NOT_FOUND")
+
+
+def test_order_rejects_server_managed_fields(client: httpx.Client) -> None:
+    token = login(client, "user1", "password123")
+    response = client.post(
+        "/store/order",
+        json={
+            "petId": str(uuid4()),
+            "quantity": 1,
+            "status": "delivered",
+            "complete": True,
+        },
+        headers=bearer(token),
+    )
+    assert_error(response, 422, "VALIDATION_ERROR")
+    assert {detail["field"] for detail in response.json()["details"]} == {
+        "status",
+        "complete",
+    }
 
 
 def test_registration_confirmation_resend_and_unique_email(client: httpx.Client) -> None:

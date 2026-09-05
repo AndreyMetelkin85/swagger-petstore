@@ -570,11 +570,11 @@ paths:
         - bearerAuth: []
       requestBody:
         required: true
-        description: Данные нового питомца. Если `id` не передан, сервер создаст его автоматически.
+        description: Данные нового питомца. Идентификатор создаётся сервером.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Pet'
+              $ref: '#/components/schemas/PetCreateRequest'
             examples:
               dog:
                 value:
@@ -627,14 +627,6 @@ paths:
                   value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
                 accountBlocked:
                   value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
-        '409':
-          description: Питомец с указанным UUID уже существует.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                petAlreadyExists:
-                  value: {status: 409, error: PET_ALREADY_EXISTS, message: A pet with this id already exists, details: []}
         '422':
           description: Поля питомца не прошли валидацию.
           content:
@@ -670,7 +662,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Pet'
+              $ref: '#/components/schemas/PetUpdateRequest'
             example:
               id: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
               name: Dog 1 Updated
@@ -727,6 +719,14 @@ paths:
               examples:
                 petNotFound:
                   value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: Статус питомца управляется активным заказом.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petHasActiveOrder:
+                  value: {status: 409, error: PET_HAS_ACTIVE_ORDER, message: Pet status is managed by its active order, details: []}
         '422':
           description: Данные питомца не прошли проверку.
           content:
@@ -766,7 +766,7 @@ paths:
             type: string
             minLength: 4
             maxLength: 30
-            pattern: '^(available|pending|sold)(,(available|pending|sold))*$'
+            pattern: '^(available|pending|reserved|sold)(,(available|pending|reserved|sold))*$'
           examples:
             single:
               value: available
@@ -802,7 +802,7 @@ paths:
                     error: VALIDATION_ERROR
                     message: Request validation failed
                     details:
-                      - {field: status, message: Status must be available, pending or sold}
+                      - {field: status, message: Status must be available, pending, reserved or sold}
         '500':
           description: Не удалось выполнить поиск питомцев.
           content:
@@ -952,6 +952,14 @@ paths:
               examples:
                 petNotFound:
                   value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: По питомцу существуют заказы.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petHasOrders:
+                  value: {status: 409, error: PET_HAS_ORDERS, message: Pet with order history cannot be deleted, details: []}
         '500':
           description: Не удалось удалить питомца.
           content:
@@ -984,7 +992,9 @@ paths:
               example:
                 placed: 2
                 approved: 1
+                shipped: 1
                 delivered: 1
+                cancelled: 1
         '401':
           description: Bearer token отсутствует или недействителен.
           content:
@@ -1076,18 +1086,16 @@ paths:
         - bearerAuth: []
       requestBody:
         required: true
-        description: Данные заказа. Сервер создаёт `id`; статус по умолчанию — `placed`.
+        description: Питомец и количество. Остальные поля заказа заполняются сервером.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/OrderCreate'
+              $ref: '#/components/schemas/OrderCreateRequest'
             examples:
               basicOrder:
                 value:
                   petId: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
                   quantity: 1
-                  status: placed
-                  complete: false
       responses:
         '201':
           description: Заказ создан.
@@ -1127,6 +1135,22 @@ paths:
                   value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
                 accountBlocked:
                   value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Питомец с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: Питомец уже зарезервирован, продан или недоступен для заказа.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petNotAvailable:
+                  value: {status: 409, error: PET_NOT_AVAILABLE, message: Pet is not available for ordering, details: []}
         '422':
           description: Данные заказа не прошли проверку.
           content:
@@ -1140,7 +1164,15 @@ paths:
                     message: Request validation failed
                     details:
                       - {field: petId, message: Pet id is required and must be a valid UUID}
-                      - {field: quantity, message: Quantity must be between 1 and 100}
+                      - {field: quantity, message: Quantity must be 1 for an individual pet}
+                serverManagedFields:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: status, message: Field is managed by the server}
+                      - {field: complete, message: Field is managed by the server}
         '500':
           description: Не удалось создать заказ.
           content:
@@ -1195,7 +1227,7 @@ paths:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 orderOwnership:
-                  value: {status: 403, error: FORBIDDEN, message: Users may access only their own orders, details: []}
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only their own orders, details: []}
                 accountNotVerified:
                   value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
                 accountBlocked:
@@ -1269,6 +1301,302 @@ paths:
                   value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
         '500':
           description: Не удалось удалить заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Подтверждение заказа
+      description: Переводит созданный заказ в подтверждённое состояние.
+      operationId: approveOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ подтверждён.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает подтверждение.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to approved, details: []}
+        '500':
+          description: Не удалось подтвердить заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/ship:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Передача заказа в доставку
+      description: Переводит подтверждённый заказ в состояние доставки.
+      operationId: shipOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ передан в доставку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает передачу в доставку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to shipped, details: []}
+        '500':
+          description: Не удалось передать заказ в доставку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/deliver:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Завершение доставки заказа
+      description: Отмечает переданный в доставку заказ как доставленный.
+      operationId: deliverOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ доставлен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает завершение доставки.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to delivered, details: []}
+        '500':
+          description: Не удалось завершить доставку заказа.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Отмена заказа
+      description: Отменяет заказ текущего пользователя или заказ, выбранный администратором.
+      operationId: cancelOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ отменён, резерв питомца снят.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may modify only their own orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает отмену.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to cancelled, details: []}
+        '500':
+          description: Не удалось отменить заказ.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -2047,6 +2375,7 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.Category
       type: object
       additionalProperties: false
+      required: [name]
       properties:
         id:
           type: string
@@ -2062,6 +2391,7 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.Tag
       type: object
       additionalProperties: false
+      required: [name]
       properties:
         id:
           type: string
@@ -2078,12 +2408,12 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.Pet
       type: object
       additionalProperties: false
-      required: [name]
+      required: [id, name, photoUrls, tags, status]
       properties:
         id:
           type: string
           format: uuid
-          nullable: true
+          readOnly: true
           example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
         name:
           type: string
@@ -2115,12 +2445,90 @@ components:
         status:
           type: string
           description: Текущий статус питомца в каталоге.
+          enum: [available, pending, reserved, sold]
+          example: available
+
+    PetCreateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PetCreateRequest
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '.*\S.*'
+          example: Luna
+        category:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Category'
+        photoUrls:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            type: string
+            format: uri
+            minLength: 1
+            maxLength: 2048
+        tags:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            $ref: '#/components/schemas/Tag'
+        status:
+          type: string
+          description: Начальный статус питомца. Статус reserved назначается только заказом.
           enum: [available, pending, sold]
           default: available
           example: available
 
-    OrderCreate:
-      x-swagger-router-model: io.swagger.petstore.model.Order
+    PetUpdateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PetUpdateRequest
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '.*\S.*'
+          example: Luna
+        category:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Category'
+        photoUrls:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            type: string
+            format: uri
+            minLength: 1
+            maxLength: 2048
+        tags:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            $ref: '#/components/schemas/Tag'
+        status:
+          type: string
+          description: Новый статус питомца. Статус reserved назначается только заказом.
+          enum: [available, pending, sold]
+          example: pending
+
+    OrderCreateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.OrderCreateRequest
       type: object
       additionalProperties: false
       required: [petId, quantity]
@@ -2133,28 +2541,14 @@ components:
           type: integer
           format: int32
           minimum: 1
-          maximum: 100
+          maximum: 1
           example: 1
-        shipDate:
-          type: string
-          format: date-time
-          nullable: true
-          example: '2026-09-06T12:00:00Z'
-        status:
-          type: string
-          enum: [placed, approved, delivered]
-          default: placed
-          example: placed
-        complete:
-          type: boolean
-          default: false
-          example: false
 
     Order:
       x-swagger-router-model: io.swagger.petstore.model.Order
       type: object
       additionalProperties: false
-      required: [id, petId, quantity, shipDate, status, complete]
+      required: [id, petId, quantity, status, complete]
       properties:
         id:
           type: string
@@ -2174,10 +2568,11 @@ components:
         shipDate:
           type: string
           format: date-time
+          nullable: true
           example: '2026-09-06T12:00:00Z'
         status:
           type: string
-          enum: [placed, approved, delivered]
+          enum: [placed, approved, shipped, delivered, cancelled]
           example: placed
         complete:
           type: boolean

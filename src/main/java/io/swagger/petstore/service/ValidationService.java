@@ -1,24 +1,27 @@
 package io.swagger.petstore.service;
 
 import io.swagger.petstore.model.ErrorDetail;
-import io.swagger.petstore.model.Order;
+import io.swagger.petstore.model.Category;
+import io.swagger.petstore.model.OrderCreateRequest;
 import io.swagger.petstore.model.PasswordForgotRequest;
 import io.swagger.petstore.model.PasswordResetRequest;
-import io.swagger.petstore.model.Pet;
+import io.swagger.petstore.model.PetCreateRequest;
+import io.swagger.petstore.model.PetStatus;
+import io.swagger.petstore.model.PetUpdateRequest;
 import io.swagger.petstore.model.RegisterRequest;
+import io.swagger.petstore.model.Tag;
 import io.swagger.petstore.model.UserUpdateRequest;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
 public final class ValidationService {
     private static final Pattern USERNAME = Pattern.compile("^[A-Za-z0-9_.-]{3,30}$");
+    private static final Pattern TAG_NAME = Pattern.compile("^[A-Za-z0-9_.-]{1,30}$");
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
-    private static final List<String> PET_STATUSES = Arrays.asList("available", "pending", "sold");
-    private static final List<String> ORDER_STATUSES = Arrays.asList("placed", "approved", "delivered");
-
     private ValidationService() {
     }
 
@@ -81,13 +84,22 @@ public final class ValidationService {
         return errors;
     }
 
-    public static List<ErrorDetail> validatePet(Pet pet, boolean idRequired) {
+    public static List<ErrorDetail> validatePetCreate(final PetCreateRequest pet) {
+        return validatePet(pet, false, null);
+    }
+
+    public static List<ErrorDetail> validatePetUpdate(final PetUpdateRequest pet) {
+        return validatePet(pet, true, pet == null ? null : pet.getId());
+    }
+
+    private static List<ErrorDetail> validatePet(final PetCreateRequest pet, final boolean idRequired,
+                                                 final Object id) {
         final List<ErrorDetail> errors = new ArrayList<>();
         if (pet == null) {
             errors.add(new ErrorDetail("body", "Request body is required"));
             return errors;
         }
-        if (idRequired && pet.getId() == null) {
+        if (idRequired && id == null) {
             errors.add(new ErrorDetail("id", "Pet id is required and must be a valid UUID"));
         }
         if (pet.getName() == null || pet.getName().trim().isEmpty()) {
@@ -95,13 +107,27 @@ public final class ValidationService {
         } else if (pet.getName().length() > 100) {
             errors.add(new ErrorDetail("name", "Pet name must not exceed 100 characters"));
         }
-        if (pet.getStatus() != null && !PET_STATUSES.contains(pet.getStatus())) {
+        if (PetStatus.RESERVED.getValue().equals(pet.getStatus())) {
+            errors.add(new ErrorDetail("status", "Reserved status is managed by the order lifecycle"));
+        } else if (pet.getStatus() != null
+                && !PetStatus.AVAILABLE.getValue().equals(pet.getStatus())
+                && !PetStatus.PENDING.getValue().equals(pet.getStatus())
+                && !PetStatus.SOLD.getValue().equals(pet.getStatus())) {
             errors.add(new ErrorDetail("status", "Pet status must be available, pending or sold"));
+        }
+        validateCategory(pet.getCategory(), errors);
+        validateTags(pet.getTags(), errors);
+        if (pet.getPhotoUrls() != null && pet.getPhotoUrls().size() > 20) {
+            errors.add(new ErrorDetail("photoUrls", "No more than 20 photo URLs are allowed"));
+        }
+        validatePhotoUrls(pet.getPhotoUrls(), errors);
+        for (String field : pet.getUnsupportedFields().keySet()) {
+            errors.add(new ErrorDetail(field, "Field is not allowed for this operation"));
         }
         return errors;
     }
 
-    public static List<ErrorDetail> validateOrder(Order order) {
+    public static List<ErrorDetail> validateOrder(final OrderCreateRequest order) {
         final List<ErrorDetail> errors = new ArrayList<>();
         if (order == null) {
             errors.add(new ErrorDetail("body", "Request body is required"));
@@ -110,13 +136,71 @@ public final class ValidationService {
         if (order.getPetId() == null) {
             errors.add(new ErrorDetail("petId", "Pet id is required and must be a valid UUID"));
         }
-        if (order.getQuantity() == null || order.getQuantity() < 1 || order.getQuantity() > 100) {
-            errors.add(new ErrorDetail("quantity", "Quantity must be between 1 and 100"));
+        if (order.getQuantity() == null || order.getQuantity() != 1) {
+            errors.add(new ErrorDetail("quantity", "Quantity must be 1 for an individual pet"));
         }
-        if (order.getStatus() != null && !ORDER_STATUSES.contains(order.getStatus())) {
-            errors.add(new ErrorDetail("status", "Order status must be placed, approved or delivered"));
+        for (String field : order.getUnsupportedFields().keySet()) {
+            errors.add(new ErrorDetail(field, "Field is managed by the server"));
         }
         return errors;
+    }
+
+    private static void validateCategory(final Category category, final List<ErrorDetail> errors) {
+        if (category == null) {
+            return;
+        }
+        if (category.getName() == null || category.getName().trim().isEmpty()) {
+            errors.add(new ErrorDetail("category.name", "Category name is required"));
+        } else if (category.getName().length() > 50) {
+            errors.add(new ErrorDetail("category.name", "Category name must not exceed 50 characters"));
+        }
+    }
+
+    private static void validateTags(final List<Tag> tags, final List<ErrorDetail> errors) {
+        if (tags == null) {
+            return;
+        }
+        if (tags.size() > 20) {
+            errors.add(new ErrorDetail("tags", "No more than 20 tags are allowed"));
+        }
+        for (int index = 0; index < tags.size(); index++) {
+            final Tag tag = tags.get(index);
+            final String field = "tags[" + index + "].name";
+            if (tag == null || tag.getName() == null || tag.getName().trim().isEmpty()) {
+                errors.add(new ErrorDetail(field, "Tag name is required"));
+            } else if (tag.getName().length() > 30) {
+                errors.add(new ErrorDetail(field, "Tag name must not exceed 30 characters"));
+            } else if (!TAG_NAME.matcher(tag.getName()).matches()) {
+                errors.add(new ErrorDetail(field,
+                        "Tag name may contain only letters, digits, dot, underscore or hyphen"));
+            }
+        }
+    }
+
+    private static void validatePhotoUrls(final List<String> photoUrls,
+                                          final List<ErrorDetail> errors) {
+        if (photoUrls == null) {
+            return;
+        }
+        for (int index = 0; index < photoUrls.size(); index++) {
+            final String value = photoUrls.get(index);
+            final String field = "photoUrls[" + index + "]";
+            if (value == null || value.trim().isEmpty()) {
+                errors.add(new ErrorDetail(field, "Photo URL is required"));
+                continue;
+            }
+            if (value.length() > 2048) {
+                errors.add(new ErrorDetail(field, "Photo URL must not exceed 2048 characters"));
+                continue;
+            }
+            try {
+                if (!new URI(value).isAbsolute()) {
+                    errors.add(new ErrorDetail(field, "Photo URL must be an absolute URI"));
+                }
+            } catch (URISyntaxException exception) {
+                errors.add(new ErrorDetail(field, "Photo URL must be a valid URI"));
+            }
+        }
     }
 
     private static void validatePassword(String password, boolean required, List<ErrorDetail> errors) {
