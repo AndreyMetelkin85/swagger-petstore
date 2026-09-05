@@ -1,367 +1,418 @@
 openapi: 3.0.4
 info:
-  title: Swagger Petstore - OpenAPI 3.0
+  title: Локальный API Swagger Petstore
+  version: 2.0.0
   description: |-
-    This is a sample Pet Store Server based on the OpenAPI 3.0 specification.  You can find out more about
-    Swagger at [https://swagger.io](https://swagger.io). In the third iteration of the pet store, we've switched to the design first approach!
-    You can now help us improve the API whether it's by making changes to the definition itself or to the code.
-    That way, with time, we can improve the API in general, and expose some of the new features in OAS3.
+    Локальный Petstore API на Swagger Inflector, ориентированный на практику
+    ручного и автоматизированного API-тестирования. Проект содержит предсказуемые
+    тестовые данные, подписанные Bearer-токены, ролевую авторизацию, постоянное
+    хранение в PostgreSQL и единый формат ошибок JSON.
 
-    Some useful links:
-    - [The Pet Store repository](https://github.com/swagger-api/swagger-petstore)
-    - [The source API definition for the Pet Store](https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml)
-  termsOfService: https://swagger.io/terms/
+    Данные сохраняются после перезапуска API-контейнера в именованном Docker volume.
+    Используйте учётную запись `admin` для управления питомцами и пользователями,
+    а `user1` — для работы со своим профилем и заказами.
   contact:
-    email: apiteam@swagger.io
+    name: Локальный учебный проект
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-  version: 1.0.29-SNAPSHOT
-externalDocs:
-  description: Find out more about Swagger
-  url: https://swagger.io
 servers:
-  - url: https://petstore3.swagger.io/api/v3
+  - url: http://localhost:8080/api/v3
+    description: Локальный сервер Docker или Maven
 tags:
-  - name: pet
-    description: Everything about your Pets
-    externalDocs:
-      description: Find out more
-      url: https://swagger.io
-  - name: store
-    description: Access to Petstore orders
-    externalDocs:
-      description: Find out more about our store
-      url: https://swagger.io
-  - name: user
-    description: Operations about user
+  - name: Состояние
+    description: Проверка готовности API и PostgreSQL для Docker и smoke-тестов.
+  - name: Авторизация
+    description: Публичные операции регистрации и входа.
+  - name: Питомцы
+    description: Публичный каталог питомцев и управление с ролью ADMIN.
+  - name: Заказы
+    description: Авторизованные операции с заказами и статистика для ADMIN.
+  - name: Пользователи
+    description: Управление своим профилем и пользователями с ролью ADMIN.
+
 paths:
-  /pet:
-    put:
-      tags:
-        - pet
-      summary: Update an existing pet.
-      description: Update an existing pet by Id.
-      operationId: updatePet
-      requestBody:
-        description: Update an existent pet in the store
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Pet'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/Pet'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Pet'
-        required: true
+  /health:
+    get:
+      tags: [Состояние]
+      summary: Проверить состояние API
+      description: Возвращает состояние готовности API и PostgreSQL. Токен доступа не требуется.
+      operationId: health
+      x-swagger-router-controller: HealthController
+      security: []
       responses:
         '200':
-          description: Successful operation
+          description: API и PostgreSQL готовы принимать запросы.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Pet'
-            application/xml:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: UP
+                service: swagger-petstore
+                database: UP
+                timestamp: '2026-09-05T09:15:30.000Z'
+        '503':
+          description: API запущен, но PostgreSQL недоступен.
+          content:
+            application/json:
               schema:
-                $ref: '#/components/schemas/Pet'
-        '400':
-          description: Invalid ID supplied
-        '404':
-          description: Pet not found
-        '422':
-          description: Validation exception
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: DOWN
+                service: swagger-petstore
+                database: DOWN
+                timestamp: '2026-09-05T09:15:30.000Z'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/register:
     post:
-      tags:
-        - pet
-      summary: Add a new pet to the store.
-      description: Add a new pet to the store.
-      operationId: addPet
+      tags: [Авторизация]
+      summary: Зарегистрировать локального пользователя
+      description: |-
+        Создаёт новую учётную запись без токена. Новому пользователю всегда
+        назначается роль `USER`; создать ADMIN через этот endpoint нельзя.
+      operationId: register
+      x-swagger-router-controller: AuthController
+      security: []
       requestBody:
-        description: Create a new pet in the store
+        required: true
+        description: Учётные данные и поля профиля нового пользователя.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              qaEngineer:
+                summary: Корректные данные регистрации
+                value:
+                  username: qa_engineer
+                  password: SecurePass123
+                  email: qa.engineer@example.com
+                  firstName: Alex
+                  lastName: Smith
+                  phone: '+1-555-0110'
+              invalid:
+                summary: Данные, приводящие к ответу 422
+                value:
+                  username: qa
+                  password: '123'
+                  email: not-an-email
+      responses:
+        '201':
+          description: Учётная запись пользователя создана.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 11
+                username: qa_engineer
+                email: qa.engineer@example.com
+                firstName: Alex
+                lastName: Smith
+                phone: '+1-555-0110'
+                userStatus: 1
+                role: USER
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/login:
+    post:
+      tags: [Авторизация]
+      summary: Войти и получить токен доступа
+      description: |-
+        Проверяет локальные учётные данные и возвращает HS256 JWT сроком на один час.
+        Передавайте полученное значение в заголовке `Authorization: Bearer <accessToken>`.
+      operationId: login
+      x-swagger-router-controller: AuthController
+      security: []
+      requestBody:
+        required: true
+        description: Имя и пароль зарегистрированного или тестового пользователя.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              user:
+                summary: Тестовая учётная запись USER
+                value:
+                  username: user1
+                  password: password123
+              admin:
+                summary: Тестовая учётная запись ADMIN
+                value:
+                  username: admin
+                  password: admin123
+      responses:
+        '200':
+          description: Аутентификация выполнена успешно.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature
+                tokenType: Bearer
+                expiresIn: 3600
+                user:
+                  id: 2
+                  username: user1
+                  email: test@example.com
+                  firstName: Test
+                  lastName: User
+                  phone: '+1-555-0101'
+                  userStatus: 1
+                  role: USER
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /pet:
+    post:
+      tags: [Питомцы]
+      summary: Добавить питомца
+      description: Создаёт запись в каталоге. Операция доступна только пользователю с ролью ADMIN.
+      operationId: addPet
+      x-swagger-router-controller: PetController
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: Данные нового питомца. Если `id` не передан, сервер создаст его автоматически.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/Pet'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/Pet'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Pet'
-        required: true
+            examples:
+              dog:
+                value:
+                  name: Luna
+                  category:
+                    id: 1
+                    name: Dogs
+                  photoUrls:
+                    - https://example.com/pets/luna.jpg
+                  tags:
+                    - id: 1
+                      name: friendly
+                  status: available
       responses:
-        '200':
-          description: Successful operation
+        '201':
+          description: Питомец создан.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Pet'
-            application/xml:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Питомцы]
+      summary: Полностью обновить питомца
+      description: Заменяет данные питомца с указанным в теле `id`. Требуется роль ADMIN.
+      operationId: updatePet
+      x-swagger-router-controller: PetController
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: Полное новое представление питомца. Требуется положительный `id`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pet'
+            example:
+              id: 4
+              name: Dog 1 Updated
+              category:
+                id: 1
+                name: Dogs
+              photoUrls: []
+              tags: []
+              status: pending
+      responses:
+        '200':
+          description: Данные питомца обновлены.
+          content:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Pet'
         '400':
-          description: Invalid input
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
-          description: Validation exception
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /pet/findByStatus:
     get:
-      tags:
-        - pet
-      summary: Finds Pets by status.
-      description: Multiple status values can be provided with comma separated strings.
+      tags: [Питомцы]
+      summary: Найти питомцев по статусу
+      description: |-
+        Публичный поиск по каталогу. Передайте один статус или несколько статусов
+        через запятую, например `available,pending`. Если совпадений нет, сервер
+        возвращает пустой массив `[]` со статусом 200.
       operationId: findPetsByStatus
+      x-swagger-router-controller: PetController
+      security: []
       parameters:
         - name: status
           in: query
-          description: Status values that need to be considered for filter
           required: true
-          explode: true
+          description: Один или несколько статусов жизненного цикла через запятую.
           schema:
             type: string
-            default: available
-            enum:
-              - available
-              - pending
-              - sold
+            minLength: 4
+            maxLength: 30
+            pattern: '^(available|pending|sold)(,(available|pending|sold))*$'
+          examples:
+            single:
+              value: available
+            multiple:
+              value: available,pending
       responses:
         '200':
-          description: successful operation
+          description: Найденные питомцы; массив может быть пустым.
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                type: array
+                maxItems: 1000
                 items:
                   $ref: '#/components/schemas/Pet'
         '400':
-          description: Invalid status value
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /pet/findByTags:
     get:
-      tags:
-        - pet
-      summary: Finds Pets by tags.
-      description: Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.
+      tags: [Питомцы]
+      summary: Найти питомцев по тегам
+      description: Публичный поиск питомцев, соответствующих хотя бы одному переданному тегу.
       operationId: findPetsByTags
+      x-swagger-router-controller: PetController
+      security: []
       parameters:
         - name: tags
           in: query
-          description: Tags to filter by
           required: true
-          explode: true
+          description: Имена тегов. Для нескольких тегов повторите query-параметр.
           schema:
             type: array
+            minItems: 1
+            maxItems: 20
             items:
               type: string
+              minLength: 1
+              maxLength: 30
+          style: form
+          explode: true
+          example: [friendly, vaccinated]
       responses:
         '200':
-          description: successful operation
+          description: Найденные питомцы; массив может быть пустым.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
         '400':
-          description: Invalid tag value
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /pet/{petId}:
+    parameters:
+      - $ref: '#/components/parameters/PetId'
     get:
-      tags:
-        - pet
-      summary: Find pet by ID.
-      description: Returns a single pet.
+      tags: [Питомцы]
+      summary: Получить питомца по идентификатору
+      description: Возвращает одну публичную запись питомца из каталога.
       operationId: getPetById
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet to return
-          required: true
-          schema:
-            type: integer
-            format: int64
+      x-swagger-router-controller: PetController
+      security: []
       responses:
         '200':
-          description: successful operation
+          description: Питомец найден.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Pet'
         '400':
-          description: Invalid ID supplied
+          $ref: '#/components/responses/BadRequest'
         '404':
-          description: Pet not found
-        default:
-          description: Unexpected error
-      security:
-        - api_key: []
-        - petstore_auth:
-            - write:pets
-            - read:pets
-    post:
-      tags:
-        - pet
-      summary: Updates a pet in the store with form data.
-      description: Updates a pet resource based on the form data.
-      operationId: updatePetWithForm
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet that needs to be updated
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: name
-          in: query
-          description: Name of pet that needs to be updated
-          schema:
-            type: string
-        - name: status
-          in: query
-          description: Status of pet that needs to be updated
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Pet'
-        '400':
-          description: Invalid input
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
-      tags:
-        - pet
-      summary: Deletes a pet.
-      description: Delete a pet.
+      tags: [Питомцы]
+      summary: Удалить питомца
+      description: Безвозвратно удаляет питомца из PostgreSQL. Требуется роль ADMIN.
       operationId: deletePet
-      parameters:
-        - name: api_key
-          in: header
-          description: ''
-          required: false
-          schema:
-            type: string
-        - name: petId
-          in: path
-          description: Pet id to delete
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Pet deleted
-        '400':
-          description: Invalid pet value
-        default:
-          description: Unexpected error
+      x-swagger-router-controller: PetController
       security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-  /pet/{petId}/uploadImage:
-    post:
-      tags:
-        - pet
-      summary: Uploads an image.
-      description: Upload image of the pet.
-      operationId: uploadFile
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet to update
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: additionalMetadata
-          in: query
-          description: Additional Metadata
-          required: false
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
+        - bearerAuth: []
       responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
+        '204':
+          description: Питомец удалён; тело ответа отсутствует.
         '400':
-          description: No file uploaded
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Pet not found
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /store/inventory:
     get:
-      tags:
-        - store
-      summary: Returns pet inventories by status.
-      description: Returns a map of status codes to quantities.
+      tags: [Заказы]
+      summary: Получить количество заказов по статусам
+      description: Возвращает суммарное количество сохранённых заказов по статусам. Требуется роль ADMIN.
       operationId: getInventory
       x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: successful operation
+          description: Количество заказов, сгруппированное по статусу.
           content:
             application/json:
               schema:
@@ -369,471 +420,806 @@ paths:
                 additionalProperties:
                   type: integer
                   format: int32
-        default:
-          description: Unexpected error
-      security:
-        - api_key: []
+                  minimum: 0
+              example:
+                placed: 2
+                approved: 1
+                delivered: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /store/order:
-    post:
-      tags:
-        - store
-      summary: Place an order for a pet.
-      description: Place a new order in the store.
+    get:
+      tags: [Заказы]
+      summary: Получить заказы текущего пользователя
+      description: Возвращает только заказы, принадлежащие авторизованному пользователю.
+      operationId: listOrders
       x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказы текущего пользователя; массив может быть пустым.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Заказы]
+      summary: Создать заказ
+      description: Создаёт заказ для авторизованного пользователя с ролью USER или ADMIN.
       operationId: placeOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
       requestBody:
+        required: true
+        description: Данные заказа. Сервер создаёт `id`; статус по умолчанию — `placed`.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Order'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/Order'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Order'
+              $ref: '#/components/schemas/OrderCreate'
+            examples:
+              basicOrder:
+                value:
+                  petId: 4
+                  quantity: 1
+                  status: placed
+                  complete: false
       responses:
-        '200':
-          description: successful operation
+        '201':
+          description: Заказ создан.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Order'
         '400':
-          description: Invalid input
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
-          description: Validation exception
-        default:
-          description: Unexpected error
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /store/order/{orderId}:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
     get:
-      tags:
-        - store
-      summary: Find purchase order by ID.
-      x-swagger-router-controller: OrderController
-      description: For valid response try integer IDs with value <= 5 or > 10. Other values will generate exceptions.
+      tags: [Заказы]
+      summary: Получить заказ по идентификатору
+      description: USER может получить только собственный заказ; ADMIN может получить любой заказ.
       operationId: getOrderById
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of order that needs to be fetched
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Order'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Order'
-        '400':
-          description: Invalid ID supplied
-        '404':
-          description: Order not found
-        default:
-          description: Unexpected error
-    delete:
-      tags:
-        - store
-      summary: Delete purchase order by identifier.
-      description: For valid response try integer IDs with value < 1000. Anything above 1000 or non-integers will generate API errors.
       x-swagger-router-controller: OrderController
-      operationId: deleteOrder
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of the order that needs to be deleted
-          required: true
-          schema:
-            type: integer
-            format: int64
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: order deleted
+          description: Заказ найден и доступен текущему пользователю.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
         '400':
-          description: Invalid ID supplied
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Order not found
-        default:
-          description: Unexpected error
-  /user:
-    post:
-      tags:
-        - user
-      summary: Create user.
-      description: This can only be done by the logged in user.
-      x-swagger-router-controller: UserController
-      operationId: createUser
-      requestBody:
-        description: Created user object
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/User'
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          description: Unexpected error
-  /user/createWithList:
-    post:
-      tags:
-        - user
-      summary: Creates list of users with given input array.
-      description: Creates list of users with given input array.
-      x-swagger-router-controller: UserController
-      operationId: createUsersWithListInput
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/User'
-      responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          description: Unexpected error
-  /user/login:
-    get:
-      tags:
-        - user
-      summary: Logs user into the system.
-      description: Log into the system.
-      operationId: loginUser
-      parameters:
-        - name: username
-          in: query
-          description: The user name for login
-          required: false
-          schema:
-            type: string
-        - name: password
-          in: query
-          description: The password for login in clear text
-          required: false
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful operation
-          headers:
-            X-Rate-Limit:
-              description: calls per hour allowed by the user
-              schema:
-                type: integer
-                format: int32
-            X-Expires-After:
-              description: date in UTC when token expires
-              schema:
-                type: string
-                format: date-time
-          content:
-            application/xml:
-              schema:
-                type: string
-            application/json:
-              schema:
-                type: string
-        '400':
-          description: Invalid username/password supplied
-        default:
-          description: Unexpected error
-  /user/logout:
-    get:
-      tags:
-        - user
-      summary: Logs out current logged in user session.
-      description: Log user out of the system.
-      operationId: logoutUser
-      parameters: []
-      responses:
-        '200':
-          description: successful operation
-        default:
-          description: Unexpected error
-  /user/{username}:
-    get:
-      tags:
-        - user
-      summary: Get user by user name.
-      description: Get user detail based on username.
-      operationId: getUserByName
-      parameters:
-        - name: username
-          in: path
-          description: The name that needs to be fetched. Use user1 for testing
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          description: Invalid username supplied
-        '404':
-          description: User not found
-        default:
-          description: Unexpected error
-    put:
-      tags:
-        - user
-      summary: Update user resource.
-      description: This can only be done by the logged in user.
-      x-swagger-router-controller: UserController
-      operationId: updateUser
-      parameters:
-        - name: username
-          in: path
-          description: name that need to be deleted
-          required: true
-          schema:
-            type: string
-      requestBody:
-        description: Update an existent user in the store
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/User'
-      responses:
-        '200':
-          description: successful operation
-        '400':
-          description: bad request
-        '404':
-          description: user not found
-        default:
-          description: Unexpected error
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
-      tags:
-        - user
-      summary: Delete user resource.
-      description: This can only be done by the logged in user.
-      operationId: deleteUser
-      parameters:
-        - name: username
-          in: path
-          description: The name that needs to be deleted
-          required: true
-          schema:
-            type: string
+      tags: [Заказы]
+      summary: Удалить заказ
+      description: Удаляет заказ из PostgreSQL. Требуется роль ADMIN.
+      operationId: deleteOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Заказ удалён; тело ответа отсутствует.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /user/me:
+    get:
+      tags: [Пользователи]
+      summary: Получить профиль текущего пользователя
+      description: Возвращает профиль пользователя, определённого по Bearer-токену.
+      operationId: getCurrentUser
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: User deleted
+          description: Профиль текущего пользователя.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Пользователи]
+      summary: Обновить профиль текущего пользователя
+      description: Обновляет только переданные изменяемые поля; имя пользователя и роль изменить нельзя.
+      operationId: updateCurrentUser
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: Изменяемые поля профиля. Необходимо передать хотя бы одно поле.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+            example:
+              firstName: Updated
+              email: updated.user@example.com
+      responses:
+        '200':
+          description: Обновлённый профиль текущего пользователя.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         '400':
-          description: Invalid username supplied
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Пользователи]
+      summary: Удалить профиль текущего пользователя
+      description: Удаляет учётную запись из токена; дальнейшее использование этого токена станет невозможным.
+      operationId: deleteCurrentUser
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Текущая учётная запись удалена; тело ответа отсутствует.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /user/{username}:
+    parameters:
+      - $ref: '#/components/parameters/Username'
+    get:
+      tags: [Пользователи]
+      summary: Получить пользователя по имени
+      description: Возвращает профиль указанного пользователя. Требуется роль ADMIN.
+      operationId: getUserByName
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Пользователь найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: User not found
-        default:
-          description: Unexpected error
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Пользователи]
+      summary: Удалить пользователя по имени
+      description: Удаляет учётную запись из PostgreSQL. Требуется роль ADMIN.
+      operationId: deleteUser
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Пользователь удалён; тело ответа отсутствует.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: HS256 JWT, возвращаемый методом POST /auth/login. Срок действия токена — 3600 секунд.
+
+  parameters:
+    PetId:
+      name: petId
+      in: path
+      required: true
+      description: Положительный идентификатор питомца.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+        maximum: 9223372036854775807
+      example: 4
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: Положительный идентификатор заказа.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+        maximum: 9223372036854775807
+      example: 1
+    Username:
+      name: username
+      in: path
+      required: true
+      description: Имя пользователя с учётом регистра.
+      schema:
+        type: string
+        minLength: 3
+        maxLength: 30
+        pattern: '^[A-Za-z0-9_.-]+$'
+      example: user1
+
+  responses:
+    BadRequest:
+      description: Некорректный синтаксис запроса, path- или query-параметр.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: BAD_REQUEST
+            message: Pet id must be a positive integer
+            details: []
+    Unauthorized:
+      description: Bearer-токен отсутствует, имеет неверный формат, недействителен или истёк.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnauthorizedErrorResponse'
+          examples:
+            missingToken:
+              value:
+                code: UNAUTHORIZED
+                message: Bearer access token is required
+                details: []
+            invalidToken:
+              value:
+                code: INVALID_TOKEN
+                message: Access token is invalid
+                details: []
+            expiredToken:
+              value:
+                code: TOKEN_EXPIRED
+                message: Access token has expired
+                details: []
+    Forbidden:
+      description: Токен действителен, но роли или прав владения недостаточно для операции.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ForbiddenErrorResponse'
+          example:
+            code: FORBIDDEN
+            message: The current role is not allowed to perform this operation
+            details: []
+    NotFound:
+      description: Запрошенная сущность не существует.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NotFoundErrorResponse'
+          example:
+            code: PET_NOT_FOUND
+            message: Pet was not found
+            details: []
+    Conflict:
+      description: Сущность конфликтует с уже сохранёнными данными.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConflictErrorResponse'
+          example:
+            code: USER_ALREADY_EXISTS
+            message: A user with this username already exists
+            details: []
+    ValidationError:
+      description: JSON корректен, но одно или несколько значений нарушают бизнес-ограничения.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+          example:
+            code: VALIDATION_ERROR
+            message: Request validation failed
+            details:
+              - field: username
+                message: Username is required
+    InternalServerError:
+      description: Непредвиденная ошибка на стороне сервера.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: INTERNAL_SERVER_ERROR
+            message: An unexpected error occurred
+            details: []
+
   schemas:
-    Order:
-      x-swagger-router-model: io.swagger.petstore.model.Order
+    Role:
+      type: string
+      description: Роль авторизации, назначенная пользователю.
+      enum: [USER, ADMIN]
+      example: USER
+
+    RegisterRequest:
+      x-swagger-router-model: io.swagger.petstore.model.RegisterRequest
       type: object
+      additionalProperties: false
+      required: [username, password, email]
       properties:
-        id:
-          type: integer
-          format: int64
-          example: 10
-        petId:
-          type: integer
-          format: int64
-          example: 198772
-        quantity:
-          type: integer
-          format: int32
-          example: 7
-        shipDate:
+        username:
           type: string
-          format: date-time
-        status:
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: qa_engineer
+        password:
           type: string
-          description: Order Status
-          example: approved
-          enum:
-            - placed
-            - approved
-            - delivered
-        complete:
-          type: boolean
-      xml:
-        name: order
-    Category:
-      x-swagger-router-model: io.swagger.petstore.model.Category
+          format: password
+          minLength: 6
+          maxLength: 100
+          writeOnly: true
+          example: SecurePass123
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+          example: qa.engineer@example.com
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: Alex
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: Smith
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          pattern: '^\+?[0-9 ()-]+$'
+          nullable: true
+          example: '+1-555-0110'
+
+    LoginRequest:
+      x-swagger-router-model: io.swagger.petstore.model.LoginRequest
       type: object
+      additionalProperties: false
+      required: [username, password]
       properties:
-        id:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: user1
+        password:
+          type: string
+          format: password
+          minLength: 6
+          maxLength: 100
+          writeOnly: true
+          example: password123
+
+    LoginResponse:
+      x-swagger-router-model: io.swagger.petstore.model.LoginResponse
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+          minLength: 20
+          description: Подписанный HS256 JWT.
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature
+        tokenType:
+          type: string
+          enum: [Bearer]
+          example: Bearer
+        expiresIn:
           type: integer
           format: int64
-          example: 1
-        name:
-          type: string
-          example: Dogs
-      xml:
-        name: category
+          minimum: 1
+          maximum: 3600
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
     User:
       x-swagger-router-model: io.swagger.petstore.model.User
       type: object
+      additionalProperties: false
+      required: [id, username, email, role]
       properties:
         id:
           type: integer
           format: int64
-          example: 10
+          minimum: 1
+          readOnly: true
+          example: 2
         username:
           type: string
-          example: theUser
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: user1
         firstName:
           type: string
-          example: John
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: Test
         lastName:
           type: string
-          example: James
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: User
         email:
           type: string
-          example: john@email.com
+          format: email
+          maxLength: 254
+          example: test@example.com
         password:
           type: string
-          example: '12345'
+          format: password
+          minLength: 6
+          maxLength: 100
+          writeOnly: true
         phone:
           type: string
-          example: '12345'
+          minLength: 7
+          maxLength: 30
+          pattern: '^\+?[0-9 ()-]+$'
+          nullable: true
+          example: '+1-555-0101'
         userStatus:
           type: integer
-          description: User Status
           format: int32
+          minimum: 0
+          maximum: 3
+          default: 1
           example: 1
-      xml:
-        name: user
+        role:
+          $ref: '#/components/schemas/Role'
+
+    UserUpdateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.UserUpdateRequest
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          nullable: true
+        password:
+          type: string
+          format: password
+          minLength: 6
+          maxLength: 100
+          writeOnly: true
+          nullable: true
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          pattern: '^\+?[0-9 ()-]+$'
+          nullable: true
+
+    Category:
+      x-swagger-router-model: io.swagger.petstore.model.Category
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Dogs
+
     Tag:
       x-swagger-router-model: io.swagger.petstore.model.Tag
       type: object
+      additionalProperties: false
       properties:
         id:
           type: integer
           format: int64
+          minimum: 1
+          example: 1
         name:
           type: string
-      xml:
-        name: tag
+          minLength: 1
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: friendly
+
     Pet:
       x-swagger-router-model: io.swagger.petstore.model.Pet
-      required:
-        - name
-        - photoUrls
       type: object
+      additionalProperties: false
+      required: [name]
       properties:
         id:
           type: integer
           format: int64
-          example: 10
+          minimum: 1
+          maximum: 9223372036854775807
+          nullable: true
+          example: 4
         name:
           type: string
-          example: doggie
+          minLength: 1
+          maxLength: 100
+          pattern: '.*\S.*'
+          example: Luna
         category:
-          $ref: '#/components/schemas/Category'
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Category'
         photoUrls:
           type: array
-          xml:
-            wrapped: true
+          maxItems: 20
+          nullable: true
           items:
             type: string
-            xml:
-              name: photoUrl
+            format: uri
+            minLength: 1
+            maxLength: 2048
+          example:
+            - https://example.com/pets/luna.jpg
         tags:
           type: array
-          xml:
-            wrapped: true
+          maxItems: 20
+          nullable: true
           items:
             $ref: '#/components/schemas/Tag'
         status:
           type: string
-          description: pet status in the store
-          enum:
-            - available
-            - pending
-            - sold
-      xml:
-        name: pet
-    ApiResponse:
+          description: Текущий статус питомца в каталоге.
+          enum: [available, pending, sold]
+          default: available
+          example: available
+
+    OrderCreate:
+      x-swagger-router-model: io.swagger.petstore.model.Order
       type: object
+      additionalProperties: false
+      required: [petId, quantity]
       properties:
-        code:
+        petId:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+          example: 4
+        quantity:
           type: integer
           format: int32
-        type:
+          minimum: 1
+          maximum: 100
+          example: 1
+        shipDate:
           type: string
+          format: date-time
+          nullable: true
+          example: '2026-09-06T12:00:00Z'
+        status:
+          type: string
+          enum: [placed, approved, delivered]
+          default: placed
+          example: placed
+        complete:
+          type: boolean
+          default: false
+          example: false
+
+    Order:
+      x-swagger-router-model: io.swagger.petstore.model.Order
+      type: object
+      additionalProperties: false
+      required: [id, petId, quantity, shipDate, status, complete]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          readOnly: true
+          example: 1
+        petId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 4
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          example: 1
+        shipDate:
+          type: string
+          format: date-time
+          example: '2026-09-06T12:00:00Z'
+        status:
+          type: string
+          enum: [placed, approved, delivered]
+          example: placed
+        complete:
+          type: boolean
+          example: false
+
+    HealthResponse:
+      x-swagger-router-model: io.swagger.petstore.model.HealthResponse
+      type: object
+      additionalProperties: false
+      required: [status, service, database, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+          example: UP
+        service:
+          type: string
+          enum: [swagger-petstore]
+          example: swagger-petstore
+        database:
+          type: string
+          description: Состояние готовности PostgreSQL.
+          enum: [UP, DOWN]
+          example: UP
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-09-05T09:15:30.000Z'
+
+    ErrorDetail:
+      x-swagger-router-model: io.swagger.petstore.model.ErrorDetail
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: username
         message:
           type: string
-      xml:
-        name: '##default'
-  requestBodies:
-    Pet:
-      description: Pet object that needs to be added to the store
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Pet'
-        application/xml:
-          schema:
-            $ref: '#/components/schemas/Pet'
-    UserArray:
-      description: List of user object
-      content:
-        application/json:
-          schema:
-            type: array
-            items:
-              $ref: '#/components/schemas/User'
-  securitySchemes:
-    petstore_auth:
-      type: oauth2
-      flows:
-        implicit:
-          authorizationUrl: https://petstore3.swagger.io/oauth/authorize
-          scopes:
-            "write:pets": modify pets in your account
-            "read:pets": read your pets
-    api_key:
-      type: apiKey
-      name: api_key
-      in: header
+          minLength: 1
+          maxLength: 500
+          example: Username is required
+
+    ErrorResponse:
+      x-swagger-router-model: io.swagger.petstore.model.ErrorResponse
+      type: object
+      additionalProperties: false
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Request validation failed
+        details:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+
+    ValidationErrorResponse:
+      description: Ошибка, возвращаемая при нарушении ограничений валидации.
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedErrorResponse:
+      description: Ошибка для отсутствующего, недействительного или истёкшего токена доступа.
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenErrorResponse:
+      description: Ошибка при недостаточных правах авторизованного пользователя.
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    NotFoundErrorResponse:
+      description: Ошибка, когда запрошенная сущность не существует.
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    ConflictErrorResponse:
+      description: Ошибка, когда уникальная сущность уже существует.
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
