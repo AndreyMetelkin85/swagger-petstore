@@ -3,8 +3,8 @@ info:
   title: Swagger Petstore API
   version: 2.0.0
   description: |-
-    An API for a pet store where users can create an account, browse pets, and place orders.
-    It is designed for practicing manual and automated testing with realistic success and error scenarios.
+    API зоомагазина, в котором пользователи могут регистрироваться, просматривать питомцев и оформлять заказы.
+    Проект предназначен для практики ручного и автоматизированного тестирования на реалистичных сценариях успешной работы и обработки ошибок.
   contact:
     name: Training project
   license:

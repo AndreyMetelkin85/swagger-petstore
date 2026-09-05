@@ -41,8 +41,9 @@ public class OpenApiContractTest {
 
         assertEquals("3.0.4", openAPI.getOpenapi());
         assertEquals("Swagger Petstore API", openAPI.getInfo().getTitle());
-        assertEquals("An API for a pet store where users can create an account, browse pets, and place orders.\n"
-                        + "It is designed for practicing manual and automated testing with realistic success and error scenarios.",
+        assertEquals("API зоомагазина, в котором пользователи могут регистрироваться, просматривать питомцев "
+                        + "и оформлять заказы.\nПроект предназначен для практики ручного и автоматизированного "
+                        + "тестирования на реалистичных сценариях успешной работы и обработки ошибок.",
                 openAPI.getInfo().getDescription());
         assertEquals(Arrays.asList("Health", "Registration", "Authentication", "Pets", "Orders",
                         "Users", "Administration"),
