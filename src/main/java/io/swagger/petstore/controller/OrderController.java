@@ -15,6 +15,7 @@ import io.swagger.petstore.utils.Util;
 import javax.ws.rs.core.Response;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 public class OrderController {
     private static final OrderData ORDER_DATA = new OrderData();
@@ -40,7 +41,7 @@ public class OrderController {
                 .entity(ORDER_DATA.findOrdersForUser(auth.getUser().getUsername()));
     }
 
-    public ResponseContext getOrderById(final RequestContext request, final Long orderId) {
+    public ResponseContext getOrderById(final RequestContext request, final UUID orderId) {
         final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
@@ -75,7 +76,7 @@ public class OrderController {
                 .entity(order);
     }
 
-    public ResponseContext deleteOrder(final RequestContext request, final Long orderId) {
+    public ResponseContext deleteOrder(final RequestContext request, final UUID orderId) {
         final AuthResult auth = authService.authorize(request, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
@@ -85,4 +86,5 @@ public class OrderController {
         }
         return new ResponseContext().status(Response.Status.NO_CONTENT);
     }
+
 }

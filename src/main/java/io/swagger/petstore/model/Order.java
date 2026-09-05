@@ -21,22 +21,23 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.Date;
+import java.util.UUID;
 
 @XmlRootElement(name = "Order")
 public class Order {
-  private Long id;
-  private Long petId;
+  private UUID id;
+  private UUID petId;
   private Integer quantity;
   private Date shipDate;
   private String status;
   private Boolean complete;
 
   @XmlElement(name = "id")
-  public Long getId() {
+  public UUID getId() {
     return id;
   }
 
-  public void setId(Long id) {
+  public void setId(UUID id) {
     this.id = id;
   }
 
@@ -50,11 +51,11 @@ public class Order {
 
 
   @XmlElement(name = "petId")
-  public Long getPetId() {
+  public UUID getPetId() {
     return petId;
   }
 
-  public void setPetId(Long petId) {
+  public void setPetId(UUID petId) {
     this.petId = petId;
   }
 

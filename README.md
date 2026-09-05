@@ -22,6 +22,8 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
   форматы и ограничения;
 - добавлена серверная runtime-валидация с единым ответом `422` и `details[]`;
 - in-memory хранилища заменены JDBC-репозиториями PostgreSQL;
+- идентификаторы users, pets, categories, tags и orders имеют формат UUID;
+- Flyway применяет версионированные миграции без удаления существующих данных;
 - Dockerfile стал multi-stage и не требует заранее выполнять Maven на хосте;
 - Compose поднимает отдельные API и PostgreSQL containers с healthcheck и volume;
 - добавлены Java contract tests и Pytest/httpx smoke tests.
@@ -37,7 +39,7 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - auth/validation services: `src/main/java/io/swagger/petstore/service`;
 - JDBC repositories: `src/main/java/io/swagger/petstore/data`;
 - Docker image БД: `docker/postgres/Dockerfile`;
-- SQL schema и seed: `docker/postgres/001-schema.sql`;
+- версия схемы и seed: `src/main/resources/db/migration`;
 - модели: `src/main/java/io/swagger/petstore/model`;
 - Java tests: `src/test/java`;
 - AQA smoke tests: `tests/smoke`.
@@ -74,7 +76,8 @@ docker compose down
 ```
 
 Обычный `down` сохраняет named volume `swagger-petstore-db-data`. Для намеренного полного
-сброса локальной БД вместе со всеми тестовыми записями:
+сброса локальной БД вместе со всеми тестовыми записями используйте команду ниже.
+Это единственный штатный сценарий, при котором сохранённые данные удаляются:
 
 ```bash
 docker compose down -v
@@ -267,7 +270,7 @@ ADMIN_TOKEN=$(curl -sS -X POST http://localhost:8080/api/v3/auth/login \
 curl -i -X POST http://localhost:8080/api/v3/pet \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":900001,"name":"Luna","status":"available"}'
+  -d '{"id":"44444444-4444-4444-8444-444444444444","name":"Luna","status":"available"}'
 ```
 
 Ожидается `201 Created`.
@@ -322,7 +325,6 @@ docker volume create swagger-petstore-db-data
 docker run -d --name swagger-petstore-db --network swagger-petstore-net \
   -e POSTGRES_DB=petstore -e POSTGRES_USER=petstore -e POSTGRES_PASSWORD=petstore \
   -v swagger-petstore-db-data:/var/lib/postgresql/data \
-  -v "$PWD/docker/postgres/001-schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro" \
   postgres:16-alpine
 
 docker run --rm --name swagger-petstore --network swagger-petstore-net -p 8080:8080 \
@@ -353,8 +355,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 - JWT не имеет refresh/revocation flow; logout является stateless;
 - локальные пароли не хешируются, а dev secret известен — это осознанно только для AQA;
-- JDBC сделан компактно без connection pool; schema initialization рассчитана на локальный
-  Docker volume, а не заменяет Flyway/Liquibase migrations;
+- JDBC сделан компактно без connection pool; схема обновляется Flyway migrations;
 - перед production-подобным использованием нужны password hashing, secret manager,
   connection pool, миграции, structured logging и полноценный security filter;
 - Swagger Inflector оставлен для сохранения архитектуры fork; переход на современный

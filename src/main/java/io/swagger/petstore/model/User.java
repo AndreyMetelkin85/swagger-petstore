@@ -21,10 +21,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import java.util.UUID;
 
 @XmlRootElement(name = "User")
 public class User {
-  private long id;
+  private UUID id;
   private String username;
   private String firstName;
   private String lastName;
@@ -35,11 +36,11 @@ public class User {
   private Role role = Role.USER;
 
   @XmlElement(name = "id")
-  public long getId() {
+  public UUID getId() {
     return id;
   }
 
-  public void setId(long id) {
+  public void setId(UUID id) {
     this.id = id;
   }
 

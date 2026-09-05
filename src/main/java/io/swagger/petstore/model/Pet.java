@@ -23,10 +23,11 @@ import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @XmlRootElement(name = "Pet")
 public class Pet {
-    private Long id;
+    private UUID id;
     private Category category;
     private String name;
     private List<String> photoUrls = new ArrayList<>();
@@ -34,11 +35,11 @@ public class Pet {
     private String status;
 
     @XmlElement(name = "id")
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(final Long id) {
+    public void setId(final UUID id) {
         this.id = id;
     }
 

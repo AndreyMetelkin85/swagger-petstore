@@ -16,6 +16,7 @@ import javax.ws.rs.core.Response;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 public class PetController {
     private static final PetData PET_DATA = new PetData();
@@ -46,10 +47,10 @@ public class PetController {
                 .entity(PET_DATA.findPetByTags(tags));
     }
 
-    public ResponseContext getPetById(final RequestContext request, final Long petId) {
-        if (petId == null || petId < 1) {
+    public ResponseContext getPetById(final RequestContext request, final UUID petId) {
+        if (petId == null) {
             return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
-                    "Pet id must be a positive integer");
+                    "Pet id must be a valid UUID");
         }
         final Pet pet = PET_DATA.getPetById(petId);
         if (pet == null) {
@@ -98,7 +99,7 @@ public class PetController {
                 .entity(pet);
     }
 
-    public ResponseContext updatePetWithForm(final RequestContext request, final Long petId,
+    public ResponseContext updatePetWithForm(final RequestContext request, final UUID petId,
                                              final String name, final String status) {
         final AuthResult auth = authService.authorize(request, Role.ADMIN);
         if (!auth.isAuthorized()) {
@@ -124,7 +125,7 @@ public class PetController {
                 .entity(existing);
     }
 
-    public ResponseContext deletePet(final RequestContext request, final Long petId) {
+    public ResponseContext deletePet(final RequestContext request, final UUID petId) {
         final AuthResult auth = authService.authorize(request, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
@@ -136,7 +137,7 @@ public class PetController {
         return new ResponseContext().status(Response.Status.NO_CONTENT);
     }
 
-    public ResponseContext uploadFile(final RequestContext request, final Long petId, final File file) {
+    public ResponseContext uploadFile(final RequestContext request, final UUID petId, final File file) {
         final AuthResult auth = authService.authorize(request, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
@@ -154,4 +155,5 @@ public class PetController {
                 .contentType(Util.getMediaType(request))
                 .entity(existing);
     }
+
 }

@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import java.util.UUID;
 
 public class TokenServiceTest {
     private final TokenService tokenService = new TokenService();
@@ -13,7 +14,7 @@ public class TokenServiceTest {
 
     private static User testUser() {
         final User value = new User();
-        value.setId(2);
+        value.setId(UUID.fromString("22222222-2222-4222-8222-222222222222"));
         value.setUsername("user1");
         value.setRole(Role.USER);
         return value;

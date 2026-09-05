@@ -65,8 +65,8 @@ public final class ValidationService {
             errors.add(new ErrorDetail("body", "Request body is required"));
             return errors;
         }
-        if (idRequired && (pet.getId() == null || pet.getId() < 1)) {
-            errors.add(new ErrorDetail("id", "Pet id must be a positive integer"));
+        if (idRequired && pet.getId() == null) {
+            errors.add(new ErrorDetail("id", "Pet id is required and must be a valid UUID"));
         }
         if (pet.getName() == null || pet.getName().trim().isEmpty()) {
             errors.add(new ErrorDetail("name", "Pet name is required"));
@@ -85,8 +85,8 @@ public final class ValidationService {
             errors.add(new ErrorDetail("body", "Request body is required"));
             return errors;
         }
-        if (order.getPetId() == null || order.getPetId() < 1) {
-            errors.add(new ErrorDetail("petId", "Pet id is required and must be positive"));
+        if (order.getPetId() == null) {
+            errors.add(new ErrorDetail("petId", "Pet id is required and must be a valid UUID"));
         }
         if (order.getQuantity() == null || order.getQuantity() < 1 || order.getQuantity() > 100) {
             errors.add(new ErrorDetail("quantity", "Quantity must be between 1 and 100"));

@@ -22,7 +22,7 @@ public class AuthService {
     }
 
     public User register(final RegisterRequest request) {
-        final User user = UserData.createUser(0, request.getUsername(), request.getFirstName(),
+        final User user = UserData.createUser(null, request.getUsername(), request.getFirstName(),
                 request.getLastName(), request.getEmail(), request.getPassword(), request.getPhone(),
                 1, Role.USER);
         return userData.addUserIfAbsent(user) ? user : null;

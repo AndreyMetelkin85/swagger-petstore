@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /** PostgreSQL-backed pet repository. Nested Pet fields are stored as JSON text. */
 public class PetData {
@@ -24,11 +25,11 @@ public class PetData {
             "id, category_json, name, photo_urls_json, tags_json, status";
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    public Pet getPetById(final long petId) {
+    public Pet getPetById(final UUID petId) {
         final String sql = "SELECT " + COLUMNS + " FROM pets WHERE id = ?";
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, petId);
+            statement.setObject(1, petId);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? map(result) : null;
             }
@@ -66,7 +67,7 @@ public class PetData {
     }
 
     public void addPet(final Pet pet) {
-        final boolean suppliedId = pet.getId() != null && pet.getId() > 0;
+        final boolean suppliedId = pet.getId() != null;
         final String sql = suppliedId
                 ? "INSERT INTO pets (id, category_json, name, photo_urls_json, tags_json, status) "
                 + "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET "
@@ -79,7 +80,7 @@ public class PetData {
              PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             if (suppliedId) {
-                statement.setLong(index++, pet.getId());
+                statement.setObject(index++, pet.getId());
             }
             statement.setString(index++, toJson(pet.getCategory()));
             statement.setString(index++, pet.getName());
@@ -88,20 +89,20 @@ public class PetData {
             statement.setString(index, pet.getStatus());
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
-                pet.setId(result.getLong(1));
+                pet.setId((UUID) result.getObject(1));
             }
         } catch (SQLException exception) {
             throw Database.failure("upsert pet", exception);
         }
     }
 
-    public void deletePetById(final Long petId) {
+    public void deletePetById(final UUID petId) {
         if (petId == null) {
             return;
         }
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement("DELETE FROM pets WHERE id = ?")) {
-            statement.setLong(1, petId);
+            statement.setObject(1, petId);
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw Database.failure("delete pet", exception);
@@ -125,7 +126,7 @@ public class PetData {
 
     private static Pet map(final ResultSet result) throws SQLException {
         try {
-            return createPet(result.getLong("id"),
+            return createPet((UUID) result.getObject("id"),
                     JSON.readValue(result.getString("category_json"), Category.class),
                     result.getString("name"),
                     JSON.readValue(result.getString("photo_urls_json"),
@@ -146,7 +147,7 @@ public class PetData {
         }
     }
 
-    public static Pet createPet(final Long id, final Category category, final String name,
+    public static Pet createPet(final UUID id, final Category category, final String name,
                                 final List<String> urls, final List<Tag> tags, final String status) {
         final Pet pet = new Pet();
         pet.setId(id);

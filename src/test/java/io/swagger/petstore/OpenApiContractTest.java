@@ -1,6 +1,7 @@
 package io.swagger.petstore;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.ParseOptions;
 import io.swagger.v3.parser.core.models.SwaggerParseResult;
@@ -41,6 +42,14 @@ public class OpenApiContractTest {
                 new HashSet<>(openAPI.getComponents().getSchemas().get("ErrorResponse").getRequired()));
         assertNull(openAPI.getComponents().getSchemas().get("ErrorResponse")
                 .getProperties().get("code"));
+        assertEquals("uuid", ((Schema) openAPI.getComponents().getSchemas().get("User")
+                .getProperties().get("id")).getFormat());
+        assertEquals("uuid", ((Schema) openAPI.getComponents().getSchemas().get("Pet")
+                .getProperties().get("id")).getFormat());
+        assertEquals("uuid", ((Schema) openAPI.getComponents().getSchemas().get("Order")
+                .getProperties().get("id")).getFormat());
+        assertEquals("uuid", ((Schema) openAPI.getComponents().getSchemas().get("Order")
+                .getProperties().get("petId")).getFormat());
         assertEquals(Collections.emptyList(),
                 openAPI.getPaths().get("/health").getGet().getSecurity());
 

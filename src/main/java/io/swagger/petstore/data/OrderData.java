@@ -13,20 +13,21 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** PostgreSQL-backed order repository with persisted ownership metadata. */
 public class OrderData {
     private static final String COLUMNS =
             "id, pet_id, quantity, ship_date, status, complete, owner_username";
 
-    public Order getOrderById(final Long orderId) {
+    public Order getOrderById(final UUID orderId) {
         if (orderId == null) {
             return null;
         }
         final String sql = "SELECT " + COLUMNS + " FROM store_orders WHERE id = ?";
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, orderId);
+            statement.setObject(1, orderId);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? map(result) : null;
             }
@@ -35,14 +36,14 @@ public class OrderData {
         }
     }
 
-    public String getOrderOwner(final Long orderId) {
+    public String getOrderOwner(final UUID orderId) {
         if (orderId == null) {
             return null;
         }
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT owner_username FROM store_orders WHERE id = ?")) {
-            statement.setLong(1, orderId);
+            statement.setObject(1, orderId);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? result.getString(1) : null;
             }
@@ -95,7 +96,7 @@ public class OrderData {
         if (order.isComplete() == null) {
             order.setComplete(false);
         }
-        final boolean suppliedId = order.getId() != null && order.getId() > 0;
+        final boolean suppliedId = order.getId() != null;
         final String sql = suppliedId
                 ? "INSERT INTO store_orders (id, pet_id, quantity, ship_date, status, complete, owner_username) "
                 + "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET "
@@ -108,9 +109,9 @@ public class OrderData {
              PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             if (suppliedId) {
-                statement.setLong(index++, order.getId());
+                statement.setObject(index++, order.getId());
             }
-            statement.setLong(index++, order.getPetId());
+            statement.setObject(index++, order.getPetId());
             statement.setInt(index++, order.getQuantity());
             statement.setTimestamp(index++, new Timestamp(order.getShipDate().getTime()));
             statement.setString(index++, order.getStatus());
@@ -118,7 +119,7 @@ public class OrderData {
             statement.setString(index, owner);
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
-                order.setId(result.getLong(1));
+                order.setId((UUID) result.getObject(1));
             }
             return order;
         } catch (SQLException exception) {
@@ -130,14 +131,14 @@ public class OrderData {
         addOrder(order, "admin");
     }
 
-    public boolean deleteOrderById(final Long orderId) {
+    public boolean deleteOrderById(final UUID orderId) {
         if (orderId == null) {
             return false;
         }
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(
                      "DELETE FROM store_orders WHERE id = ?")) {
-            statement.setLong(1, orderId);
+            statement.setObject(1, orderId);
             return statement.executeUpdate() > 0;
         } catch (SQLException exception) {
             throw Database.failure("delete order", exception);
@@ -146,13 +147,13 @@ public class OrderData {
 
     private static Order map(final ResultSet result) throws SQLException {
         final Timestamp shipDate = result.getTimestamp("ship_date");
-        return createOrder(result.getLong("id"), result.getLong("pet_id"),
+        return createOrder((UUID) result.getObject("id"), (UUID) result.getObject("pet_id"),
                 result.getInt("quantity"),
                 shipDate == null ? null : new Date(shipDate.getTime()),
                 result.getString("status"), result.getBoolean("complete"));
     }
 
-    public static Order createOrder(final long id, final long petId, final int quantity,
+    public static Order createOrder(final UUID id, final UUID petId, final int quantity,
                                     final Date shipDate, final String status, final boolean complete) {
         final Order order = new Order();
         order.setId(id);

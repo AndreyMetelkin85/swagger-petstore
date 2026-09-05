@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /** PostgreSQL-backed user repository for local API testing. */
 public class UserData {
@@ -48,7 +49,7 @@ public class UserData {
         if (user.getRole() == null) {
             user.setRole(Role.USER);
         }
-        final boolean suppliedId = user.getId() > 0;
+        final boolean suppliedId = user.getId() != null;
         final String sql = suppliedId
                 ? "INSERT INTO users (id, username, first_name, last_name, email, password, phone, user_status, role) "
                 + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
@@ -58,12 +59,12 @@ public class UserData {
              PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             if (suppliedId) {
-                statement.setLong(index++, user.getId());
+                statement.setObject(index++, user.getId());
             }
             bindUser(statement, index, user);
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
-                user.setId(result.getLong(1));
+                user.setId((UUID) result.getObject(1));
             }
             return true;
         } catch (SQLException exception) {
@@ -171,21 +172,21 @@ public class UserData {
     }
 
     private static User map(final ResultSet result) throws SQLException {
-        return createUser(result.getLong("id"), result.getString("username"),
+        return createUser((UUID) result.getObject("id"), result.getString("username"),
                 result.getString("first_name"), result.getString("last_name"),
                 result.getString("email"), result.getString("password"),
                 result.getString("phone"), result.getInt("user_status"),
                 Role.valueOf(result.getString("role")));
     }
 
-    public static User createUser(final long id, final String username, final String firstName,
+    public static User createUser(final UUID id, final String username, final String firstName,
                                   final String lastName, final String email, final String phone,
                                   final int userStatus) {
         return createUser(id, username, firstName, lastName, email, "XXXXXXXXXXX", phone,
                 userStatus, Role.USER);
     }
 
-    public static User createUser(final long id, final String username, final String firstName,
+    public static User createUser(final UUID id, final String username, final String firstName,
                                   final String lastName, final String email, final String password,
                                   final String phone, final int userStatus, final Role role) {
         final User user = new User();

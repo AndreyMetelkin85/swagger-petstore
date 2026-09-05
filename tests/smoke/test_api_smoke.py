@@ -1,4 +1,5 @@
 import os
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -19,6 +20,7 @@ def login(client: httpx.Client, username: str, password: str) -> str:
     )
     assert response.status_code == 200, response.text
     body = response.json()
+    UUID(body["user"]["id"])
     assert body["tokenType"] == "Bearer"
     assert body["expiresIn"] == 3600
     return body["accessToken"]
@@ -65,7 +67,7 @@ def test_validation_error_contains_field_details(client: httpx.Client) -> None:
 def test_user_cannot_create_pet_but_admin_can(client: httpx.Client) -> None:
     user_token = login(client, "user1", "password123")
     admin_token = login(client, "admin", "admin123")
-    pet = {"id": 900001, "name": "Smoke Test Dog", "status": "available"}
+    pet = {"id": str(uuid4()), "name": "Smoke Test Dog", "status": "available"}
 
     forbidden = client.post("/pet", json=pet, headers=bearer(user_token))
     assert_error(forbidden, 403, "FORBIDDEN")
@@ -80,13 +82,18 @@ def test_user_cannot_create_pet_but_admin_can(client: httpx.Client) -> None:
 
 def test_user_can_create_and_read_own_order(client: httpx.Client) -> None:
     token = login(client, "user1", "password123")
+    pets = client.get("/pet/findByStatus", params={"status": "available"})
+    assert pets.status_code == 200, pets.text
+    pet_id = pets.json()[0]["id"]
+    UUID(pet_id)
     created = client.post(
         "/store/order",
-        json={"petId": 4, "quantity": 1, "status": "placed", "complete": False},
+        json={"petId": pet_id, "quantity": 1, "status": "placed", "complete": False},
         headers=bearer(token),
     )
     assert created.status_code == 201, created.text
     order_id = created.json()["id"]
+    UUID(order_id)
 
     fetched = client.get(f"/store/order/{order_id}", headers=bearer(token))
     assert fetched.status_code == 200, fetched.text
