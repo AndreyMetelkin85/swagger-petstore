@@ -1,96 +1,88 @@
-/**
- * Copyright 2018 SmartBear Software
- * <p>
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package io.swagger.petstore.controller;
 
 import io.swagger.oas.inflector.models.RequestContext;
 import io.swagger.oas.inflector.models.ResponseContext;
 import io.swagger.petstore.data.OrderData;
+import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.Order;
+import io.swagger.petstore.model.Role;
+import io.swagger.petstore.service.AuthResult;
+import io.swagger.petstore.service.AuthService;
+import io.swagger.petstore.service.ValidationService;
+import io.swagger.petstore.utils.Responses;
 import io.swagger.petstore.utils.Util;
-import org.joda.time.DateTime;
 
 import javax.ws.rs.core.Response;
-import java.util.Date;
+import java.util.List;
+import java.util.Objects;
 
-@javax.annotation.Generated(value = "class io.swagger.codegen.languages.JavaInflectorServerCodegen", date = "2017-04-08T15:48:56.501Z")
 public class OrderController {
-
-    private static OrderData orderData = new OrderData();
+    private static final OrderData ORDER_DATA = new OrderData();
+    private final AuthService authService = AuthService.getInstance();
 
     public ResponseContext getInventory(final RequestContext request) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
-                .entity(orderData.getCountByStatus());
+                .entity(ORDER_DATA.getCountByStatus());
+    }
+
+    public ResponseContext listOrders(final RequestContext request) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        return new ResponseContext()
+                .contentType(Util.getMediaType(request))
+                .entity(ORDER_DATA.findOrdersForUser(auth.getUser().getUsername()));
     }
 
     public ResponseContext getOrderById(final RequestContext request, final Long orderId) {
-        if (orderId == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No orderId provided. Try again?");
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
         }
-
-        final Order order = orderData.getOrderById(orderId);
-
-        if (order != null) {
-            return new ResponseContext()
-                    .contentType(Util.getMediaType(request))
-                    .entity(order);
-        }
-
-        return new ResponseContext().status(Response.Status.NOT_FOUND).entity("Order not found");
-    }
-
-    public ResponseContext placeOrder(final RequestContext request, final Order order) {
+        final Order order = ORDER_DATA.getOrderById(orderId);
         if (order == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No Order provided. Try again?");
+            return Responses.error(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND", "Order was not found");
         }
-
-        orderData.addOrder(order);
+        if (auth.getUser().getRole() != Role.ADMIN
+                && !Objects.equals(auth.getUser().getUsername(), ORDER_DATA.getOrderOwner(orderId))) {
+            return Responses.error(Response.Status.FORBIDDEN, "FORBIDDEN",
+                    "Users may access only their own orders");
+        }
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
                 .entity(order);
     }
 
-    public ResponseContext placeOrder(final RequestContext request, final Long id, final Long petId, final Integer quantity, final DateTime shipDate,
-                                      final String status, final Boolean complete) {
-        final Order order = OrderData.createOrder(id, petId, quantity, new Date(), status, complete);
-        return placeOrder(request,order);
+    public ResponseContext placeOrder(final RequestContext request, final Order order) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        final List<ErrorDetail> errors = ValidationService.validateOrder(order);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        ORDER_DATA.addOrder(order, auth.getUser().getUsername());
+        return new ResponseContext()
+                .status(Response.Status.CREATED)
+                .contentType(Util.getMediaType(request))
+                .entity(order);
     }
 
     public ResponseContext deleteOrder(final RequestContext request, final Long orderId) {
-        if (orderId == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No orderId provided. Try again?");
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
         }
-
-        orderData.deleteOrderById(orderId);
-
-        final Order order = orderData.getOrderById(orderId);
-
-        if (null == order) {
-            return new ResponseContext()
-                    .contentType(Util.getMediaType(request))
-                    .entity(order);
-        } else {
-            return new ResponseContext().status(Response.Status.NOT_MODIFIED).entity("Order couldn't be deleted.");
+        if (!ORDER_DATA.deleteOrderById(orderId)) {
+            return Responses.error(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND", "Order was not found");
         }
+        return new ResponseContext().status(Response.Status.NO_CONTENT);
     }
 }

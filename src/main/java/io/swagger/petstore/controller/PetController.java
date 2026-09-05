@@ -1,249 +1,157 @@
-/**
- * Copyright 2018 SmartBear Software
- * <p>
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package io.swagger.petstore.controller;
 
 import io.swagger.oas.inflector.models.RequestContext;
 import io.swagger.oas.inflector.models.ResponseContext;
 import io.swagger.petstore.data.PetData;
-import io.swagger.petstore.model.Category;
+import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.Pet;
-import io.swagger.petstore.model.Tag;
-import io.swagger.petstore.notification.Notifier;
-import io.swagger.petstore.notification.NullNotifier;
+import io.swagger.petstore.model.Role;
+import io.swagger.petstore.service.AuthResult;
+import io.swagger.petstore.service.AuthService;
+import io.swagger.petstore.service.ValidationService;
+import io.swagger.petstore.utils.Responses;
 import io.swagger.petstore.utils.Util;
 
-import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.File;
+import java.util.Arrays;
 import java.util.List;
 
-@javax.annotation.Generated(value = "class io.swagger.codegen.languages.JavaInflectorServerCodegen", date = "2017-04-08T15:48:56.501Z")
 public class PetController {
-
-    private static PetData petData = new PetData();
-    private Notifier notifier = new NullNotifier();
-
-    public PetController() {
-        if (System.getenv("notifierClass") != null) {
-            try {
-                notifier = (Notifier) this.getClass().forName(System.getenv("notifierClass")).newInstance();
-            } catch (Exception e) {
-                //
-            }
-        }
-    }
+    private static final PetData PET_DATA = new PetData();
+    private static final List<String> STATUSES = Arrays.asList("available", "pending", "sold");
+    private final AuthService authService = AuthService.getInstance();
 
     public ResponseContext findPetsByStatus(final RequestContext request, final String status) {
-        if (status == null) {
-            notifier.notify(new RuntimeException("No status provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No status provided. Try again?");
+        if (status == null || status.trim().isEmpty()) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST", "Status is required");
         }
-
-        final List<Pet> petByStatus = petData.findPetByStatus(status);
-
-        if (petByStatus == null) {
-            notifier.notify(new RuntimeException("Pets not found"));
-            return new ResponseContext().status(Response.Status.NOT_FOUND).entity("Pets not found");
+        for (String value : status.split(",")) {
+            if (!STATUSES.contains(value)) {
+                return Responses.validation(Arrays.asList(
+                        new ErrorDetail("status", "Status must be available, pending or sold")));
+            }
         }
-
-        notifier.notify(new RuntimeException("Pets not found"));
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
-                .entity(petByStatus);
-    }
-
-    public ResponseContext getPetById(final RequestContext request, final Long petId) {
-        if (petId == null) {
-            notifier.notify(new RuntimeException("No petId provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No petId provided. Try again?");
-        }
-
-        final Pet pet = petData.getPetById(petId);
-
-        if (pet != null) {
-            return new ResponseContext()
-                    .contentType(Util.getMediaType(request))
-                    .entity(pet);
-        }
-
-        notifier.notify(new RuntimeException("Pets not found"));
-        return new ResponseContext().status(Response.Status.NOT_FOUND).entity("Pet not found");
-    }
-
-    public ResponseContext updatePetWithForm(final RequestContext request, final Long petId, final String name, final String status) {
-        if (petId == null) {
-            notifier.notify(new RuntimeException("No petId provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No Pet provided. Try again?");
-        }
-
-        if (name == null) {
-            notifier.notify(new RuntimeException("No name provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No Name provided. Try again?");
-        }
-
-        final MediaType outputType = Util.getMediaType(request);
-        final Pet existingPet = petData.getPetById(petId);
-
-        if (existingPet == null) {
-            notifier.notify(new RuntimeException("No pet provided"));
-            return new ResponseContext().status(Response.Status.NOT_FOUND).entity("Pet not found");
-        }
-
-        petData.deletePetById(existingPet.getId());
-        existingPet.setName(name);
-        existingPet.setStatus(status);
-        petData.addPet(existingPet);
-
-        return new ResponseContext()
-                .contentType(outputType)
-                .entity(existingPet);
-    }
-
-    public ResponseContext deletePet(final RequestContext request, final String apiKey, final Long petId) {
-        if (petId == null) {
-            notifier.notify(new RuntimeException("No petId provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No petId provided. Try again?");
-        }
-
-        petData.deletePetById(petId);
-
-        final MediaType outputType = Util.getMediaType(request);
-
-        final Pet pet = petData.getPetById(petId);
-
-        if (null == pet) {
-            return new ResponseContext()
-                    .contentType(outputType)
-                    .entity("Pet deleted");
-        } else {
-            notifier.notify(new RuntimeException("Pet couldn't be deleted"));
-            return new ResponseContext().status(Response.Status.NOT_MODIFIED).entity("Pet couldn't be deleted.");
-        }
-
-    }
-
-    public ResponseContext uploadFile(final RequestContext request, final Long petId, final String apiKey, final File file) {
-        if (petId == null) {
-            notifier.notify(new RuntimeException("No petId provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No petId provided. Try again?");
-        }
-
-        if (file == null) {
-            notifier.notify(new RuntimeException("No file provided"));
-            return new ResponseContext().status(Response.Status.BAD_REQUEST).entity("No file uploaded");
-        }
-
-        final Pet existingPet = petData.getPetById(petId);
-        if (existingPet == null) {
-            notifier.notify(new RuntimeException("No pet provided"));
-            return new ResponseContext().status(Response.Status.NOT_FOUND).entity("Pet not found");
-        }
-
-        existingPet.getPhotoUrls().add(file.getAbsolutePath());
-        petData.deletePetById(existingPet.getId());
-        petData.addPet(existingPet);
-
-        final Pet pet = petData.getPetById(petId);
-
-        if (null != pet) {
-            return new ResponseContext()
-                    .contentType(Util.getMediaType(request))
-                    .entity(pet);
-        } else {
-            notifier.notify(new RuntimeException("Pet couldn't be updated"));
-            return new ResponseContext().status(Response.Status.NOT_MODIFIED).entity("Pet couldn't be updated.");
-        }
-    }
-
-    public ResponseContext addPet(final RequestContext request, final Pet pet) {
-        if (pet == null) {
-            notifier.notify(new RuntimeException("No pet provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No Pet provided. Try again?");
-        }
-
-        petData.addPet(pet);
-
-        return new ResponseContext()
-                .contentType(Util.getMediaType(request))
-                .entity(pet);
-    }
-
-    public ResponseContext addPet(final RequestContext request, final Long id, final String name, final Category category,
-                                  final List<String> urls, final List<Tag> tags, final String status) {
-        final Pet pet = PetData.createPet(id, category, name, urls, tags, status);
-        return addPet(request, pet);
-    }
-
-    public ResponseContext updatePet(final RequestContext request, final Pet pet) {
-        if (pet == null) {
-            notifier.notify(new RuntimeException("No pet provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No Pet provided. Try again?");
-        }
-
-        final Pet existingPet = petData.getPetById(pet.getId());
-        if (existingPet == null) {
-            notifier.notify(new RuntimeException("No pet provided"));
-            return new ResponseContext().status(Response.Status.NOT_FOUND).entity("Pet not found");
-        }
-
-        petData.deletePetById(existingPet.getId());
-        petData.addPet(pet);
-
-        return new ResponseContext()
-                .contentType(Util.getMediaType(request))
-                .entity(pet);
-    }
-
-    public ResponseContext updatePet(final RequestContext request, final Long id, final String name, final Category category,
-                                  final List<String> urls, final List<Tag> tags, final String status) {
-        final Pet pet = PetData.createPet(id, category, name, urls, tags, status);
-        return updatePet(request, pet);
+                .entity(PET_DATA.findPetByStatus(status));
     }
 
     public ResponseContext findPetsByTags(final RequestContext request, final List<String> tags) {
-        if (tags == null || tags.size() == 0) {
-            notifier.notify(new RuntimeException("No tags provided"));
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No tags provided. Try again?");
+        if (tags == null || tags.isEmpty()) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST", "At least one tag is required");
         }
-
-        final List<Pet> petByTags = petData.findPetByTags(tags);
-
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
-                .entity(petByTags);
+                .entity(PET_DATA.findPetByTags(tags));
     }
-    
-}
 
+    public ResponseContext getPetById(final RequestContext request, final Long petId) {
+        if (petId == null || petId < 1) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Pet id must be a positive integer");
+        }
+        final Pet pet = PET_DATA.getPetById(petId);
+        if (pet == null) {
+            return Responses.error(Response.Status.NOT_FOUND, "PET_NOT_FOUND", "Pet was not found");
+        }
+        return new ResponseContext()
+                .contentType(Util.getMediaType(request))
+                .entity(pet);
+    }
+
+    public ResponseContext addPet(final RequestContext request, final Pet pet) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        final List<ErrorDetail> errors = ValidationService.validatePet(pet, false);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        if (pet.getId() != null && PET_DATA.getPetById(pet.getId()) != null) {
+            return Responses.error(Response.Status.CONFLICT, "PET_ALREADY_EXISTS",
+                    "A pet with this id already exists");
+        }
+        PET_DATA.addPet(pet);
+        return new ResponseContext()
+                .status(Response.Status.CREATED)
+                .contentType(Util.getMediaType(request))
+                .entity(pet);
+    }
+
+    public ResponseContext updatePet(final RequestContext request, final Pet pet) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        final List<ErrorDetail> errors = ValidationService.validatePet(pet, true);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        if (PET_DATA.getPetById(pet.getId()) == null) {
+            return Responses.error(Response.Status.NOT_FOUND, "PET_NOT_FOUND", "Pet was not found");
+        }
+        PET_DATA.addPet(pet);
+        return new ResponseContext()
+                .contentType(Util.getMediaType(request))
+                .entity(pet);
+    }
+
+    public ResponseContext updatePetWithForm(final RequestContext request, final Long petId,
+                                             final String name, final String status) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        final Pet existing = PET_DATA.getPetById(petId);
+        if (existing == null) {
+            return Responses.error(Response.Status.NOT_FOUND, "PET_NOT_FOUND", "Pet was not found");
+        }
+        if (name != null) {
+            existing.setName(name);
+        }
+        if (status != null) {
+            existing.setStatus(status);
+        }
+        final List<ErrorDetail> errors = ValidationService.validatePet(existing, true);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        PET_DATA.addPet(existing);
+        return new ResponseContext()
+                .contentType(Util.getMediaType(request))
+                .entity(existing);
+    }
+
+    public ResponseContext deletePet(final RequestContext request, final Long petId) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (PET_DATA.getPetById(petId) == null) {
+            return Responses.error(Response.Status.NOT_FOUND, "PET_NOT_FOUND", "Pet was not found");
+        }
+        PET_DATA.deletePetById(petId);
+        return new ResponseContext().status(Response.Status.NO_CONTENT);
+    }
+
+    public ResponseContext uploadFile(final RequestContext request, final Long petId, final File file) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        final Pet existing = PET_DATA.getPetById(petId);
+        if (existing == null) {
+            return Responses.error(Response.Status.NOT_FOUND, "PET_NOT_FOUND", "Pet was not found");
+        }
+        if (file == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST", "Image file is required");
+        }
+        existing.getPhotoUrls().add(file.getName());
+        PET_DATA.addPet(existing);
+        return new ResponseContext()
+                .contentType(Util.getMediaType(request))
+                .entity(existing);
+    }
+}

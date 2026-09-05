@@ -1,173 +1,183 @@
-/**
- * Copyright 2018 SmartBear Software
- * <p>
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package io.swagger.petstore.controller;
 
 import io.swagger.oas.inflector.models.RequestContext;
 import io.swagger.oas.inflector.models.ResponseContext;
 import io.swagger.petstore.data.UserData;
+import io.swagger.petstore.model.ErrorDetail;
+import io.swagger.petstore.model.LoginResponse;
+import io.swagger.petstore.model.RegisterRequest;
+import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
+import io.swagger.petstore.model.UserUpdateRequest;
+import io.swagger.petstore.service.AuthResult;
+import io.swagger.petstore.service.AuthService;
+import io.swagger.petstore.service.ValidationService;
+import io.swagger.petstore.utils.Responses;
 import io.swagger.petstore.utils.Util;
-import org.apache.commons.lang3.RandomUtils;
 
 import javax.ws.rs.core.Response;
-import java.util.Date;
+import java.util.List;
 
-@javax.annotation.Generated(value = "class io.swagger.codegen.languages.JavaInflectorServerCodegen", date = "2017-04-08T15:48:56.501Z")
 public class UserController {
+    private final AuthService authService = AuthService.getInstance();
+    private final UserData userData = authService.getUserData();
 
-    private static UserData userData = new UserData();
-
+    /** Backward-compatible alias for POST /auth/register. */
     public ResponseContext createUser(final RequestContext request, final User user) {
-        if (user == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No User provided. Try again?");
+        final RegisterRequest registration = toRegistration(user);
+        final List<ErrorDetail> errors = ValidationService.validateRegistration(registration);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
         }
-
-        userData.addUser(user);
+        final User created = authService.register(registration);
+        if (created == null) {
+            return Responses.error(Response.Status.CONFLICT, "USER_ALREADY_EXISTS",
+                    "A user with this username already exists");
+        }
         return new ResponseContext()
+                .status(Response.Status.CREATED)
                 .contentType(Util.getMediaType(request))
-                .entity(user);
+                .entity(created);
     }
 
-    public ResponseContext createUser(final RequestContext request, final Long id, final String username,
-                                      final String firstName, final String lastName, final String email,
-                                      final String password, final String phone, final Integer userStatus) {
-        final User user = UserData.createUser(id, username, firstName, lastName, email, phone, userStatus);
-        return createUser(request, user);
+    public ResponseContext getCurrentUser(final RequestContext request) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        return new ResponseContext()
+                .contentType(Util.getMediaType(request))
+                .entity(auth.getUser());
+    }
+
+    public ResponseContext updateCurrentUser(final RequestContext request, final UserUpdateRequest body) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        final List<ErrorDetail> errors = ValidationService.validateUserUpdate(body);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        final User updated = userData.updateUser(auth.getUser().getUsername(), body);
+        return new ResponseContext()
+                .contentType(Util.getMediaType(request))
+                .entity(updated);
+    }
+
+    public ResponseContext deleteCurrentUser(final RequestContext request) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        userData.deleteUser(auth.getUser().getUsername());
+        return new ResponseContext().status(Response.Status.NO_CONTENT);
     }
 
     public ResponseContext getUserByName(final RequestContext request, final String username) {
-        if (username == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No username provided. Try again?");
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
         }
-
         final User user = userData.findUserByName(username);
         if (user == null) {
-            return new ResponseContext().status(Response.Status.NOT_FOUND).entity("User not found");
+            return Responses.error(Response.Status.NOT_FOUND, "USER_NOT_FOUND", "User was not found");
         }
-
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
                 .entity(user);
-    }
-
-    public ResponseContext createUsersWithArrayInput(final RequestContext request, final User[] users) {
-        if (users == null || users.length == 0) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No User provided. Try again?");
-        }
-
-        for (final User user : users) {
-            userData.addUser(user);
-        }
-
-        return new ResponseContext()
-                .contentType(Util.getMediaType(request))
-                .entity(users);
     }
 
     public ResponseContext createUsersWithListInput(final RequestContext request, final User[] users) {
-        if (users == null || users.length == 0) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No User provided. Try again?");
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
         }
-
-        for (final User user : users) {
+        if (users == null || users.length == 0) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "At least one user is required");
+        }
+        for (User user : users) {
+            if (user.getRole() == null) {
+                user.setRole(Role.USER);
+            }
             userData.addUser(user);
         }
-
         return new ResponseContext()
+                .status(Response.Status.CREATED)
                 .contentType(Util.getMediaType(request))
                 .entity(users);
     }
 
+    /** Backward-compatible query-parameter login. */
     public ResponseContext loginUser(final RequestContext request, final String username, final String password) {
-        Date date = new Date(System.currentTimeMillis() + 3600000);
+        final List<ErrorDetail> errors = ValidationService.validateLogin(username, password);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        final LoginResponse response = authService.login(username, password);
+        if (response == null) {
+            return Responses.error(Response.Status.UNAUTHORIZED, "INVALID_CREDENTIALS",
+                    "Username or password is incorrect");
+        }
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
-                .header("X-Rate-Limit", String.valueOf(5000))
-                .header("X-Expires-After", date.toString())
-                .entity("Logged in user session: " + RandomUtils.nextLong());
+                .header("X-Expires-In", String.valueOf(response.getExpiresIn()))
+                .entity(response);
     }
 
     public ResponseContext logoutUser(final RequestContext request) {
-        return new ResponseContext()
-                .contentType(Util.getMediaType(request))
-                .entity("User logged out");
-
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        return new ResponseContext().status(Response.Status.NO_CONTENT);
     }
 
     public ResponseContext deleteUser(final RequestContext request, final String username) {
-        if (username == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No username provided. Try again?");
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
         }
-
+        if (userData.findUserByName(username) == null) {
+            return Responses.error(Response.Status.NOT_FOUND, "USER_NOT_FOUND", "User was not found");
+        }
         userData.deleteUser(username);
-
-        final User user = userData.findUserByName(username);
-
-        if (null == user) {
-            return new ResponseContext()
-                    .contentType(Util.getMediaType(request))
-                    .entity(user);
-        } else {
-            return new ResponseContext().status(Response.Status.NOT_MODIFIED).entity("User couldn't be deleted.");
-        }
+        return new ResponseContext().status(Response.Status.NO_CONTENT);
     }
 
     public ResponseContext updateUser(final RequestContext request, final String username, final User user) {
-        if (username == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No Username provided. Try again?");
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
         }
-
         if (user == null) {
-            return new ResponseContext()
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity("No User provided. Try again?");
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST", "Request body is required");
         }
-
-        final User existingUser = userData.findUserByName(username);
-
-        if (existingUser == null) {
-            return new ResponseContext().status(Response.Status.NOT_FOUND).entity("User not found");
+        if (userData.findUserByName(username) == null) {
+            return Responses.error(Response.Status.NOT_FOUND, "USER_NOT_FOUND", "User was not found");
         }
-
-        userData.deleteUser(existingUser.getUsername());
+        user.setUsername(username);
+        if (user.getRole() == null) {
+            user.setRole(Role.USER);
+        }
         userData.addUser(user);
-
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
                 .entity(user);
     }
 
-    public ResponseContext updateUser(final RequestContext request, final String updatedUser, final Long id, final String username,
-                                      final String firstName, final String lastName, final String email,
-                                      final String password, final String phone, final Integer userStatus) {
-        final User user = UserData.createUser(id, username, firstName, lastName, email, phone, userStatus);
-        return updateUser(request, updatedUser, user);
+    private RegisterRequest toRegistration(User user) {
+        if (user == null) {
+            return null;
+        }
+        final RegisterRequest result = new RegisterRequest();
+        result.setUsername(user.getUsername());
+        result.setPassword(user.getPassword());
+        result.setEmail(user.getEmail());
+        result.setFirstName(user.getFirstName());
+        result.setLastName(user.getLastName());
+        result.setPhone(user.getPhone());
+        return result;
     }
 }
-
