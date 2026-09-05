@@ -1,90 +1,203 @@
-/**
- * Copyright 2018 SmartBear Software
- * <p>
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package io.swagger.petstore.data;
 
+import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
+import io.swagger.petstore.model.UserUpdateRequest;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+/** PostgreSQL-backed user repository for local API testing. */
 public class UserData {
-    private static List<User> users = new ArrayList<>();
-
-    static {
-        users.add(createUser(1, "user1", "first name 1", "last name 1",
-                "email1@test.com", "123-456-7890", 1));
-        users.add(createUser(2, "user2", "first name 2", "last name 2",
-                "email2@test.com", "123-456-7890", 2));
-        users.add(createUser(3, "user3", "first name 3", "last name 3",
-                "email3@test.com", "123-456-7890", 3));
-        users.add(createUser(4, "user4", "first name 4", "last name 4",
-                "email4@test.com", "123-456-7890", 1));
-        users.add(createUser(5, "user5", "first name 5", "last name 5",
-                "email5@test.com", "123-456-7890", 2));
-        users.add(createUser(6, "user6", "first name 6", "last name 6",
-                "email6@test.com", "123-456-7890", 3));
-        users.add(createUser(7, "user7", "first name 7", "last name 7",
-                "email7@test.com", "123-456-7890", 1));
-        users.add(createUser(8, "user8", "first name 8", "last name 8",
-                "email8@test.com", "123-456-7890", 2));
-        users.add(createUser(9, "user9", "first name 9", "last name 9",
-                "email9@test.com", "123-456-7890", 3));
-        users.add(createUser(10, "user10", "first name 10", "last name 10",
-                "email10@test.com", "123-456-7890", 1));
-        users.add(createUser(11, "user?10", "first name ?10", "last name ?10",
-                "email101@test.com", "123-456-7890", 1));
-
-    }
+    private static final String COLUMNS =
+            "id, username, first_name, last_name, email, password, phone, user_status, role";
 
     public User findUserByName(final String username) {
-        for (final User user : users) {
-            if (user.getUsername().equals(username)) {
-                return user;
-            }
+        if (username == null) {
+            return null;
         }
-        return null;
+        final String sql = "SELECT " + COLUMNS + " FROM users WHERE username = ?";
+        try (Connection connection = Database.connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, username);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? map(result) : null;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("find user", exception);
+        }
     }
 
-    public void addUser(final User user) {
-        if (users.size() > 0) {
-            for (int i = users.size() - 1; i >= 0; i--) {
-                if (users.get(i).getUsername().equals(user.getUsername())) {
-                    users.remove(i);
-                }
-            }
+    public User authenticate(final String username, final String password) {
+        final User user = findUserByName(username);
+        if (user == null || password == null || !password.equals(user.getPassword())) {
+            return null;
         }
-        users.add(user);
+        return user;
+    }
+
+    public boolean addUserIfAbsent(final User user) {
+        if (user == null || user.getUsername() == null) {
+            return false;
+        }
+        if (user.getRole() == null) {
+            user.setRole(Role.USER);
+        }
+        final boolean suppliedId = user.getId() > 0;
+        final String sql = suppliedId
+                ? "INSERT INTO users (id, username, first_name, last_name, email, password, phone, user_status, role) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+                : "INSERT INTO users (username, first_name, last_name, email, password, phone, user_status, role) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
+        try (Connection connection = Database.connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            if (suppliedId) {
+                statement.setLong(index++, user.getId());
+            }
+            bindUser(statement, index, user);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                user.setId(result.getLong(1));
+            }
+            return true;
+        } catch (SQLException exception) {
+            if (Database.isUniqueViolation(exception)) {
+                return false;
+            }
+            throw Database.failure("create user", exception);
+        }
+    }
+
+    /** Legacy upsert behaviour retained for the original endpoints. */
+    public void addUser(final User user) {
+        if (user == null || user.getUsername() == null) {
+            return;
+        }
+        if (user.getRole() == null) {
+            user.setRole(Role.USER);
+        }
+        if (findUserByName(user.getUsername()) == null) {
+            addUserIfAbsent(user);
+            return;
+        }
+        final String sql = "UPDATE users SET first_name = ?, last_name = ?, email = ?, password = ?, "
+                + "phone = ?, user_status = ?, role = ? WHERE username = ?";
+        try (Connection connection = Database.connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, user.getFirstName());
+            statement.setString(2, user.getLastName());
+            statement.setString(3, user.getEmail());
+            statement.setString(4, user.getPassword());
+            statement.setString(5, user.getPhone());
+            statement.setInt(6, user.getUserStatus());
+            statement.setString(7, user.getRole().name());
+            statement.setString(8, user.getUsername());
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw Database.failure("upsert user", exception);
+        }
+    }
+
+    public User updateUser(final String username, final UserUpdateRequest update) {
+        if (username == null || update == null) {
+            return null;
+        }
+        final String sql = "UPDATE users SET "
+                + "first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name), "
+                + "email = COALESCE(?, email), password = COALESCE(?, password), "
+                + "phone = COALESCE(?, phone) WHERE username = ? RETURNING " + COLUMNS;
+        try (Connection connection = Database.connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, update.getFirstName());
+            statement.setString(2, update.getLastName());
+            statement.setString(3, update.getEmail());
+            statement.setString(4, update.getPassword());
+            statement.setString(5, update.getPhone());
+            statement.setString(6, username);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? map(result) : null;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("update user", exception);
+        }
     }
 
     public void deleteUser(final String username) {
-        users.removeIf(user -> user.getUsername().equals(username));
+        if (username == null) {
+            return;
+        }
+        try (Connection connection = Database.connect();
+             PreparedStatement statement = connection.prepareStatement(
+                     "DELETE FROM users WHERE username = ?")) {
+            statement.setString(1, username);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw Database.failure("delete user", exception);
+        }
+    }
+
+    public List<User> findAll() {
+        final List<User> users = new ArrayList<>();
+        try (Connection connection = Database.connect();
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery(
+                     "SELECT " + COLUMNS + " FROM users ORDER BY id")) {
+            while (result.next()) {
+                users.add(map(result));
+            }
+            return users;
+        } catch (SQLException exception) {
+            throw Database.failure("list users", exception);
+        }
+    }
+
+    private static void bindUser(final PreparedStatement statement, final int start,
+                                 final User user) throws SQLException {
+        int index = start;
+        statement.setString(index++, user.getUsername());
+        statement.setString(index++, user.getFirstName());
+        statement.setString(index++, user.getLastName());
+        statement.setString(index++, user.getEmail());
+        statement.setString(index++, user.getPassword());
+        statement.setString(index++, user.getPhone());
+        statement.setInt(index++, user.getUserStatus());
+        statement.setString(index, user.getRole().name());
+    }
+
+    private static User map(final ResultSet result) throws SQLException {
+        return createUser(result.getLong("id"), result.getString("username"),
+                result.getString("first_name"), result.getString("last_name"),
+                result.getString("email"), result.getString("password"),
+                result.getString("phone"), result.getInt("user_status"),
+                Role.valueOf(result.getString("role")));
     }
 
     public static User createUser(final long id, final String username, final String firstName,
-                                   final String lastName, final String email, final String phone, final int userStatus) {
+                                  final String lastName, final String email, final String phone,
+                                  final int userStatus) {
+        return createUser(id, username, firstName, lastName, email, "XXXXXXXXXXX", phone,
+                userStatus, Role.USER);
+    }
+
+    public static User createUser(final long id, final String username, final String firstName,
+                                  final String lastName, final String email, final String password,
+                                  final String phone, final int userStatus, final Role role) {
         final User user = new User();
         user.setId(id);
         user.setUsername(username);
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setEmail(email);
-        user.setPassword("XXXXXXXXXXX");
+        user.setPassword(password);
         user.setPhone(phone);
         user.setUserStatus(userStatus);
+        user.setRole(role == null ? Role.USER : role);
         return user;
     }
 }
