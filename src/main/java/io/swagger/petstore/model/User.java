@@ -16,6 +16,7 @@
 
 package io.swagger.petstore.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import javax.xml.bind.annotation.XmlElement;
@@ -31,6 +32,7 @@ public class User {
   private String password;
   private String phone;
   private int userStatus;
+  private Role role = Role.USER;
 
   @XmlElement(name = "id")
   public long getId() {
@@ -78,6 +80,7 @@ public class User {
   }
 
   @XmlElement(name = "password")
+  @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
   public String getPassword() {
     return password;
   }
@@ -103,5 +106,14 @@ public class User {
 
   public void setUserStatus(int userStatus) {
     this.userStatus = userStatus;
+  }
+
+  @XmlElement(name = "role")
+  public Role getRole() {
+    return role;
+  }
+
+  public void setRole(Role role) {
+    this.role = role;
   }
 }

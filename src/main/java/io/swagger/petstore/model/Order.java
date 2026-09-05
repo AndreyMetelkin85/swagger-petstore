@@ -24,46 +24,46 @@ import java.util.Date;
 
 @XmlRootElement(name = "Order")
 public class Order {
-  private long id;
-  private long petId;
-  private int quantity;
+  private Long id;
+  private Long petId;
+  private Integer quantity;
   private Date shipDate;
   private String status;
-  private boolean complete;
+  private Boolean complete;
 
   @XmlElement(name = "id")
-  public long getId() {
+  public Long getId() {
     return id;
   }
 
-  public void setId(long id) {
+  public void setId(Long id) {
     this.id = id;
   }
 
-    public boolean isComplete() {
+    public Boolean isComplete() {
         return complete;
     }
 
-    public void setComplete(boolean complete) {
+    public void setComplete(Boolean complete) {
         this.complete = complete;
     }
 
 
   @XmlElement(name = "petId")
-  public long getPetId() {
+  public Long getPetId() {
     return petId;
   }
 
-  public void setPetId(long petId) {
+  public void setPetId(Long petId) {
     this.petId = petId;
   }
 
   @XmlElement(name = "quantity")
-  public int getQuantity() {
+  public Integer getQuantity() {
     return quantity;
   }
 
-  public void setQuantity(int quantity) {
+  public void setQuantity(Integer quantity) {
     this.quantity = quantity;
   }
 

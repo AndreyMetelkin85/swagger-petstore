@@ -34,7 +34,7 @@ public class Pet {
     private String status;
 
     @XmlElement(name = "id")
-    public long getId() {
+    public Long getId() {
         return id;
     }
 
