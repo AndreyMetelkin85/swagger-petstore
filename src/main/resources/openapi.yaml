@@ -724,7 +724,8 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: BAD_REQUEST
+            status: 400
+            error: BAD_REQUEST
             message: Pet id must be a positive integer
             details: []
     Unauthorized:
@@ -736,17 +737,20 @@ components:
           examples:
             missingToken:
               value:
-                code: UNAUTHORIZED
+                status: 401
+                error: UNAUTHORIZED
                 message: Bearer access token is required
                 details: []
             invalidToken:
               value:
-                code: INVALID_TOKEN
+                status: 401
+                error: INVALID_TOKEN
                 message: Access token is invalid
                 details: []
             expiredToken:
               value:
-                code: TOKEN_EXPIRED
+                status: 401
+                error: TOKEN_EXPIRED
                 message: Access token has expired
                 details: []
     Forbidden:
@@ -756,7 +760,8 @@ components:
           schema:
             $ref: '#/components/schemas/ForbiddenErrorResponse'
           example:
-            code: FORBIDDEN
+            status: 403
+            error: FORBIDDEN
             message: The current role is not allowed to perform this operation
             details: []
     NotFound:
@@ -766,7 +771,8 @@ components:
           schema:
             $ref: '#/components/schemas/NotFoundErrorResponse'
           example:
-            code: PET_NOT_FOUND
+            status: 404
+            error: PET_NOT_FOUND
             message: Pet was not found
             details: []
     Conflict:
@@ -776,7 +782,8 @@ components:
           schema:
             $ref: '#/components/schemas/ConflictErrorResponse'
           example:
-            code: USER_ALREADY_EXISTS
+            status: 409
+            error: USER_ALREADY_EXISTS
             message: A user with this username already exists
             details: []
     ValidationError:
@@ -786,7 +793,8 @@ components:
           schema:
             $ref: '#/components/schemas/ValidationErrorResponse'
           example:
-            code: VALIDATION_ERROR
+            status: 422
+            error: VALIDATION_ERROR
             message: Request validation failed
             details:
               - field: username
@@ -798,7 +806,8 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: INTERNAL_SERVER_ERROR
+            status: 500
+            error: INTERNAL_SERVER_ERROR
             message: An unexpected error occurred
             details: []
 
@@ -1184,9 +1193,16 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.ErrorResponse
       type: object
       additionalProperties: false
-      required: [code, message, details]
+      required: [status, error, message, details]
       properties:
-        code:
+        status:
+          type: integer
+          format: int32
+          minimum: 400
+          maximum: 599
+          description: HTTP-код статуса, продублированный в теле ответа.
+          example: 422
+        error:
           type: string
           minLength: 1
           maxLength: 100

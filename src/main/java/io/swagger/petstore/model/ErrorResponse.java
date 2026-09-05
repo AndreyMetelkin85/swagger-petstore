@@ -4,32 +4,43 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ErrorResponse {
-    private String code;
+    private int status;
+    private String error;
     private String message;
     private List<ErrorDetail> details = new ArrayList<>();
 
     public ErrorResponse() {
     }
 
-    public ErrorResponse(String code, String message) {
-        this.code = code;
+    public ErrorResponse(int status, String error, String message) {
+        this.status = status;
+        this.error = error;
         this.message = message;
     }
 
-    public ErrorResponse(String code, String message, List<ErrorDetail> details) {
-        this.code = code;
+    public ErrorResponse(int status, String error, String message, List<ErrorDetail> details) {
+        this.status = status;
+        this.error = error;
         this.message = message;
         if (details != null) {
             this.details = details;
         }
     }
 
-    public String getCode() {
-        return code;
+    public int getStatus() {
+        return status;
     }
 
-    public void setCode(String code) {
-        this.code = code;
+    public void setStatus(int status) {
+        this.status = status;
+    }
+
+    public String getError() {
+        return error;
+    }
+
+    public void setError(String error) {
+        this.error = error;
     }
 
     public String getMessage() {

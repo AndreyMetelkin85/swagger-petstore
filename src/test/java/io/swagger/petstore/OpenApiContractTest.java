@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.Arrays;
+import java.util.HashSet;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -35,6 +37,10 @@ public class OpenApiContractTest {
         assertNotNull(openAPI.getPaths().get("/user/me"));
         assertNotNull(openAPI.getComponents().getSecuritySchemes().get("bearerAuth"));
         assertNotNull(openAPI.getComponents().getSchemas().get("ValidationErrorResponse"));
+        assertEquals(new HashSet<>(Arrays.asList("status", "error", "message", "details")),
+                new HashSet<>(openAPI.getComponents().getSchemas().get("ErrorResponse").getRequired()));
+        assertNull(openAPI.getComponents().getSchemas().get("ErrorResponse")
+                .getProperties().get("code"));
         assertEquals(Collections.emptyList(),
                 openAPI.getPaths().get("/health").getGet().getSecurity());
 

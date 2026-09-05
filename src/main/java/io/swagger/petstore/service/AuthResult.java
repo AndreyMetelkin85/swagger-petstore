@@ -22,8 +22,9 @@ public class AuthResult {
         return new AuthResult(user, null, null);
     }
 
-    public static AuthResult failure(Response.Status status, String code, String message) {
-        return new AuthResult(null, status, new ErrorResponse(code, message));
+    public static AuthResult failure(Response.Status status, String error, String message) {
+        return new AuthResult(null, status,
+                new ErrorResponse(status.getStatusCode(), error, message));
     }
 
     public boolean isAuthorized() {
