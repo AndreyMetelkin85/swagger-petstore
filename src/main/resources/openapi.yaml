@@ -15,26 +15,26 @@ servers:
     description: Local development server
 tags:
   - name: Health
-    description: Service availability.
+    description: Проверка состояния сервиса.
   - name: Registration
-    description: Account registration and confirmation.
+    description: Регистрация и подтверждение пользователей.
   - name: Authentication
-    description: Sign-in and password recovery.
+    description: Аутентификация и восстановление пароля.
   - name: Pets
-    description: Pet catalog operations.
+    description: Операции с питомцами.
   - name: Orders
-    description: Order operations.
+    description: Операции с заказами.
   - name: Users
-    description: User profile operations.
+    description: Операции с пользователями.
   - name: Administration
-    description: Administrative account operations.
+    description: Административные операции.
 
 paths:
   /health:
     get:
       tags: [Health]
       summary: Проверка состояния сервиса
-      description: Возвращает текущее состояние сервиса.
+      description: Возвращает состояние API и подключения к базе данных.
       operationId: health
       x-swagger-router-controller: HealthController
       security: []
@@ -74,9 +74,7 @@ paths:
     post:
       tags: [Registration]
       summary: Регистрация пользователя
-      description: |-
-        Создаёт учётную запись со статусом `PENDING` и возвращает ссылку подтверждения.
-        Новому пользователю назначается роль `USER`.
+      description: Создаёт пользователя в статусе PENDING и возвращает ссылку подтверждения.
       operationId: register
       x-swagger-router-controller: RegistrationController
       security: []
@@ -172,7 +170,7 @@ paths:
     get:
       tags: [Registration]
       summary: Подтверждение регистрации
-      description: Подтверждает регистрацию по одноразовой ссылке, действующей 24 часа.
+      description: Подтверждает регистрацию по идентификатору пользователя и одноразовому коду.
       operationId: confirm
       x-swagger-router-controller: RegistrationController
       security: []
@@ -239,6 +237,7 @@ paths:
     post:
       tags: [Registration]
       summary: Повторная отправка ссылки подтверждения
+      description: Аннулирует текущую ссылку подтверждения и возвращает новую.
       operationId: resendConfirmation
       x-swagger-router-controller: RegistrationController
       security: []
@@ -311,6 +310,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Запрос восстановления пароля
+      description: Создаёт ссылку сброса пароля для пользователя с указанным email.
       operationId: forgotPassword
       x-swagger-router-controller: AuthenticationController
       security: []
@@ -376,6 +376,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Установка нового пароля
+      description: Изменяет пароль по идентификатору пользователя и одноразовому коду.
       operationId: resetPassword
       x-swagger-router-controller: AuthenticationController
       security: []
@@ -462,9 +463,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Авторизация пользователя
-      description: |-
-        Проверяет локальные учётные данные и возвращает HS256 JWT сроком на один час.
-        Передавайте Bearer token в заголовке `Authorization: Bearer <access_token>`.
+      description: Проверяет учётные данные и возвращает Bearer token.
       operationId: login
       x-swagger-router-controller: AuthenticationController
       security: []
@@ -564,7 +563,7 @@ paths:
     post:
       tags: [Pets]
       summary: Добавление питомца
-      description: Создаёт запись в каталоге. Операция доступна только пользователю с ролью ADMIN.
+      description: Создаёт запись питомца в каталоге.
       operationId: addPet
       x-swagger-router-controller: PetController
       security:
@@ -660,7 +659,7 @@ paths:
     put:
       tags: [Pets]
       summary: Обновление питомца
-      description: Заменяет данные питомца с указанным в теле `id`. Доступно администратору.
+      description: Обновляет запись питомца по идентификатору из тела запроса.
       operationId: updatePet
       x-swagger-router-controller: PetController
       security:
@@ -754,10 +753,7 @@ paths:
     get:
       tags: [Pets]
       summary: Поиск питомцев по статусу
-      description: |-
-        Публичный поиск по каталогу. Передайте один статус или несколько статусов
-        через запятую, например `available,pending`. Если совпадений нет, сервер
-        возвращает пустой массив `[]` со статусом 200.
+      description: Возвращает список питомцев с указанными статусами.
       operationId: findPetsByStatus
       x-swagger-router-controller: PetController
       security: []
@@ -820,7 +816,7 @@ paths:
     get:
       tags: [Pets]
       summary: Поиск питомцев по тегам
-      description: Публичный поиск питомцев, соответствующих хотя бы одному переданному тегу.
+      description: Возвращает список питомцев хотя бы с одним из указанных тегов.
       operationId: findPetsByTags
       x-swagger-router-controller: PetController
       security: []
@@ -872,7 +868,7 @@ paths:
     get:
       tags: [Pets]
       summary: Получение питомца
-      description: Возвращает одну публичную запись питомца из каталога.
+      description: Возвращает питомца по идентификатору.
       operationId: getPetById
       x-swagger-router-controller: PetController
       security: []
@@ -910,7 +906,7 @@ paths:
     delete:
       tags: [Pets]
       summary: Удаление питомца
-      description: Удаляет питомца. Доступно администратору.
+      description: Удаляет питомца по идентификатору.
       operationId: deletePet
       x-swagger-router-controller: PetController
       security:
@@ -969,7 +965,7 @@ paths:
     get:
       tags: [Orders]
       summary: Получение количества заказов по статусам
-      description: Возвращает количество заказов по статусам. Доступно администратору.
+      description: Возвращает количество заказанных питомцев с группировкой по статусу заказа.
       operationId: getInventory
       x-swagger-router-controller: OrderController
       security:
@@ -1026,7 +1022,7 @@ paths:
     get:
       tags: [Orders]
       summary: Получение заказов пользователя
-      description: Возвращает только заказы, принадлежащие авторизованному пользователю.
+      description: Возвращает список заказов текущего пользователя.
       operationId: listOrders
       x-swagger-router-controller: OrderController
       security:
@@ -1073,7 +1069,7 @@ paths:
     post:
       tags: [Orders]
       summary: Создание заказа
-      description: Создаёт заказ для авторизованного пользователя с ролью USER или ADMIN.
+      description: Создаёт заказ от имени текущего пользователя.
       operationId: placeOrder
       x-swagger-router-controller: OrderController
       security:
@@ -1160,7 +1156,7 @@ paths:
     get:
       tags: [Orders]
       summary: Получение заказа
-      description: USER может получить только собственный заказ; ADMIN может получить любой заказ.
+      description: Возвращает заказ по идентификатору с проверкой права доступа.
       operationId: getOrderById
       x-swagger-router-controller: OrderController
       security:
@@ -1223,7 +1219,7 @@ paths:
     delete:
       tags: [Orders]
       summary: Удаление заказа
-      description: Удаляет заказ. Доступно администратору.
+      description: Удаляет заказ по идентификатору.
       operationId: deleteOrder
       x-swagger-router-controller: OrderController
       security:
@@ -1284,7 +1280,7 @@ paths:
     get:
       tags: [Users]
       summary: Получение профиля
-      description: Возвращает профиль текущего пользователя по Bearer token.
+      description: Возвращает профиль текущего пользователя.
       operationId: getCurrentUser
       x-swagger-router-controller: UserController
       security:
@@ -1329,7 +1325,7 @@ paths:
     put:
       tags: [Users]
       summary: Обновление профиля
-      description: Обновляет только переданные изменяемые поля; имя пользователя и роль изменить нельзя.
+      description: Обновляет изменяемые поля профиля текущего пользователя.
       operationId: updateCurrentUser
       x-swagger-router-controller: UserController
       security:
@@ -1415,7 +1411,7 @@ paths:
     delete:
       tags: [Users]
       summary: Удаление профиля
-      description: Удаляет учётную запись из токена; дальнейшее использование этого токена станет невозможным.
+      description: Удаляет учётную запись текущего пользователя.
       operationId: deleteCurrentUser
       x-swagger-router-controller: UserController
       security:
@@ -1460,7 +1456,7 @@ paths:
     get:
       tags: [Users]
       summary: Получение пользователя
-      description: Возвращает профиль указанного пользователя. Доступно администратору.
+      description: Возвращает пользователя по имени.
       operationId: getUserByName
       x-swagger-router-controller: UserController
       security:
@@ -1523,7 +1519,7 @@ paths:
     delete:
       tags: [Users]
       summary: Удаление пользователя
-      description: Удаляет учётную запись. Доступно администратору.
+      description: Удаляет пользователя по имени.
       operationId: deleteUser
       x-swagger-router-controller: UserController
       security:
@@ -1586,6 +1582,7 @@ paths:
     post:
       tags: [Administration]
       summary: Блокировка пользователя
+      description: Переводит пользователя в статус BLOCKED и отзывает выданные токены.
       operationId: blockUser
       x-swagger-router-controller: AdminUserController
       security:
@@ -1663,6 +1660,7 @@ paths:
     post:
       tags: [Administration]
       summary: Разблокировка пользователя
+      description: Переводит заблокированного пользователя в статус ACTIVE или PENDING.
       operationId: unblockUser
       x-swagger-router-controller: AdminUserController
       security:

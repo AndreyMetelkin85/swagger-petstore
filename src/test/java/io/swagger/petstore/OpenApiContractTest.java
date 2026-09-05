@@ -101,6 +101,34 @@ public class OpenApiContractTest {
     }
 
     @Test
+    public void operationDescriptionsAreShortAndHumanReadable() throws Exception {
+        final OpenAPI openAPI = parseContract().openAPI;
+
+        openAPI.getTags().forEach(tag -> {
+            assertNotNull("Missing description for tag " + tag.getName(), tag.getDescription());
+            assertTrue("Tag description must be in Russian: " + tag.getName(),
+                    tag.getDescription().matches("(?s).*[А-Яа-яЁё].*"));
+        });
+        openAPI.getPaths().forEach((path, pathItem) ->
+                pathItem.readOperationsMap().forEach((method, operation) -> {
+                    final String location = method + " " + path;
+                    final String description = operation.getDescription();
+                    assertNotNull("Missing endpoint description: " + location, description);
+                    assertTrue("Endpoint description must be in Russian: " + location,
+                            description.matches("(?s).*[А-Яа-яЁё].*"));
+                    assertTrue("Endpoint description is too long: " + location,
+                            description.length() <= 160);
+                    for (String implementationDetail
+                            : Arrays.asList("HS256", "JWT", "Authorization:", "локальн", "`")) {
+                        assertFalse("Implementation detail in endpoint description: " + location,
+                                description.contains(implementationDetail));
+                    }
+                }));
+        assertEquals("Проверяет учётные данные и возвращает Bearer token.",
+                openAPI.getPaths().get("/auth/login").getPost().getDescription());
+    }
+
+    @Test
     public void everyDomainDocumentsItsOwnErrorCodes() throws Exception {
         final OpenAPI openAPI = parseContract().openAPI;
 
