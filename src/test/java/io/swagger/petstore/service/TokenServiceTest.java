@@ -14,9 +14,10 @@ public class TokenServiceTest {
 
     private static User testUser() {
         final User value = new User();
-        value.setId(UUID.fromString("22222222-2222-4222-8222-222222222222"));
+        value.setId(UUID.fromString("b9ec3485-6954-4faf-813b-1c9d25ea750c"));
         value.setUsername("user1");
         value.setRole(Role.USER);
+        value.setTokenVersion(7);
         return value;
     }
 
@@ -26,13 +27,19 @@ public class TokenServiceTest {
         final TokenService.TokenClaims claims = tokenService.validate(token);
         assertEquals("user1", claims.getUsername());
         assertEquals(user.getRole(), claims.getRole());
+        assertEquals(7, claims.getTokenVersion());
     }
 
     @Test
     public void modifiedTokenIsRejected() throws Exception {
         final String token = tokenService.issueToken(user);
+        final int signatureStart = token.lastIndexOf('.') + 1;
+        final char firstSignatureCharacter = token.charAt(signatureStart);
+        final char replacement = firstSignatureCharacter == 'A' ? 'B' : 'A';
+        final String modified = token.substring(0, signatureStart) + replacement
+                + token.substring(signatureStart + 1);
         try {
-            tokenService.validate(token.substring(0, token.length() - 1) + "x");
+            tokenService.validate(modified);
             fail("Modified token must be rejected");
         } catch (TokenException expected) {
             assertEquals("INVALID_TOKEN", expected.getCode());

@@ -16,11 +16,13 @@
 
 package io.swagger.petstore.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import java.util.Date;
 import java.util.UUID;
 
 @XmlRootElement(name = "User")
@@ -32,8 +34,15 @@ public class User {
   private String email;
   private String password;
   private String phone;
-  private int userStatus;
+  private AccountStatus userStatus = AccountStatus.PENDING;
   private Role role = Role.USER;
+  private Date confirmedAt;
+  private String confirmationCodeHash;
+  private Date confirmationExpiresAt;
+  private String resetCodeHash;
+  private Date resetExpiresAt;
+  private Date resetUsedAt;
+  private int tokenVersion;
 
   @XmlElement(name = "id")
   public UUID getId() {
@@ -100,12 +109,12 @@ public class User {
   }
 
   @XmlElement(name = "userStatus")
-  @Schema(description = "User Status", allowableValues = "1-registered,2-active,3-closed")
-  public int getUserStatus() {
+  @Schema(description = "Account lifecycle status")
+  public AccountStatus getUserStatus() {
     return userStatus;
   }
 
-  public void setUserStatus(int userStatus) {
+  public void setUserStatus(AccountStatus userStatus) {
     this.userStatus = userStatus;
   }
 
@@ -116,5 +125,68 @@ public class User {
 
   public void setRole(Role role) {
     this.role = role;
+  }
+
+  @JsonIgnore
+  public Date getConfirmedAt() {
+    return confirmedAt;
+  }
+
+  public void setConfirmedAt(Date confirmedAt) {
+    this.confirmedAt = confirmedAt;
+  }
+
+  @JsonIgnore
+  public String getConfirmationCodeHash() {
+    return confirmationCodeHash;
+  }
+
+  public void setConfirmationCodeHash(String confirmationCodeHash) {
+    this.confirmationCodeHash = confirmationCodeHash;
+  }
+
+  @JsonIgnore
+  public Date getConfirmationExpiresAt() {
+    return confirmationExpiresAt;
+  }
+
+  public void setConfirmationExpiresAt(Date confirmationExpiresAt) {
+    this.confirmationExpiresAt = confirmationExpiresAt;
+  }
+
+  @JsonIgnore
+  public String getResetCodeHash() {
+    return resetCodeHash;
+  }
+
+  public void setResetCodeHash(String resetCodeHash) {
+    this.resetCodeHash = resetCodeHash;
+  }
+
+  @JsonIgnore
+  public Date getResetExpiresAt() {
+    return resetExpiresAt;
+  }
+
+  public void setResetExpiresAt(Date resetExpiresAt) {
+    this.resetExpiresAt = resetExpiresAt;
+  }
+
+  @JsonIgnore
+  public Date getResetUsedAt() {
+    return resetUsedAt;
+  }
+
+  public void setResetUsedAt(Date resetUsedAt) {
+    this.resetUsedAt = resetUsedAt;
+  }
+
+  @JsonIgnore
+  public int getTokenVersion() {
+    return tokenVersion;
+  }
+
+  public void setTokenVersion(int tokenVersion) {
+    this.tokenVersion = tokenVersion;
   }
 }

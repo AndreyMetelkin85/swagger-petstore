@@ -6,11 +6,13 @@ import io.swagger.petstore.data.UserData;
 import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.LoginResponse;
 import io.swagger.petstore.model.RegisterRequest;
+import io.swagger.petstore.model.RegistrationResponse;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
 import io.swagger.petstore.model.UserUpdateRequest;
 import io.swagger.petstore.service.AuthResult;
 import io.swagger.petstore.service.AuthService;
+import io.swagger.petstore.service.AccountException;
 import io.swagger.petstore.service.ValidationService;
 import io.swagger.petstore.utils.Responses;
 import io.swagger.petstore.utils.Util;
@@ -29,15 +31,15 @@ public class UserController {
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
-        final User created = authService.register(registration);
-        if (created == null) {
-            return Responses.error(Response.Status.CONFLICT, "USER_ALREADY_EXISTS",
-                    "A user with this username already exists");
+        try {
+            final RegistrationResponse created = authService.register(registration);
+            return new ResponseContext()
+                    .status(Response.Status.CREATED)
+                    .contentType(Util.getMediaType(request))
+                    .entity(created);
+        } catch (AccountException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
         }
-        return new ResponseContext()
-                .status(Response.Status.CREATED)
-                .contentType(Util.getMediaType(request))
-                .entity(created);
     }
 
     public ResponseContext getCurrentUser(final RequestContext request) {
@@ -59,10 +61,14 @@ public class UserController {
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
-        final User updated = userData.updateUser(auth.getUser().getUsername(), body);
-        return new ResponseContext()
-                .contentType(Util.getMediaType(request))
-                .entity(updated);
+        try {
+            final User updated = authService.updateCurrentUser(auth.getUser(), body);
+            return new ResponseContext()
+                    .contentType(Util.getMediaType(request))
+                    .entity(updated);
+        } catch (AccountException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        }
     }
 
     public ResponseContext deleteCurrentUser(final RequestContext request) {
@@ -115,15 +121,19 @@ public class UserController {
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
-        final LoginResponse response = authService.login(username, password);
-        if (response == null) {
-            return Responses.error(Response.Status.UNAUTHORIZED, "INVALID_CREDENTIALS",
-                    "Username or password is incorrect");
+        try {
+            final LoginResponse response = authService.login(username, password);
+            if (response == null) {
+                return Responses.error(Response.Status.UNAUTHORIZED, "INVALID_CREDENTIALS",
+                        "Username or password is incorrect");
+            }
+            return new ResponseContext()
+                    .contentType(Util.getMediaType(request))
+                    .header("X-Expires-In", String.valueOf(response.getExpiresIn()))
+                    .entity(response);
+        } catch (AccountException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
         }
-        return new ResponseContext()
-                .contentType(Util.getMediaType(request))
-                .header("X-Expires-In", String.valueOf(response.getExpiresIn()))
-                .entity(response);
     }
 
     public ResponseContext logoutUser(final RequestContext request) {

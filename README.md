@@ -1,23 +1,26 @@
 # Локальный Swagger Petstore для API-тестирования
 
-Учебный Java API для практики ручного и автоматизированного API-тестирования. Проект
-основан на оригинальном Swagger Petstore, но дополнен тестоориентированным OpenAPI
-контрактом, HS256 JWT, ролями, единым форматом ошибок, серверной валидацией,
-PostgreSQL, Docker Compose и smoke-тестами на Python + Pytest + httpx.
+Учебный Java API для практики ручного и автоматизированного API-тестирования. В нём
+можно регистрировать и подтверждать пользователей, управлять профилем, искать питомцев,
+создавать заказы и проверять реалистичные успешные и ошибочные сценарии.
 
 Users, pets, orders и ownership хранятся в PostgreSQL. Named volume сохраняет записи
 при перезапуске или пересоздании API-контейнера.
 
 ## Что изменено относительно оригинального Petstore
 
-- добавлены public `POST /auth/register`, `POST /auth/login` и `GET /health`;
+- регистрация и авторизация разделены на самостоятельные группы операций;
+- добавлены подтверждение регистрации, повторная выдача ссылки и восстановление пароля;
+- учётная запись проходит состояния `PENDING`, `ACTIVE`, `BLOCKED`;
 - добавлены Bearer JWT и роли `USER`/`ADMIN`;
+- смена пароля и блокировка немедленно отзывают ранее выданные Bearer tokens;
+- новые пароли хранятся как BCrypt, старые обновляются при успешной авторизации;
 - добавлены self-service методы `/user/me` и просмотр собственных заказов;
 - операции изменения pets и управления пользователями защищены ролью `ADMIN`;
 - отсутствие/ошибка/истечение токена дают `401`, недостаточная роль — `403`;
 - ошибки имеют единый JSON-контракт `status`, `error`, `message`, `details`;
 - устаревшие зачёркнутые операции удалены из Swagger UI;
-- все пользовательские заголовки и описания OpenAPI переведены на русский язык;
+- разделы Swagger имеют английские названия, а операции — нейтральные русские названия;
 - OpenAPI содержит подробные описания, `operationId`, примеры, перечисления,
   форматы и ограничения;
 - добавлена серверная runtime-валидация с единым ответом `422` и `details[]`;
@@ -90,8 +93,8 @@ docker compose up --build
 docker compose exec postgres psql -U petstore -d petstore -c "SELECT id, username, role FROM users ORDER BY id;"
 ```
 
-JWT secret и параметры БД можно передать через окружение или `.env`. Значения по умолчанию
-предназначены только для локальной практики:
+JWT secret, публичный адрес одноразовых ссылок и параметры БД можно передать через
+окружение или `.env`. Значения по умолчанию предназначены только для локальной практики:
 
 ```bash
 PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret docker compose up --build
@@ -101,6 +104,7 @@ PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret docker compose up --build
 
 ```powershell
 $env:PETSTORE_TOKEN_SECRET = "replace-with-a-long-local-secret"
+$env:PETSTORE_PUBLIC_BASE_URL = "http://localhost:8080/api/v3"
 docker compose up --build
 ```
 
@@ -120,16 +124,16 @@ mvn clean package jetty:run
 Приложение запускается на порту `8080`. Docker-вариант предпочтителен: он фиксирует
 среду исполнения и не требует Java/Maven на ноутбуке.
 
-## Тестовые пользователи
+## Предзагруженные демонстрационные пользователи
 
 | Роль | Username | Password | Назначение |
 |---|---|---|---|
 | ADMIN | `admin` | `admin123` | pets, inventory, управление users/orders |
 | USER | `user1` | `password123` | свой профиль и свои orders |
 
-Seed-пользователи создаются SQL-скриптом при первой инициализации volume. Пароли хранятся
-открыто только потому, что это локальный disposable test service. Не
-используйте эти credentials и dev JWT secret вне локальной среды.
+Эти пользователи создаются только при первой инициализации volume. Их исходные пароли
+автоматически заменяются BCrypt-хешами при первом успешном входе. Не используйте эти
+credentials и dev JWT secret вне локальной среды.
 
 ## Авторизация
 
@@ -145,22 +149,23 @@ curl -sS -X POST http://localhost:8080/api/v3/auth/login \
 
 ```json
 {
-  "accessToken": "<signed-jwt>",
-  "tokenType": "Bearer",
-  "expiresIn": 3600,
+  "access_token": "<signed-jwt>",
+  "token_type": "Bearer",
+  "expires_in": 3600,
   "user": {
-    "id": 2,
+    "id": "b9ec3485-6954-4faf-813b-1c9d25ea750c",
     "username": "user1",
     "email": "test@example.com",
+    "userStatus": "ACTIVE",
     "role": "USER"
   }
 }
 ```
 
-Передавайте `accessToken` в каждом private request:
+Передавайте Bearer token в каждом приватном запросе:
 
 ```http
-Authorization: Bearer <accessToken>
+Authorization: Bearer <access_token>
 ```
 
 PowerShell-пример без ручного копирования token:
@@ -170,7 +175,7 @@ $login = Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8080/api/v3/auth/login" `
   -ContentType "application/json" `
   -Body '{"username":"user1","password":"password123"}'
-$headers = @{ Authorization = "Bearer $($login.accessToken)" }
+$headers = @{ Authorization = "Bearer $($login.access_token)" }
 Invoke-RestMethod -Uri "http://localhost:8080/api/v3/user/me" -Headers $headers
 ```
 
@@ -180,7 +185,11 @@ Invoke-RestMethod -Uri "http://localhost:8080/api/v3/user/me" -Headers $headers
 
 - `GET /health`;
 - `POST /auth/register`;
+- `GET /auth/confirm/{userId}`;
+- `POST /auth/confirmation/resend`;
 - `POST /auth/login`;
+- `POST /auth/password/forgot`;
+- `POST /auth/password/reset/{userId}`;
 - `GET /pet/findByStatus`;
 - `GET /pet/findByTags`;
 - `GET /pet/{petId}`.
@@ -199,6 +208,8 @@ ADMIN:
 - `GET /store/inventory`;
 - `DELETE /store/order/{orderId}`;
 - `GET`, `DELETE /user/{username}`.
+- `POST /admin/users/{userId}/block`;
+- `POST /admin/users/{userId}/unblock`.
 
 ## Примеры smoke-проверок через curl
 
@@ -210,7 +221,9 @@ curl -i -X POST http://localhost:8080/api/v3/auth/register \
   -d '{"username":"qa_engineer","password":"SecurePass123","email":"qa.engineer@example.com"}'
 ```
 
-Ожидается `201 Created`. Повтор запроса с тем же username даёт `409 Conflict`.
+Ожидается `201 Created`, пользователь со статусом `PENDING` и одноразовая
+`confirmationUrl`. После запроса этой ссылки статус станет `ACTIVE`. Повтор регистрации
+с тем же username или email даёт `409 Conflict`.
 
 ### Вход
 
@@ -220,7 +233,7 @@ curl -i -X POST http://localhost:8080/api/v3/auth/login \
   -d '{"username":"user1","password":"password123"}'
 ```
 
-Ожидается `200 OK` и `accessToken`.
+Ожидается `200 OK` и `access_token`.
 
 ### Приватный запрос без токена
 
@@ -231,7 +244,7 @@ curl -i http://localhost:8080/api/v3/user/me
 Ожидается `401 Unauthorized`:
 
 ```json
-{"status":401,"error":"UNAUTHORIZED","message":"Bearer access token is required","details":[]}
+{"status":401,"error":"UNAUTHORIZED","message":"Bearer token is required","details":[]}
 ```
 
 ### Приватный запрос с токеном USER
@@ -241,7 +254,7 @@ curl -i http://localhost:8080/api/v3/user/me
 ```bash
 USER_TOKEN=$(curl -sS -X POST http://localhost:8080/api/v3/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"password123"}' | jq -r .accessToken)
+  -d '{"username":"user1","password":"password123"}' | jq -r .access_token)
 
 curl -i http://localhost:8080/api/v3/user/me \
   -H "Authorization: Bearer $USER_TOKEN"
@@ -265,12 +278,12 @@ curl -i -X POST http://localhost:8080/api/v3/pet \
 ```bash
 ADMIN_TOKEN=$(curl -sS -X POST http://localhost:8080/api/v3/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}' | jq -r .accessToken)
+  -d '{"username":"admin","password":"admin123"}' | jq -r .access_token)
 
 curl -i -X POST http://localhost:8080/api/v3/pet \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":"44444444-4444-4444-8444-444444444444","name":"Luna","status":"available"}'
+  -d '{"id":"7c1d1b70-f31e-42cd-9f78-6a5d87ed8620","name":"Luna","status":"available"}'
 ```
 
 Ожидается `201 Created`.
@@ -296,8 +309,10 @@ python -m pytest tests/smoke -v
 BASE_URL=http://localhost:8080/api/v3 python -m pytest tests/smoke -v
 ```
 
-Smoke-набор проверяет health, login, 401 без токена, 401 с неверным токеном, 403 для
-USER на ADMIN endpoint, ADMIN create/delete pet и USER create/read own order.
+22 smoke-сценария проверяют health, авторизацию, регистрацию и подтверждение,
+восстановление пароля, блокировку, отзыв старых tokens, роли, питомцев, заказы и
+единый формат ошибок для некорректных входных данных. Параллельные запросы отдельно
+проверяют атомарность подтверждения, сброса пароля, блокировки и разблокировки.
 
 Для ручной проверки persistence создайте пользователя или pet, перезапустите только API и
 повторите GET-запрос — запись останется в PostgreSQL:
@@ -329,6 +344,7 @@ docker run -d --name swagger-petstore-db --network swagger-petstore-net \
 
 docker run --rm --name swagger-petstore --network swagger-petstore-net -p 8080:8080 \
   -e PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret \
+  -e PETSTORE_PUBLIC_BASE_URL=http://localhost:8080/api/v3 \
   -e PETSTORE_DB_URL=jdbc:postgresql://swagger-petstore-db:5432/petstore \
   -e PETSTORE_DB_USER=petstore -e PETSTORE_DB_PASSWORD=petstore \
   <dockerhub_login>/swagger-petstore:latest
@@ -353,10 +369,10 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## Ограничения и дальнейшие TODO
 
-- JWT не имеет refresh/revocation flow; logout является stateless;
-- локальные пароли не хешируются, а dev secret известен — это осознанно только для AQA;
+- JWT не имеет refresh flow; для отзыва используется внутренняя версия token;
+- dev secret по умолчанию предназначен только для локальной практики;
 - JDBC сделан компактно без connection pool; схема обновляется Flyway migrations;
-- перед production-подобным использованием нужны password hashing, secret manager,
-  connection pool, миграции, structured logging и полноценный security filter;
+- перед production-подобным использованием нужны secret manager, connection pool,
+  structured logging и полноценный security filter;
 - Swagger Inflector оставлен для сохранения архитектуры fork; переход на современный
   framework был бы отдельным крупным рефакторингом.

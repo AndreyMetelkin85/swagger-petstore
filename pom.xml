@@ -244,6 +244,11 @@
             <artifactId>flyway-core</artifactId>
             <version>${flyway-version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.mindrot</groupId>
+            <artifactId>jbcrypt</artifactId>
+            <version>${jbcrypt-version}</version>
+        </dependency>
 
         <dependency>
             <groupId>javax.xml.bind</groupId>
@@ -286,6 +291,7 @@
         <junit-version>4.13.2</junit-version>
         <postgresql-version>42.7.3</postgresql-version>
         <flyway-version>9.22.3</flyway-version>
+        <jbcrypt-version>0.4</jbcrypt-version>
         <slf4j-version>2.0.9</slf4j-version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>

@@ -2,6 +2,8 @@ package io.swagger.petstore.service;
 
 import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.Order;
+import io.swagger.petstore.model.PasswordForgotRequest;
+import io.swagger.petstore.model.PasswordResetRequest;
 import io.swagger.petstore.model.Pet;
 import io.swagger.petstore.model.RegisterRequest;
 import io.swagger.petstore.model.UserUpdateRequest;
@@ -59,6 +61,26 @@ public final class ValidationService {
         return errors;
     }
 
+    public static List<ErrorDetail> validatePasswordForgot(PasswordForgotRequest request) {
+        final List<ErrorDetail> errors = new ArrayList<>();
+        if (request == null) {
+            errors.add(new ErrorDetail("body", "Request body is required"));
+            return errors;
+        }
+        validateEmail(request.getEmail(), true, errors);
+        return errors;
+    }
+
+    public static List<ErrorDetail> validatePasswordReset(PasswordResetRequest request) {
+        final List<ErrorDetail> errors = new ArrayList<>();
+        if (request == null) {
+            errors.add(new ErrorDetail("body", "Request body is required"));
+            return errors;
+        }
+        validatePassword(request.getNewPassword(), true, "newPassword", errors);
+        return errors;
+    }
+
     public static List<ErrorDetail> validatePet(Pet pet, boolean idRequired) {
         final List<ErrorDetail> errors = new ArrayList<>();
         if (pet == null) {
@@ -98,12 +120,17 @@ public final class ValidationService {
     }
 
     private static void validatePassword(String password, boolean required, List<ErrorDetail> errors) {
+        validatePassword(password, required, "password", errors);
+    }
+
+    private static void validatePassword(String password, boolean required, String field,
+                                         List<ErrorDetail> errors) {
         if (password == null || password.isEmpty()) {
             if (required) {
-                errors.add(new ErrorDetail("password", "Password is required"));
+                errors.add(new ErrorDetail(field, "Password is required"));
             }
         } else if (password.length() < 6 || password.length() > 100) {
-            errors.add(new ErrorDetail("password", "Password must be between 6 and 100 characters"));
+            errors.add(new ErrorDetail(field, "Password must be between 6 and 100 characters"));
         }
     }
 

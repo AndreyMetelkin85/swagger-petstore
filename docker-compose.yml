@@ -29,6 +29,7 @@ services:
     container_name: swagger-petstore
     environment:
       PETSTORE_TOKEN_SECRET: ${PETSTORE_TOKEN_SECRET:-local-petstore-secret-change-me}
+      PETSTORE_PUBLIC_BASE_URL: ${PETSTORE_PUBLIC_BASE_URL:-http://localhost:8080/api/v3}
       PETSTORE_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-petstore}
       PETSTORE_DB_USER: ${POSTGRES_USER:-petstore}
       PETSTORE_DB_PASSWORD: ${POSTGRES_PASSWORD:-petstore}

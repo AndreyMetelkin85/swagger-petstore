@@ -130,6 +130,10 @@ public class PetController {
         if (!auth.isAuthorized()) {
             return auth.toResponse();
         }
+        if (petId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Pet id must be a valid UUID");
+        }
         if (PET_DATA.getPetById(petId) == null) {
             return Responses.error(Response.Status.NOT_FOUND, "PET_NOT_FOUND", "Pet was not found");
         }

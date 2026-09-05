@@ -46,6 +46,10 @@ public class OrderController {
         if (!auth.isAuthorized()) {
             return auth.toResponse();
         }
+        if (orderId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Order id must be a valid UUID");
+        }
         final Order order = ORDER_DATA.getOrderById(orderId);
         if (order == null) {
             return Responses.error(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND", "Order was not found");
@@ -80,6 +84,10 @@ public class OrderController {
         final AuthResult auth = authService.authorize(request, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
+        }
+        if (orderId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Order id must be a valid UUID");
         }
         if (!ORDER_DATA.deleteOrderById(orderId)) {
             return Responses.error(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND", "Order was not found");

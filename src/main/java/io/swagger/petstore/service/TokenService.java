@@ -43,6 +43,7 @@ public class TokenService {
             final Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("sub", user.getUsername());
             payload.put("role", user.getRole().name());
+            payload.put("ver", user.getTokenVersion());
             payload.put("iat", now);
             payload.put("exp", now + ttlSeconds);
 
@@ -73,11 +74,12 @@ public class TokenService {
                     new TypeReference<Map<String, Object>>() { });
             final String username = String.valueOf(payload.get("sub"));
             final Role role = Role.valueOf(String.valueOf(payload.get("role")));
+            final int tokenVersion = ((Number) payload.get("ver")).intValue();
             final long expiresAt = ((Number) payload.get("exp")).longValue();
             if (expiresAt <= System.currentTimeMillis() / 1000L) {
                 throw new TokenException("TOKEN_EXPIRED", "Access token has expired");
             }
-            return new TokenClaims(username, role, expiresAt);
+            return new TokenClaims(username, role, tokenVersion, expiresAt);
         } catch (TokenException exception) {
             throw exception;
         } catch (Exception exception) {
@@ -98,11 +100,13 @@ public class TokenService {
     public static final class TokenClaims {
         private final String username;
         private final Role role;
+        private final int tokenVersion;
         private final long expiresAt;
 
-        TokenClaims(String username, Role role, long expiresAt) {
+        TokenClaims(String username, Role role, int tokenVersion, long expiresAt) {
             this.username = username;
             this.role = role;
+            this.tokenVersion = tokenVersion;
             this.expiresAt = expiresAt;
         }
 
@@ -112,6 +116,10 @@ public class TokenService {
 
         public Role getRole() {
             return role;
+        }
+
+        public int getTokenVersion() {
+            return tokenVersion;
         }
 
         public long getExpiresAt() {
