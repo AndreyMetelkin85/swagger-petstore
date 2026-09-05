@@ -15,7 +15,7 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - добавлены self-service методы `/user/me` и просмотр собственных заказов;
 - операции изменения pets и управления пользователями защищены ролью `ADMIN`;
 - отсутствие/ошибка/истечение токена дают `401`, недостаточная роль — `403`;
-- ошибки имеют единый JSON-контракт `code`, `message`, `details`;
+- ошибки имеют единый JSON-контракт `status`, `error`, `message`, `details`;
 - устаревшие зачёркнутые операции удалены из Swagger UI;
 - все пользовательские заголовки и описания OpenAPI переведены на русский язык;
 - OpenAPI содержит подробные описания, `operationId`, примеры, перечисления,
@@ -228,7 +228,7 @@ curl -i http://localhost:8080/api/v3/user/me
 Ожидается `401 Unauthorized`:
 
 ```json
-{"code":"UNAUTHORIZED","message":"Bearer access token is required","details":[]}
+{"status":401,"error":"UNAUTHORIZED","message":"Bearer access token is required","details":[]}
 ```
 
 ### Приватный запрос с токеном USER
