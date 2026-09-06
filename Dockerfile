@@ -7,31 +7,51 @@ COPY inflector.yaml ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -B clean package
 
-FROM tomcat:9.0.121-jre17-temurin-noble@sha256:e04a0353442f403a24763b5112d597aee03af8eb420775deedd039220afbcb35
+FROM tomcat:9.0.121-jre17-temurin-noble@sha256:e04a0353442f403a24763b5112d597aee03af8eb420775deedd039220afbcb35 AS tomcat
 
-LABEL org.opencontainers.image.title="Swagger Petstore API" \
-      org.opencontainers.image.description="Training pet store API" \
+FROM postgres:16.15-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+
+LABEL org.opencontainers.image.title="Swagger Petstore" \
+      org.opencontainers.image.description="Training pet store API with PostgreSQL" \
       org.opencontainers.image.source="https://github.com/AndreyMetelkin85/swagger-petstore" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.licenses="Apache-2.0 AND PostgreSQL"
 
-RUN groupadd --system --gid 10001 petstore \
+ENV JAVA_HOME=/opt/java/openjdk \
+    CATALINA_HOME=/usr/local/tomcat \
+    PATH=/opt/java/openjdk/bin:/usr/local/tomcat/bin:$PATH \
+    CATALINA_OPTS="-Dconfig=/app/inflector.yaml -DswaggerUrl=/app/openapi.yaml" \
+    PETSTORE_PUBLIC_BASE_URL=http://localhost:8080/api/v3 \
+    PETSTORE_EXPOSE_TEST_LINKS=false
+
+COPY --from=tomcat /opt/java/openjdk /opt/java/openjdk
+COPY --from=tomcat /usr/local/tomcat /usr/local/tomcat
+
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends curl tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/local/bin/gosu \
+    && groupadd --system --gid 10001 petstore \
     && useradd --system --uid 10001 --gid petstore --home-dir /nonexistent \
         --shell /usr/sbin/nologin petstore \
     && rm -rf /usr/local/tomcat/webapps/* /usr/local/tomcat/webapps.dist \
     && mkdir -p /app /licenses \
     && chown -R petstore:petstore /app /licenses /usr/local/tomcat
+
 WORKDIR /app
 
 COPY --from=build --chown=petstore:petstore /build/target/*.war /usr/local/tomcat/webapps/ROOT.war
 COPY --from=build --chown=petstore:petstore /build/src/main/resources/openapi.yaml ./openapi.yaml
 COPY --from=build --chown=petstore:petstore /build/inflector.yaml ./inflector.yaml
 COPY --chown=petstore:petstore LICENSE /licenses/LICENSE
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/petstore-entrypoint
 
-EXPOSE 8080
-ENV CATALINA_OPTS="-Dconfig=/app/inflector.yaml -DswaggerUrl=/app/openapi.yaml"
-USER petstore
+EXPOSE 8080 5432
+STOPSIGNAL SIGTERM
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
+HEALTHCHECK --interval=10s --timeout=3s --start-period=40s --retries=8 \
   CMD curl --fail --silent --show-error http://localhost:8080/api/v3/health >/dev/null || exit 1
 
-CMD ["catalina.sh", "run"]
+# The supervisor needs root only to prepare a newly mounted PGDATA directory.
+# PostgreSQL runs as uid 999 and the network-facing API runs as uid 10001.
+ENTRYPOINT ["tini", "--", "/usr/local/bin/petstore-entrypoint"]

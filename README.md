@@ -53,8 +53,7 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - контроллеры: `src/main/java/io/swagger/petstore/controller`;
 - auth/validation services: `src/main/java/io/swagger/petstore/service`;
 - JDBC repositories: `src/main/java/io/swagger/petstore/data`;
-- Docker image БД: `docker/postgres/Dockerfile`;
-- единый Docker image API + PostgreSQL: `Dockerfile.all-in-one`;
+- единый Docker image API + PostgreSQL: `Dockerfile`;
 - версия схемы и seed: `src/main/resources/db/migration`;
 - модели: `src/main/java/io/swagger/petstore/model`;
 - Java tests: `src/test/java`;
@@ -62,9 +61,8 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 
 ## Быстрый запуск через Docker Compose
 
-Требуются Docker Desktop и Docker Compose. Основной Compose скачивает проверенные
-`andymentor/swagger-petstore:dev` и `andymentor/swagger-petstore-db:16.15`, ждёт
-готовности БД и только затем запускает API:
+Требуются Docker Desktop и Docker Compose. Основной Compose скачивает один проверенный
+образ `andymentor/swagger-petstore:latest`, в котором вместе запускаются API и PostgreSQL:
 
 ```bash
 docker compose up -d
@@ -76,33 +74,29 @@ docker compose up -d
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-## Запуск одним Docker-образом
+## Запуск без Docker Compose
 
 Для учебного локального запуска API и PostgreSQL доступны в одном контейнере. Docker
 автоматически создаст named volume и сохранит в нём данные между перезапусками:
 
 ```bash
-docker run -d --name swagger-petstore-all-in-one --restart unless-stopped \
+docker run -d --name swagger-petstore --restart unless-stopped \
   -p 127.0.0.1:8080:8080 \
   -p 127.0.0.1:5432:5432 \
-  -v swagger-petstore-all-in-one-data:/var/lib/postgresql/data \
-  andymentor/swagger-petstore:dev-all-in-one
+  -v swagger-petstore-data:/var/lib/postgresql/data \
+  andymentor/swagger-petstore:latest
 ```
 
 Остановить и снова запустить тот же контейнер без потери данных:
 
 ```bash
-docker stop swagger-petstore-all-in-one
-docker start swagger-petstore-all-in-one
+docker stop swagger-petstore
+docker start swagger-petstore
 ```
 
-All-in-one предназначен для быстрого учебного запуска. Основной Compose-вариант
-оставляет API и PostgreSQL отдельными сервисами.
-
-В Docker Desktop внутри Compose-проекта `swagger-petstore` должны быть видны два
-контейнера: `swagger-petstore` (API, `127.0.0.1:8080`) и `swagger-petstore-db`.
-PostgreSQL опубликован только на loopback: `127.0.0.1:${POSTGRES_PORT:-5432}`. Он
-недоступен из внешней сети; порт можно переопределить переменной `POSTGRES_PORT`.
+В Docker Desktop внутри Compose-проекта виден один контейнер `swagger-petstore`.
+API и PostgreSQL опубликованы только на loopback. Порт PostgreSQL можно переопределить
+переменной `POSTGRES_PORT`.
 
 После успешного healthcheck доступны:
 
@@ -133,7 +127,7 @@ docker compose up -d
 Посмотреть таблицы напрямую:
 
 ```bash
-docker compose exec postgres psql -U petstore -d petstore -c "SELECT id, username, role FROM users ORDER BY id;"
+docker compose exec petstore psql -U petstore -d petstore -c "SELECT id, username, role FROM users ORDER BY id;"
 ```
 
 Параметры подключения к PostgreSQL с хоста:
@@ -387,7 +381,7 @@ BASE_URL=http://localhost:8080/api/v3 python -m pytest tests/smoke -v
 резервирования и оплаты. Также проверяются запрет destructive user/order operations,
 невозможность подделать ADMIN token старым публичным secret и optimistic lock питомца.
 
-Для ручной проверки persistence создайте пользователя или pet, перезапустите только API и
+Для ручной проверки persistence создайте пользователя или pet, перезапустите контейнер и
 повторите GET-запрос — запись останется в PostgreSQL:
 
 ```bash
@@ -396,34 +390,23 @@ docker compose restart petstore
 
 ## Docker-образ и Docker Hub
 
-Публичные dev-образы публикуются в `andymentor/swagger-petstore` и
-`andymentor/swagger-petstore-db`. Они собираются только из проверенного commit ветки
-`dev`; upstream-образы `swaggerapi/petstore3` не используются.
+Публичный образ публикуется как `andymentor/swagger-petstore:latest`. Он содержит API и
+PostgreSQL и собирается только из проверенного commit ветки `dev`; upstream-образ
+`swaggerapi/petstore3` не используется.
 
 Build image:
 
 ```bash
-docker build --pull -t andymentor/swagger-petstore:dev .
-docker build --pull -t andymentor/swagger-petstore-db:16.15 docker/postgres
+docker build --pull -t andymentor/swagger-petstore:latest .
 ```
 
 Run image:
 
 ```bash
-docker network create swagger-petstore-net
-docker volume create swagger-petstore-db-data
-docker run -d --name swagger-petstore-db --network swagger-petstore-net \
-  -e POSTGRES_DB=petstore -e POSTGRES_USER=petstore -e POSTGRES_PASSWORD=petstore \
-  -v swagger-petstore-db-data:/var/lib/postgresql/data \
-  -p 127.0.0.1:5432:5432 \
-  andymentor/swagger-petstore-db:16.15
-
-docker run --rm --name swagger-petstore --network swagger-petstore-net -p 127.0.0.1:8080:8080 \
-  -e PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret \
-  -e PETSTORE_PUBLIC_BASE_URL=http://localhost:8080/api/v3 \
-  -e PETSTORE_DB_URL=jdbc:postgresql://swagger-petstore-db:5432/petstore \
-  -e PETSTORE_DB_USER=petstore -e PETSTORE_DB_PASSWORD=petstore \
-  andymentor/swagger-petstore:dev
+docker run -d --name swagger-petstore --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:5432:5432 \
+  -v swagger-petstore-data:/var/lib/postgresql/data \
+  andymentor/swagger-petstore:latest
 ```
 
 Основной Compose использует этот образ. Локальная разработка выполняется через
@@ -433,17 +416,14 @@ Push image:
 
 ```bash
 docker login
-docker push andymentor/swagger-petstore:dev
-docker push andymentor/swagger-petstore-db:16.15
+docker push andymentor/swagger-petstore:latest
 ```
 
 Multi-arch build and push из проверенного `dev`:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t andymentor/swagger-petstore:dev --push .
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t andymentor/swagger-petstore-db:16.15 --push docker/postgres
+  -t andymentor/swagger-petstore:latest --push .
 ```
 
 ## Ограничения и дальнейшие TODO

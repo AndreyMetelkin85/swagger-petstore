@@ -1,11 +1,4 @@
 services:
-  postgres:
-    build:
-      context: ./docker/postgres
-      dockerfile: Dockerfile
-    image: swagger-petstore-db:local
-    pull_policy: never
-
   petstore:
     build:
       context: .
