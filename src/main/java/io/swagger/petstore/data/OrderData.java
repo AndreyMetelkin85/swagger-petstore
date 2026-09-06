@@ -29,9 +29,9 @@ import java.util.UUID;
 /** PostgreSQL-backed order repository with transactional reservation and payment lifecycle. */
 public class OrderData {
     public static final int PAYMENT_TIMEOUT_MINUTES = 15;
-    static final String COLUMNS = "id, pet_id, quantity, ship_date, status, complete, "
-            + "owner_user_id, created_at, unit_price, total_amount, currency, delivery_details, "
-            + "payment_status, payment_expires_at";
+    static final String COLUMNS = "id, owner_user_id, pet_id, quantity, status, unit_price, "
+            + "total_amount, currency, delivery_details, payment_status, payment_expires_at, "
+            + "ship_date, complete, created_at";
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public Order getOrderById(final UUID orderId) {

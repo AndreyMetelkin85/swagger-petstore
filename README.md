@@ -74,6 +74,16 @@ docker compose up -d
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
+Чтобы получить опубликованное обновление и пересоздать контейнер без удаления данных:
+
+```powershell
+docker compose pull
+docker compose up -d
+```
+
+Named volume остаётся прежним, поэтому PostgreSQL продолжает использовать уже
+сохранённые данные.
+
 ## Запуск без Docker Compose
 
 Для учебного локального запуска API и PostgreSQL доступны в одном контейнере. Docker
@@ -391,7 +401,7 @@ docker compose restart petstore
 ## Docker-образ и Docker Hub
 
 Публичный образ публикуется как `andymentor/swagger-petstore:latest`. Он содержит API и
-PostgreSQL и собирается только из проверенного commit ветки `dev`; upstream-образ
+PostgreSQL и собирается только из проверенного commit ветки `master`; upstream-образ
 `swaggerapi/petstore3` не используется.
 
 Build image:
@@ -412,19 +422,17 @@ docker run -d --name swagger-petstore --restart unless-stopped \
 Основной Compose использует этот образ. Локальная разработка выполняется через
 `docker-compose.dev.yml`.
 
-Push image:
+GitHub Actions собирает и сканирует image в pull request, но ничего не публикует.
+После успешной проверки push в `master` автоматически обновляет единственный тег
+`latest` для платформ `linux/amd64` и `linux/arm64`. Image содержит SBOM,
+provenance и OCI-label с точным Git commit.
 
-```bash
-docker login
-docker push andymentor/swagger-petstore:latest
-```
+Для публикации в настройках GitHub Actions должны быть заданы:
 
-Multi-arch build and push из проверенного `dev`:
+- variable `DOCKERHUB_USERNAME=andymentor`;
+- secret `DOCKERHUB_TOKEN` — отдельный Docker Hub access token с правом Read & Write.
 
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t andymentor/swagger-petstore:latest --push .
-```
+Пароль Docker Hub и access token не сохраняются в Git, README или Docker image.
 
 ## Ограничения и дальнейшие TODO
 
