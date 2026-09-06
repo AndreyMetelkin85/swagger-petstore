@@ -54,6 +54,7 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - auth/validation services: `src/main/java/io/swagger/petstore/service`;
 - JDBC repositories: `src/main/java/io/swagger/petstore/data`;
 - Docker image БД: `docker/postgres/Dockerfile`;
+- единый Docker image API + PostgreSQL: `Dockerfile.all-in-one`;
 - версия схемы и seed: `src/main/resources/db/migration`;
 - модели: `src/main/java/io/swagger/petstore/model`;
 - Java tests: `src/test/java`;
@@ -74,6 +75,29 @@ docker compose up -d
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
+
+## Запуск одним Docker-образом
+
+Для учебного локального запуска API и PostgreSQL доступны в одном контейнере. Docker
+автоматически создаст named volume и сохранит в нём данные между перезапусками:
+
+```bash
+docker run -d --name swagger-petstore-all-in-one --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 \
+  -p 127.0.0.1:5432:5432 \
+  -v swagger-petstore-all-in-one-data:/var/lib/postgresql/data \
+  andymentor/swagger-petstore:dev-all-in-one
+```
+
+Остановить и снова запустить тот же контейнер без потери данных:
+
+```bash
+docker stop swagger-petstore-all-in-one
+docker start swagger-petstore-all-in-one
+```
+
+All-in-one предназначен для быстрого учебного запуска. Основной Compose-вариант
+оставляет API и PostgreSQL отдельными сервисами.
 
 В Docker Desktop внутри Compose-проекта `swagger-petstore` должны быть видны два
 контейнера: `swagger-petstore` (API, `127.0.0.1:8080`) и `swagger-petstore-db`.

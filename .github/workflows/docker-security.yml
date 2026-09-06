@@ -19,6 +19,8 @@ jobs:
         run: docker build --pull --tag swagger-petstore:ci .
       - name: Build database image
         run: docker build --pull --tag swagger-petstore-db:ci docker/postgres
+      - name: Build all-in-one image
+        run: docker build --pull --file Dockerfile.all-in-one --tag swagger-petstore:all-in-one-ci .
       - name: Scan application image
         run: >-
           docker run --rm
@@ -41,3 +43,14 @@ jobs:
           --scanners vuln
           --no-progress
           swagger-petstore-db:ci
+      - name: Scan all-in-one image
+        run: >-
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.74.0 image
+          --exit-code 1
+          --severity CRITICAL,HIGH
+          --ignore-unfixed
+          --scanners vuln
+          --no-progress
+          swagger-petstore:all-in-one-ci
