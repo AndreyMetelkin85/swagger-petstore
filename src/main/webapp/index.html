@@ -4,7 +4,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Swagger UI</title>
-  <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,700|Source+Code+Pro:300,600|Titillium+Web:400,600,700" rel="stylesheet">
   <link rel="stylesheet" type="text/css" href="./swagger-ui.css" >
   <link rel="icon" type="image/png" href="./favicon-32x32.png" sizes="32x32" />
   <link rel="icon" type="image/png" href="./favicon-16x16.png" sizes="16x16" />
@@ -72,7 +71,7 @@
 <script>
   window.onload = function() {
     // Build a system
-    apiUrl = window.location.protocol + "//" + window.location.host + "/api/v3/openapi.json";
+    const apiUrl = window.location.protocol + "//" + window.location.host + "/api/v3/openapi.json";
     const ui = SwaggerUIBundle({
       oauth2RedirectUrl:  window.location.protocol + '//' + window.location.host + '/oauth2-redirect.html',
       url: apiUrl,

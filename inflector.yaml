@@ -2,6 +2,13 @@ controllerPackage: io.swagger.petstore.controller
 modelPackage:  io.swagger.petstore.model
 swaggerUrl: openapi.yaml
 
+exceptionMappers:
+- io.swagger.petstore.utils.PetstoreExceptionMapper
+
+# Business validation is handled by endpoint controllers so each operation
+# keeps its documented error codes and field-level details.
+validatePayloads: false
+
 exposedSpecOptions:
   useOriginalNotParsed: true
 
@@ -9,8 +16,5 @@ entityProcessors:
 - json
 - yaml
 - xml
-
-swaggerProcessors:
-- io.swagger.petstore.utils.HandleAuthUrlProcessor
 
 rootPath: /api

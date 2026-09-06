@@ -18,18 +18,19 @@ package io.swagger.petstore.model;
 
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import java.util.UUID;
 
 @XmlRootElement(name = "Category")
 public class Category {
-  private long id;
+  private UUID id;
   private String name;
 
   @XmlElement(name = "id")
-  public long getId() {
+  public UUID getId() {
     return id;
   }
 
-  public void setId(long id) {
+  public void setId(UUID id) {
     this.id = id;
   }
 

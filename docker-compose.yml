@@ -1,0 +1,28 @@
+services:
+  petstore:
+    image: ${PETSTORE_IMAGE:-andymentor/swagger-petstore}:${PETSTORE_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: swagger-petstore
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-petstore}
+      POSTGRES_USER: ${POSTGRES_USER:-petstore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-petstore}
+      PETSTORE_TOKEN_SECRET: ${PETSTORE_TOKEN_SECRET:-}
+      PETSTORE_PUBLIC_BASE_URL: ${PETSTORE_PUBLIC_BASE_URL:-http://localhost:8080/api/v3}
+      PETSTORE_EXPOSE_TEST_LINKS: ${PETSTORE_EXPOSE_TEST_LINKS:-false}
+    volumes:
+      - petstore-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8080/api/v3/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 40s
+      retries: 8
+
+volumes:
+  petstore-data:
+    name: ${PETSTORE_DB_VOLUME:-swagger-petstore-db-data}

@@ -1,367 +1,1027 @@
 openapi: 3.0.4
 info:
-  title: Swagger Petstore - OpenAPI 3.0
+  title: Swagger Petstore API
+  version: 2.0.0
   description: |-
-    This is a sample Pet Store Server based on the OpenAPI 3.0 specification.  You can find out more about
-    Swagger at [https://swagger.io](https://swagger.io). In the third iteration of the pet store, we've switched to the design first approach!
-    You can now help us improve the API whether it's by making changes to the definition itself or to the code.
-    That way, with time, we can improve the API in general, and expose some of the new features in OAS3.
-
-    Some useful links:
-    - [The Pet Store repository](https://github.com/swagger-api/swagger-petstore)
-    - [The source API definition for the Pet Store](https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml)
-  termsOfService: https://swagger.io/terms/
+    API зоомагазина, в котором пользователи могут регистрироваться, просматривать питомцев и оформлять заказы.
+    Проект предназначен для практики ручного и автоматизированного тестирования на реалистичных сценариях успешной работы и обработки ошибок.
+    Для практики доступны два демо-аккаунта: admin (администратор) и user (обычный пользователь).
+    Служат для демонстрации ролей и проверки доступа в учебном окружении.
   contact:
-    email: apiteam@swagger.io
+    name: Training project
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-  version: 1.0.29-SNAPSHOT
-externalDocs:
-  description: Find out more about Swagger
-  url: https://swagger.io
 servers:
-  - url: https://petstore3.swagger.io/api/v3
+  - url: http://localhost:8080/api/v3
+    description: Local development server
 tags:
-  - name: pet
-    description: Everything about your Pets
-    externalDocs:
-      description: Find out more
-      url: https://swagger.io
-  - name: store
-    description: Access to Petstore orders
-    externalDocs:
-      description: Find out more about our store
-      url: https://swagger.io
-  - name: user
-    description: Operations about user
+  - name: Health
+    description: Проверка состояния сервиса.
+  - name: Registration
+    description: Регистрация и подтверждение пользователей.
+  - name: Authentication
+    description: Аутентификация и восстановление пароля.
+  - name: Pets
+    description: Операции с питомцами.
+  - name: Orders
+    description: Операции с заказами.
+  - name: Payments
+    description: Оплата заказов тестовыми картами.
+  - name: Users
+    description: Операции с пользователями.
+  - name: Administration
+    description: Административные операции.
+
 paths:
-  /pet:
-    put:
-      tags:
-        - pet
-      summary: Update an existing pet.
-      description: Update an existing pet by Id.
-      operationId: updatePet
-      requestBody:
-        description: Update an existent pet in the store
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Pet'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/Pet'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Pet'
-        required: true
+  /health:
+    get:
+      tags: [Health]
+      summary: Проверка состояния сервиса
+      description: Возвращает состояние API и подключения к базе данных.
+      operationId: health
+      x-swagger-router-controller: HealthController
+      security: []
       responses:
         '200':
-          description: Successful operation
+          description: API и PostgreSQL готовы принимать запросы.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Pet'
-            application/xml:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: UP
+                service: swagger-petstore
+                database: UP
+                timestamp: '2026-09-05T09:15:30.000Z'
+        '503':
+          description: API запущен, но PostgreSQL недоступен.
+          content:
+            application/json:
               schema:
-                $ref: '#/components/schemas/Pet'
-        '400':
-          description: Invalid ID supplied
-        '404':
-          description: Pet not found
-        '422':
-          description: Validation exception
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: DOWN
+                service: swagger-petstore
+                database: DOWN
+                timestamp: '2026-09-05T09:15:30.000Z'
+        '500':
+          description: Не удалось определить состояние сервиса.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                healthCheckFailed:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /auth/register:
     post:
-      tags:
-        - pet
-      summary: Add a new pet to the store.
-      description: Add a new pet to the store.
-      operationId: addPet
+      tags: [Registration]
+      summary: Регистрация пользователя
+      description: Создаёт пользователя в статусе PENDING и возвращает ссылку подтверждения.
+      operationId: register
+      x-swagger-router-controller: RegistrationController
+      security: []
       requestBody:
-        description: Create a new pet in the store
+        required: true
+        description: Учётные данные и поля профиля нового пользователя.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Pet'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/Pet'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Pet'
-        required: true
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              qaEngineer:
+                summary: Корректные данные регистрации
+                value:
+                  username: qa_engineer
+                  password: SecurePass123
+                  email: qa.engineer@example.com
+                  firstName: Alex
+                  lastName: Smith
+                  phone: '+1-555-0110'
+                  address:
+                    city: Москва
+                    street: Федорова
+                    house: '30'
+                    apartment: '12'
+                    postalCode: '123456'
+              invalid:
+                summary: Данные, приводящие к ответу 422
+                value:
+                  username: qa
+                  password: '123'
+                  email: not-an-email
+      responses:
+        '201':
+          description: Учётная запись со статусом PENDING создана; возвращена ссылка подтверждения.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationResponse'
+              example:
+                user:
+                  id: b9ec3485-6954-4faf-813b-1c9d25ea750c
+                  username: qa_engineer
+                  email: qa.engineer@example.com
+                  firstName: Alex
+                  lastName: Smith
+                  phone: '+1-555-0110'
+                  address:
+                    city: Москва
+                    street: Федорова
+                    house: '30'
+                    apartment: '12'
+                    postalCode: '123456'
+                  userStatus: PENDING
+                  role: USER
+                confirmationUrl: http://localhost:8080/api/v3/auth/confirm/b9ec3485-6954-4faf-813b-1c9d25ea750c?code=example
+                expiresAt: '2026-09-06T12:00:00Z'
+        '400':
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '409':
+          description: Имя пользователя или email уже зарегистрированы.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userAlreadyExists:
+                  value: {status: 409, error: USER_ALREADY_EXISTS, message: A user with this username or email already exists, details: []}
+        '422':
+          description: Поля регистрации не прошли валидацию.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidRegistration:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: email, message: Email must be a valid email address}
+        '500':
+          description: Не удалось создать пользователя.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /auth/confirm/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Registration]
+      summary: Подтверждение регистрации
+      description: Подтверждает регистрацию по идентификатору пользователя и одноразовому коду.
+      operationId: confirm
+      x-swagger-router-controller: RegistrationController
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/OneTimeCode'
       responses:
         '200':
-          description: Successful operation
+          description: Регистрация подтверждена.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: UUID или одноразовый код имеют неверный формат.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidUserId:
+                  value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
+                invalidConfirmationLink:
+                  value: {status: 400, error: INVALID_CONFIRMATION_LINK, message: The one-time link is invalid, details: []}
+        '404':
+          description: Пользователь из ссылки не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
+        '409':
+          description: Регистрация уже подтверждена или состояние ссылки изменилось.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                alreadyConfirmed:
+                  value: {status: 409, error: ACCOUNT_ALREADY_CONFIRMED, message: The account has already been confirmed, details: []}
+                stateChanged:
+                  value: {status: 409, error: CONFIRMATION_STATE_CHANGED, message: The confirmation state changed; request a new link, details: []}
+        '410':
+          description: Срок действия ссылки подтверждения истёк.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                confirmationExpired:
+                  value: {status: 410, error: CONFIRMATION_LINK_EXPIRED, message: The one-time link has expired, details: []}
+        '500':
+          description: Не удалось подтвердить регистрацию.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /auth/confirmation/resend:
+    post:
+      tags: [Registration]
+      summary: Повторная отправка ссылки подтверждения
+      description: Аннулирует текущую ссылку подтверждения и возвращает новую.
+      operationId: resendConfirmation
+      x-swagger-router-controller: RegistrationController
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Старая ссылка аннулирована, создана новая.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationLinkResponse'
+        '400':
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Email или пароль указаны неверно.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value: {status: 401, error: INVALID_CREDENTIALS, message: Email or password is incorrect, details: []}
+        '429':
+          description: Слишком много неверных попыток аутентификации.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                rateLimited:
+                  value: {status: 429, error: LOGIN_RATE_LIMITED, message: Too many failed login attempts. Try again in 5 minute(s), details: []}
+        '409':
+          description: Учётная запись уже подтверждена или её состояние изменилось параллельно.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                alreadyConfirmed:
+                  value: {status: 409, error: ACCOUNT_ALREADY_CONFIRMED, message: The account has already been confirmed, details: []}
+                stateChanged:
+                  value: {status: 409, error: CONFIRMATION_STATE_CHANGED, message: The confirmation state changed; retry the request, details: []}
+        '422':
+          description: Email или пароль не переданы.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingCredentials:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: email, message: Email is required}
+        '500':
+          description: Не удалось создать новую ссылку подтверждения.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /auth/password/forgot:
+    post:
+      tags: [Authentication]
+      summary: Запрос восстановления пароля
+      description: Создаёт запрос на сброс пароля для пользователя с указанным email.
+      operationId: forgotPassword
+      x-swagger-router-controller: AuthenticationController
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordForgotRequest'
+      responses:
+        '200':
+          description: Запрос создан и действует 30 минут.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetLinkResponse'
+        '400':
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '404':
+          description: Пользователь с указанным email не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: A user with this email was not found, details: []}
+        '422':
+          description: Email не передан или имеет неверный формат.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidEmail:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: email, message: Email must be a valid email address}
+        '500':
+          description: Не удалось создать ссылку восстановления.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /auth/password/reset/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [Authentication]
+      summary: Установка нового пароля
+      description: Изменяет пароль по идентификатору пользователя и одноразовому коду.
+      operationId: resetPassword
+      x-swagger-router-controller: AuthenticationController
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/OneTimeCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '204':
+          description: Пароль изменён, ранее выданные JWT отозваны.
+        '400':
+          description: UUID, одноразовый код или тело запроса имеют неверный формат.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidUserId:
+                  value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+                invalidResetLink:
+                  value: {status: 400, error: INVALID_RESET_LINK, message: The one-time link is invalid, details: []}
+        '404':
+          description: Пользователь из ссылки не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
+        '409':
+          description: Ссылка уже использована или её состояние изменилось.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                linkAlreadyUsed:
+                  value: {status: 409, error: RESET_LINK_ALREADY_USED, message: The password reset link has already been used, details: []}
+                stateChanged:
+                  value: {status: 409, error: RESET_STATE_CHANGED, message: The password reset state changed; request a new link, details: []}
+        '410':
+          description: Срок действия ссылки восстановления истёк.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                resetExpired:
+                  value: {status: 410, error: RESET_LINK_EXPIRED, message: The one-time link has expired, details: []}
+        '422':
+          description: Новый пароль не прошёл валидацию.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidPassword:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: newPassword, message: Password must be between 6 and 100 characters}
+        '500':
+          description: Не удалось изменить пароль.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Авторизация пользователя
+      description: Проверяет учётные данные и возвращает Bearer token.
+      operationId: login
+      x-swagger-router-controller: AuthenticationController
+      security: []
+      requestBody:
+        required: true
+        description: Email и пароль.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              user:
+                summary: Пользователь
+                value:
+                  email: qa.user@example.com
+                  password: SecurePass123
+              admin:
+                summary: Администратор
+                value:
+                  email: admin@example.com
+                  password: admin123
+      responses:
+        '200':
+          description: Аутентификация выполнена успешно.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature
+                token_type: Bearer
+                expires_in: 3600
+                user:
+                  id: b9ec3485-6954-4faf-813b-1c9d25ea750c
+                  username: qa_user
+                  email: qa.user@example.com
+                  firstName: Alex
+                  lastName: Smith
+                  phone: '+1-555-0101'
+                  userStatus: ACTIVE
+                  role: USER
+        '400':
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Email или пароль указаны неверно.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value: {status: 401, error: INVALID_CREDENTIALS, message: Email or password is incorrect, details: []}
+        '429':
+          description: Слишком много неверных попыток входа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                tooManyAttempts:
+                  value: {status: 429, error: LOGIN_RATE_LIMITED, message: Too many failed login attempts. Try again in 5 minute(s), details: []}
+        '403':
+          description: Состояние учётной записи запрещает авторизацию.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                blocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '422':
+          description: Email или пароль не переданы.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingCredentials:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: password, message: Password is required}
+        '500':
+          description: Не удалось выполнить авторизацию.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /pet:
+    post:
+      tags: [Pets]
+      summary: Добавление питомца
+      description: Создаёт запись питомца в каталоге.
+      operationId: addPet
+      x-swagger-router-controller: PetController
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: Данные нового питомца. Идентификатор создаётся сервером.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PetCreateRequest'
+            examples:
+              dog:
+                value:
+                  name: Luna
+                  category:
+                    id: 0e446653-3b7b-4ad1-81d3-b0a71af26f31
+                    name: Dogs
+                  photoUrls:
+                    - https://example.com/pets/luna.jpg
+                  tags:
+                    - id: f0c2308f-19f2-4689-a395-7926a5825cd0
+                      name: friendly
+                  status: available
+                  price: 15000.00
+      responses:
+        '201':
+          description: Питомец создан.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Pet'
         '400':
-          description: Invalid input
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: У пользователя нет роли ADMIN.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
         '422':
-          description: Validation exception
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          description: Поля питомца не прошли валидацию.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidPet:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: name, message: Pet name is required}
+        '500':
+          description: Не удалось создать питомца.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /pet/findByStatus:
     get:
-      tags:
-        - pet
-      summary: Finds Pets by status.
-      description: Multiple status values can be provided with comma separated strings.
+      tags: [Pets]
+      summary: Поиск питомцев по статусу
+      description: Возвращает список питомцев с указанными статусами.
       operationId: findPetsByStatus
+      x-swagger-router-controller: PetController
+      security: []
       parameters:
         - name: status
           in: query
-          description: Status values that need to be considered for filter
           required: true
-          explode: true
+          description: Один или несколько статусов жизненного цикла через запятую.
           schema:
             type: string
-            default: available
-            enum:
-              - available
-              - pending
-              - sold
+            minLength: 4
+            maxLength: 30
+            pattern: '^(available|pending|reserved|sold)(,(available|pending|reserved|sold))*$'
+          examples:
+            single:
+              value: available
+            multiple:
+              value: available,pending
       responses:
         '200':
-          description: successful operation
+          description: Найденные питомцы; массив может быть пустым.
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                type: array
+                maxItems: 1000
                 items:
                   $ref: '#/components/schemas/Pet'
         '400':
-          description: Invalid status value
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          description: Обязательный параметр status не передан.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingStatus:
+                  value: {status: 400, error: BAD_REQUEST, message: Status is required, details: []}
+        '422':
+          description: Передано недопустимое значение status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatus:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: status, message: Status must be available, pending, reserved or sold}
+        '500':
+          description: Не удалось выполнить поиск питомцев.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /pet/findByTags:
     get:
-      tags:
-        - pet
-      summary: Finds Pets by tags.
-      description: Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.
+      tags: [Pets]
+      summary: Поиск питомцев по тегам
+      description: Возвращает список питомцев хотя бы с одним из указанных тегов.
       operationId: findPetsByTags
+      x-swagger-router-controller: PetController
+      security: []
       parameters:
         - name: tags
           in: query
-          description: Tags to filter by
           required: true
-          explode: true
+          description: Имена тегов. Для нескольких тегов повторите query-параметр.
           schema:
             type: array
+            minItems: 1
+            maxItems: 20
             items:
               type: string
+              minLength: 1
+              maxLength: 30
+          style: form
+          explode: true
+          example: [friendly, vaccinated]
       responses:
         '200':
-          description: successful operation
+          description: Найденные питомцы; массив может быть пустым.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
         '400':
-          description: Invalid tag value
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+          description: Обязательный параметр tags не передан.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingTags:
+                  value: {status: 400, error: BAD_REQUEST, message: At least one tag is required, details: []}
+        '500':
+          description: Не удалось выполнить поиск питомцев.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /pet/{petId}:
-    get:
-      tags:
-        - pet
-      summary: Find pet by ID.
-      description: Returns a single pet.
-      operationId: getPetById
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet to return
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Pet'
-        '400':
-          description: Invalid ID supplied
-        '404':
-          description: Pet not found
-        default:
-          description: Unexpected error
+    parameters:
+      - $ref: '#/components/parameters/PetId'
+    put:
+      tags: [Pets]
+      summary: Обновление питомца
+      description: Обновляет запись питомца по идентификатору из пути.
+      operationId: updatePet
+      x-swagger-router-controller: PetController
       security:
-        - api_key: []
-        - petstore_auth:
-            - write:pets
-            - read:pets
-    post:
-      tags:
-        - pet
-      summary: Updates a pet in the store with form data.
-      description: Updates a pet resource based on the form data.
-      operationId: updatePetWithForm
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet that needs to be updated
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: name
-          in: query
-          description: Name of pet that needs to be updated
-          schema:
-            type: string
-        - name: status
-          in: query
-          description: Status of pet that needs to be updated
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Pet'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Pet'
-        '400':
-          description: Invalid input
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-    delete:
-      tags:
-        - pet
-      summary: Deletes a pet.
-      description: Delete a pet.
-      operationId: deletePet
-      parameters:
-        - name: api_key
-          in: header
-          description: ''
-          required: false
-          schema:
-            type: string
-        - name: petId
-          in: path
-          description: Pet id to delete
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Pet deleted
-        '400':
-          description: Invalid pet value
-        default:
-          description: Unexpected error
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-  /pet/{petId}/uploadImage:
-    post:
-      tags:
-        - pet
-      summary: Uploads an image.
-      description: Upload image of the pet.
-      operationId: uploadFile
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet to update
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: additionalMetadata
-          in: query
-          description: Additional Metadata
-          required: false
-          schema:
-            type: string
+        - bearerAuth: []
       requestBody:
+        required: true
+        description: Полное новое представление питомца. Идентификатор берётся только из petId.
         content:
-          application/octet-stream:
+          application/json:
             schema:
-              type: string
-              format: binary
+              $ref: '#/components/schemas/PetUpdateRequest'
+            example:
+              version: 0
+              name: Dog 1 Updated
+              category:
+                id: 0e446653-3b7b-4ad1-81d3-b0a71af26f31
+                name: Dogs
+              photoUrls: []
+              tags: []
+              status: pending
+              price: 17500.00
       responses:
         '200':
-          description: successful operation
+          description: Данные питомца обновлены.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiResponse'
+                $ref: '#/components/schemas/Pet'
         '400':
-          description: No file uploaded
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+                invalidPetId:
+                  value: {status: 400, error: BAD_REQUEST, message: Pet id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
         '404':
-          description: Pet not found
-        default:
-          description: Unexpected error
+          description: Питомец с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: Запись изменилась либо статус питомца управляется активным заказом.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petHasActiveOrder:
+                  value: {status: 409, error: PET_HAS_ACTIVE_ORDER, message: Pet status is managed by its active order, details: []}
+                versionConflict:
+                  value: {status: 409, error: PET_VERSION_CONFLICT, message: Pet was changed by another request; reload it and retry, details: []}
+        '422':
+          description: Данные питомца не прошли проверку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidPet:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: version, message: Pet version is required}
+        '500':
+          description: Не удалось обновить питомца.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    get:
+      tags: [Pets]
+      summary: Получение питомца
+      description: Возвращает питомца по идентификатору.
+      operationId: getPetById
+      x-swagger-router-controller: PetController
+      security: []
+      responses:
+        '200':
+          description: Питомец найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '400':
+          description: petId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidPetId:
+                  value: {status: 400, error: BAD_REQUEST, message: Pet id must be a valid UUID, details: []}
+        '404':
+          description: Питомец с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '500':
+          description: Не удалось получить питомца.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    delete:
+      tags: [Pets]
+      summary: Удаление питомца
+      description: Удаляет питомца по идентификатору.
+      operationId: deletePet
+      x-swagger-router-controller: PetController
       security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Питомец удалён; тело ответа отсутствует.
+        '400':
+          description: petId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidPetId:
+                  value: {status: 400, error: BAD_REQUEST, message: Pet id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Питомец с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: По питомцу существуют заказы.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petHasOrders:
+                  value: {status: 409, error: PET_HAS_ORDERS, message: Pet with order history cannot be deleted, details: []}
+        '500':
+          description: Не удалось удалить питомца.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /store/inventory:
     get:
-      tags:
-        - store
-      summary: Returns pet inventories by status.
-      description: Returns a map of status codes to quantities.
+      tags: [Orders]
+      summary: Получение количества заказов по статусам
+      description: Возвращает количество заказанных питомцев с группировкой по статусу заказа.
       operationId: getInventory
       x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: successful operation
+          description: Количество заказов, сгруппированное по статусу.
           content:
             application/json:
               schema:
@@ -369,471 +1029,2199 @@ paths:
                 additionalProperties:
                   type: integer
                   format: int32
-        default:
-          description: Unexpected error
-      security:
-        - api_key: []
+                  minimum: 0
+              example:
+                placed: 2
+                approved: 1
+                shipped: 1
+                delivered: 1
+                cancelled: 1
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '500':
+          description: Не удалось получить данные о заказах.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /store/order:
-    post:
-      tags:
-        - store
-      summary: Place an order for a pet.
-      description: Place a new order in the store.
+    get:
+      tags: [Orders]
+      summary: Получение списка заказов
+      description: Возвращает собственные заказы для USER и все заказы для ADMIN.
+      operationId: listOrders
       x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Доступные текущей роли заказы; массив может быть пустым.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Учётная запись не подтверждена или заблокирована.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '500':
+          description: Не удалось получить заказы.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    post:
+      tags: [Orders]
+      summary: Создание заказа
+      description: Создаёт заказ от имени текущего пользователя.
       operationId: placeOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
       requestBody:
+        required: true
+        description: Питомец и количество. Остальные поля заказа заполняются сервером.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Order'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/Order'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Order'
+              $ref: '#/components/schemas/OrderCreateRequest'
+            examples:
+              basicOrder:
+                value:
+                  petId: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+                  quantity: 1
       responses:
-        '200':
-          description: successful operation
+        '201':
+          description: Заказ создан.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Order'
         '400':
-          description: Invalid input
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Учётная запись не подтверждена или заблокирована.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Питомец с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: Профиль доставки не заполнен либо питомец недоступен для заказа.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                profileIncomplete:
+                  value:
+                    status: 409
+                    error: PROFILE_INCOMPLETE
+                    message: Complete the delivery profile before placing an order
+                    details:
+                      - {field: address.postalCode, message: Field is required to place an order}
+                petNotAvailable:
+                  value: {status: 409, error: PET_NOT_AVAILABLE, message: Pet is not available for ordering, details: []}
         '422':
-          description: Validation exception
-        default:
-          description: Unexpected error
+          description: Данные заказа не прошли проверку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrder:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: petId, message: Pet id is required and must be a valid UUID}
+                      - {field: quantity, message: Quantity must be 1 for an individual pet}
+                serverManagedFields:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: status, message: Field is managed by the server}
+                      - {field: complete, message: Field is managed by the server}
+        '500':
+          description: Не удалось создать заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /store/order/{orderId}:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
     get:
-      tags:
-        - store
-      summary: Find purchase order by ID.
-      x-swagger-router-controller: OrderController
-      description: For valid response try integer IDs with value <= 5 or > 10. Other values will generate exceptions.
+      tags: [Orders]
+      summary: Получение заказа
+      description: Возвращает заказ по идентификатору с проверкой права доступа.
       operationId: getOrderById
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of order that needs to be fetched
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Order'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Order'
-        '400':
-          description: Invalid ID supplied
-        '404':
-          description: Order not found
-        default:
-          description: Unexpected error
-    delete:
-      tags:
-        - store
-      summary: Delete purchase order by identifier.
-      description: For valid response try integer IDs with value < 1000. Anything above 1000 or non-integers will generate API errors.
       x-swagger-router-controller: OrderController
-      operationId: deleteOrder
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of the order that needs to be deleted
-          required: true
-          schema:
-            type: integer
-            format: int64
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: order deleted
+          description: Заказ найден и доступен текущему пользователю.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
         '400':
-          description: Invalid ID supplied
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only their own orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
         '404':
-          description: Order not found
-        default:
-          description: Unexpected error
-  /user:
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '500':
+          description: Не удалось получить заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+  /store/order/{orderId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
     post:
-      tags:
-        - user
-      summary: Create user.
-      description: This can only be done by the logged in user.
-      x-swagger-router-controller: UserController
-      operationId: createUser
+      tags: [Orders]
+      summary: Подтверждение заказа
+      description: Переводит созданный заказ в подтверждённое состояние.
+      operationId: approveOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ подтверждён.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает подтверждение.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotPaid:
+                  value: {status: 409, error: ORDER_NOT_PAID, message: The order must be paid before approval, details: []}
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to approved, details: []}
+        '500':
+          description: Не удалось подтвердить заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/ship:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Передача заказа в доставку
+      description: Переводит подтверждённый заказ в состояние доставки.
+      operationId: shipOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ передан в доставку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает передачу в доставку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to shipped, details: []}
+        '500':
+          description: Не удалось передать заказ в доставку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/deliver:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Завершение доставки заказа
+      description: Отмечает переданный в доставку заказ как доставленный.
+      operationId: deliverOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ доставлен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает завершение доставки.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to delivered, details: []}
+        '500':
+          description: Не удалось завершить доставку заказа.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Отмена заказа
+      description: Отменяет заказ текущего пользователя или заказ, выбранный администратором.
+      operationId: cancelOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Заказ отменён, резерв питомца снят.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may modify only their own orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает отмену.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to cancelled, details: []}
+        '500':
+          description: Не удалось отменить заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/payments:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Payments]
+      summary: Оплата заказа
+      description: Выполняет оплату заказа одной из документированных тестовых карт.
+      operationId: createPayment
+      x-swagger-router-controller: PaymentController
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
-        description: Created user object
+        required: true
+        description: Реквизиты тестовой карты. Полный номер и CVV после обработки не сохраняются.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/User'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/User'
+              $ref: '#/components/schemas/PaymentRequest'
+            example:
+              cardNumber: '4242424242424242'
+              expiryMonth: 12
+              expiryYear: 2099
+              cvv: '123'
+              cardholderName: IVAN IVANOV
       responses:
-        '200':
-          description: successful operation
+        '201':
+          description: Оплата успешно выполнена.
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          description: Unexpected error
-  /user/createWithList:
-    post:
-      tags:
-        - user
-      summary: Creates list of users with given input array.
-      description: Creates list of users with given input array.
-      x-swagger-router-controller: UserController
-      operationId: createUsersWithListInput
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/User'
-      responses:
+              schema: {$ref: '#/components/schemas/Payment'}
         '200':
-          description: Successful operation
+          description: Возвращён результат ранее выполненного запроса с тем же Idempotency-Key.
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          description: Unexpected error
-  /user/login:
-    get:
-      tags:
-        - user
-      summary: Logs user into the system.
-      description: Log into the system.
-      operationId: loginUser
-      parameters:
-        - name: username
-          in: query
-          description: The user name for login
-          required: false
-          schema:
-            type: string
-        - name: password
-          in: query
-          description: The password for login in clear text
-          required: false
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful operation
-          headers:
-            X-Rate-Limit:
-              description: calls per hour allowed by the user
-              schema:
-                type: integer
-                format: int32
-            X-Expires-After:
-              description: date in UTC when token expires
-              schema:
-                type: string
-                format: date-time
-          content:
-            application/xml:
-              schema:
-                type: string
-            application/json:
-              schema:
-                type: string
+              schema: {$ref: '#/components/schemas/Payment'}
         '400':
-          description: Invalid username/password supplied
-        default:
-          description: Unexpected error
-  /user/logout:
-    get:
-      tags:
-        - user
-      summary: Logs out current logged in user session.
-      description: Log user out of the system.
-      operationId: logoutUser
-      parameters: []
-      responses:
-        '200':
-          description: successful operation
-        default:
-          description: Unexpected error
-  /user/{username}:
-    get:
-      tags:
-        - user
-      summary: Get user by user name.
-      description: Get user detail based on username.
-      operationId: getUserByName
-      parameters:
-        - name: username
-          in: path
-          description: The name that needs to be fetched. Use user1 for testing
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: successful operation
+          description: Идентификатор, заголовок или тело запроса имеют неверный формат.
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          description: Invalid username supplied
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+                missingIdempotencyKey:
+                  value: {status: 400, error: IDEMPOTENCY_KEY_REQUIRED, message: Idempotency-Key header is required, details: []}
+                invalidIdempotencyKey:
+                  value: {status: 400, error: INVALID_IDEMPOTENCY_KEY, message: Idempotency-Key must be a valid UUID, details: []}
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '402':
+          description: Тестовая карта отклонила оплату.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                paymentDeclined:
+                  value: {status: 402, error: PAYMENT_DECLINED, message: The test card payment was declined, details: []}
+                insufficientFunds:
+                  value: {status: 402, error: INSUFFICIENT_FUNDS, message: The test card has insufficient funds, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only payments for their own orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
         '404':
-          description: User not found
-        default:
-          description: Unexpected error
+          description: Заказ не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Повторно использован ключ либо текущее состояние заказа не допускает оплату.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                idempotencyKeyReused:
+                  value: {status: 409, error: IDEMPOTENCY_KEY_REUSED, message: Idempotency-Key was already used with another request, details: []}
+                orderAlreadyPaid:
+                  value: {status: 409, error: ORDER_ALREADY_PAID, message: The order already has a successful payment, details: []}
+                orderNotPayable:
+                  value: {status: 409, error: ORDER_NOT_PAYABLE, message: The order cannot be paid in its current state, details: []}
+                paymentStateConflict:
+                  value: {status: 409, error: PAYMENT_STATE_CONFLICT, message: The order payment state changed concurrently, details: []}
+        '410':
+          description: Период оплаты заказа истёк.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                paymentExpired:
+                  value: {status: 410, error: ORDER_PAYMENT_EXPIRED, message: The payment period for this order has expired, details: []}
+        '422':
+          description: Реквизиты тестовой карты не прошли проверку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidCard:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: cardNumber, message: Card number must be valid and pass the Luhn check}
+        '500':
+          description: Не удалось выполнить оплату.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    get:
+      tags: [Payments]
+      summary: Получение платежей заказа
+      description: Возвращает историю попыток оплаты указанного заказа.
+      operationId: listPayments
+      x-swagger-router-controller: PaymentController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: История платежей; массив может быть пустым.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Payment'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only payments for their own orders, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '500':
+          description: Не удалось получить историю платежей.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/payments/{paymentId}:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+      - $ref: '#/components/parameters/PaymentId'
+    get:
+      tags: [Payments]
+      summary: Получение платежа
+      description: Возвращает отдельную попытку оплаты указанного заказа.
+      operationId: getPayment
+      x-swagger-router-controller: PaymentController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Платёж найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        '400':
+          description: orderId или paymentId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+                invalidPaymentId:
+                  value: {status: 400, error: BAD_REQUEST, message: Payment id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only payments for their own orders, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ или платёж не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+                paymentNotFound:
+                  value: {status: 404, error: PAYMENT_NOT_FOUND, message: Payment was not found, details: []}
+        '500':
+          description: Не удалось получить платёж.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /user/me:
+    get:
+      tags: [Users]
+      summary: Получение профиля
+      description: Возвращает профиль текущего пользователя.
+      operationId: getCurrentUser
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Профиль текущего пользователя.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Учётная запись не подтверждена или заблокирована.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '500':
+          description: Не удалось получить профиль.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
     put:
-      tags:
-        - user
-      summary: Update user resource.
-      description: This can only be done by the logged in user.
+      tags: [Users]
+      summary: Обновление профиля
+      description: Обновляет изменяемые поля профиля текущего пользователя.
+      operationId: updateCurrentUser
       x-swagger-router-controller: UserController
-      operationId: updateUser
-      parameters:
-        - name: username
-          in: path
-          description: name that need to be deleted
-          required: true
-          schema:
-            type: string
+      security:
+        - bearerAuth: []
       requestBody:
-        description: Update an existent user in the store
+        required: true
+        description: Изменяемые поля профиля. Необходимо передать хотя бы одно поле.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/User'
-          application/xml:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/User'
+              $ref: '#/components/schemas/UserUpdateRequest'
+            example:
+              firstName: Updated
+              lastName: Petlover
+              address:
+                city: Москва
+                street: Федорова
+                house: '30'
+                apartment: '12'
+                postalCode: '123456'
       responses:
         '200':
-          description: successful operation
+          description: Обновлённый профиль текущего пользователя.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         '400':
-          description: bad request
-        '404':
-          description: user not found
-        default:
-          description: Unexpected error
-    delete:
-      tags:
-        - user
-      summary: Delete user resource.
-      description: This can only be done by the logged in user.
-      operationId: deleteUser
-      parameters:
-        - name: username
-          in: path
-          description: The name that needs to be deleted
-          required: true
-          schema:
-            type: string
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Учётная запись не подтверждена или заблокирована.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '422':
+          description: Данные профиля не прошли проверку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidProfile:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: firstName, message: firstName must not be blank}
+        '500':
+          description: Не удалось обновить профиль.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+  /users:
+    get:
+      tags: [Users]
+      summary: Получение списка пользователей
+      description: Возвращает список пользователей. Операция доступна только администратору.
+      operationId: listUsers
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: User deleted
+          description: Список пользователей.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей роли или состояния учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '500':
+          description: Не удалось получить список пользователей.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Users]
+      summary: Получение пользователя
+      description: Возвращает пользователя по UUID. Операция доступна только администратору.
+      operationId: getUserById
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Пользователь найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         '400':
-          description: Invalid username supplied
+          description: userId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidUserId:
+                  value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей роли или состояния учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
         '404':
-          description: User not found
-        default:
-          description: Unexpected error
+          description: Пользователь с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
+        '500':
+          description: Не удалось получить пользователя.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    put:
+      tags: [Users]
+      summary: Обновление пользователя
+      description: Полностью обновляет управляемые поля профиля. Операция доступна только администратору; статус изменяется отдельными командами блокировки.
+      operationId: updateUserById
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: Полное представление управляемых полей без id и userStatus.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserUpdateRequest'
+            example:
+              username: qa_user
+              firstName: Alex
+              lastName: Smith
+              email: qa.user@example.com
+              phone: '+1-555-0110'
+              role: USER
+              address:
+                city: Москва
+                street: Федорова
+                house: '30'
+                apartment: '12'
+                postalCode: '123456'
+      responses:
+        '200':
+          description: Пользователь обновлён; ранее выданные ему Bearer tokens отозваны.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: userId, тело запроса или JSON имеют неверный формат.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidUserId:
+                  value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей роли или состояния учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Пользователь с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
+        '409':
+          description: Username или email уже занят либо переход роли запрещён.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                usernameAlreadyExists:
+                  value: {status: 409, error: USERNAME_ALREADY_EXISTS, message: A user with this username already exists, details: []}
+                emailAlreadyExists:
+                  value: {status: 409, error: EMAIL_ALREADY_EXISTS, message: A user with this email already exists, details: []}
+                invalidRoleTransition:
+                  value: {status: 409, error: INVALID_ROLE_TRANSITION, message: Only an active user can be promoted to administrator, details: []}
+                lastAdminProtected:
+                  value: {status: 409, error: LAST_ADMIN_PROTECTED, message: The last administrator cannot be demoted, details: []}
+        '422':
+          description: Поля профиля не прошли валидацию.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidProfile:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: email, message: Email must be a valid email address}
+        '500':
+          description: Не удалось обновить пользователя.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /admin/users/{userId}/block:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [Administration]
+      summary: Блокировка пользователя
+      description: Переводит пользователя в статус BLOCKED и отзывает выданные токены.
+      operationId: blockUser
+      x-swagger-router-controller: AdminUserController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Пользователь заблокирован, его старые JWT отозваны.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: userId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidUserId:
+                  value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция запрещена для текущей или целевой учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+                adminAccountProtected:
+                  value: {status: 403, error: ADMIN_ACCOUNT_PROTECTED, message: Administrator accounts cannot be managed by this operation, details: []}
+        '404':
+          description: Пользователь с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
+        '409':
+          description: Пользователь уже заблокирован или его статус изменился параллельно.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: The account is already blocked, details: []}
+        '500':
+          description: Не удалось заблокировать пользователя.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /admin/users/{userId}/unblock:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [Administration]
+      summary: Разблокировка пользователя
+      description: Переводит заблокированного пользователя в статус ACTIVE или PENDING.
+      operationId: unblockUser
+      x-swagger-router-controller: AdminUserController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Пользователь разблокирован; итоговый статус зависит от подтверждения регистрации.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: userId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidUserId:
+                  value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция запрещена для текущей или целевой учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+                adminAccountProtected:
+                  value: {status: 403, error: ADMIN_ACCOUNT_PROTECTED, message: Administrator accounts cannot be managed by this operation, details: []}
+        '404':
+          description: Пользователь с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
+        '409':
+          description: Пользователь не заблокирован или его статус изменился параллельно.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: The account is not blocked, details: []}
+        '500':
+          description: Не удалось разблокировать пользователя.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Bearer token из POST /auth/login. Передавайте его в заголовке Authorization: Bearer <access_token>.'
+
+  parameters:
+    PetId:
+      name: petId
+      in: path
+      required: true
+      description: UUID питомца.
+      schema:
+        type: string
+        format: uuid
+      example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: UUID заказа.
+      schema:
+        type: string
+        format: uuid
+      example: e3a724f6-580d-4d87-91c4-8f17e2027629
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      description: UUID платежа.
+      schema:
+        type: string
+        format: uuid
+      example: 51c0bd19-792f-4144-a775-87a660c53e37
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID для безопасного повтора запроса оплаты.
+      schema:
+        type: string
+        format: uuid
+      example: 12d39e45-5737-4c0a-8878-232793eddb62
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: UUID пользователя.
+      schema:
+        type: string
+        format: uuid
+      example: b9ec3485-6954-4faf-813b-1c9d25ea750c
+    OneTimeCode:
+      name: code
+      in: query
+      required: true
+      description: Одноразовый секрет из confirmationUrl или resetUrl.
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 128
+
   schemas:
-    Order:
-      x-swagger-router-model: io.swagger.petstore.model.Order
+    Role:
+      type: string
+      description: Роль авторизации, назначенная пользователю.
+      enum: [USER, ADMIN]
+      example: USER
+
+    AccountStatus:
+      type: string
+      description: Состояние учётной записи пользователя.
+      enum: [PENDING, ACTIVE, BLOCKED]
+      example: ACTIVE
+
+    Address:
+      x-swagger-router-model: io.swagger.petstore.model.Address
       type: object
+      additionalProperties: false
+      required: [city, street, house, postalCode]
       properties:
-        id:
-          type: integer
-          format: int64
-          example: 10
-        petId:
-          type: integer
-          format: int64
-          example: 198772
-        quantity:
-          type: integer
-          format: int32
-          example: 7
-        shipDate:
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Москва
+        street:
+          type: string
+          minLength: 1
+          maxLength: 150
+          example: Федорова
+        house:
+          type: string
+          minLength: 1
+          maxLength: 30
+          example: '30'
+        apartment:
+          type: string
+          minLength: 1
+          maxLength: 30
+          nullable: true
+          example: '12'
+        postalCode:
+          type: string
+          pattern: '^[0-9]{6}$'
+          minLength: 6
+          maxLength: 6
+          example: '123456'
+
+    RegisterRequest:
+      x-swagger-router-model: io.swagger.petstore.model.RegisterRequest
+      type: object
+      additionalProperties: false
+      required: [username, password, email]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: qa_engineer
+        password:
+          type: string
+          format: password
+          minLength: 6
+          maxLength: 100
+          writeOnly: true
+          example: SecurePass123
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+          example: qa.engineer@example.com
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: Alex
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: Smith
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          pattern: '^\+?[0-9 ()-]+$'
+          nullable: true
+          example: '+1-555-0110'
+        address:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Address'
+
+    RegistrationResponse:
+      x-swagger-router-model: io.swagger.petstore.model.RegistrationResponse
+      type: object
+      additionalProperties: false
+      required: [user, confirmationUrl, expiresAt]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        confirmationUrl:
+          type: string
+          format: uri
+        expiresAt:
           type: string
           format: date-time
-        status:
-          type: string
-          description: Order Status
-          example: approved
-          enum:
-            - placed
-            - approved
-            - delivered
-        complete:
-          type: boolean
-      xml:
-        name: order
-    Category:
-      x-swagger-router-model: io.swagger.petstore.model.Category
+
+    ConfirmationLinkResponse:
+      x-swagger-router-model: io.swagger.petstore.model.ConfirmationLinkResponse
       type: object
+      additionalProperties: false
+      required: [confirmationUrl, expiresAt]
       properties:
-        id:
+        confirmationUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+
+    PasswordForgotRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PasswordForgotRequest
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+
+    PasswordResetRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PasswordResetRequest
+      type: object
+      additionalProperties: false
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
+          format: password
+          minLength: 6
+          maxLength: 100
+          writeOnly: true
+
+    PasswordResetLinkResponse:
+      x-swagger-router-model: io.swagger.petstore.model.PasswordResetLinkResponse
+      type: object
+      additionalProperties: false
+      required: [expiresAt]
+      properties:
+        resetUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Доступна только при PETSTORE_EXPOSE_TEST_LINKS=true в изолированном учебном окружении.
+        expiresAt:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      x-swagger-router-model: io.swagger.petstore.model.LoginRequest
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+          example: qa.user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6
+          maxLength: 100
+          writeOnly: true
+          example: password123
+
+    LoginResponse:
+      x-swagger-router-model: io.swagger.petstore.model.LoginResponse
+      type: object
+      additionalProperties: false
+      required: [access_token, token_type, expires_in, user]
+      properties:
+        access_token:
+          type: string
+          minLength: 20
+          description: Подписанный HS256 JWT.
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature
+        token_type:
+          type: string
+          enum: [Bearer]
+          example: Bearer
+        expires_in:
           type: integer
           format: int64
-          example: 1
-        name:
-          type: string
-          example: Dogs
-      xml:
-        name: category
+          minimum: 1
+          maximum: 3600
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
     User:
       x-swagger-router-model: io.swagger.petstore.model.User
       type: object
+      additionalProperties: false
+      required: [id, username, email, userStatus, role, address]
       properties:
         id:
-          type: integer
-          format: int64
-          example: 10
+          type: string
+          format: uuid
+          readOnly: true
+          example: b9ec3485-6954-4faf-813b-1c9d25ea750c
         username:
           type: string
-          example: theUser
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: qa_user
         firstName:
           type: string
-          example: John
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: Test
         lastName:
           type: string
-          example: James
+          minLength: 1
+          maxLength: 50
+          nullable: true
+          example: User
         email:
           type: string
-          example: john@email.com
-        password:
-          type: string
-          example: '12345'
+          format: email
+          maxLength: 254
+          example: test@example.com
         phone:
           type: string
-          example: '12345'
+          minLength: 7
+          maxLength: 30
+          pattern: '^\+?[0-9 ()-]+$'
+          nullable: true
+          example: '+1-555-0101'
+        address:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Address'
         userStatus:
-          type: integer
-          description: User Status
-          format: int32
-          example: 1
-      xml:
-        name: user
+          $ref: '#/components/schemas/AccountStatus'
+        role:
+          $ref: '#/components/schemas/Role'
+
+    UserUpdateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.UserUpdateRequest
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          pattern: '^\+?[0-9 ()-]+$'
+          nullable: true
+        address:
+          nullable: true
+          description: Передайте null, чтобы удалить текущий адрес целиком.
+          allOf:
+            - $ref: '#/components/schemas/Address'
+
+    AdminUserUpdateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.AdminUserUpdateRequest
+      type: object
+      additionalProperties: false
+      required: [username, firstName, lastName, email, phone, role, address]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          nullable: true
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          pattern: '^\+?[0-9 ()-]+$'
+          nullable: true
+        role:
+          $ref: '#/components/schemas/Role'
+        address:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Address'
+
+    Category:
+      x-swagger-router-model: io.swagger.petstore.model.Category
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 0e446653-3b7b-4ad1-81d3-b0a71af26f31
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Dogs
+
     Tag:
       x-swagger-router-model: io.swagger.petstore.model.Tag
       type: object
+      additionalProperties: false
+      required: [name]
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
+          example: f0c2308f-19f2-4689-a395-7926a5825cd0
         name:
           type: string
-      xml:
-        name: tag
+          minLength: 1
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: friendly
+
     Pet:
       x-swagger-router-model: io.swagger.petstore.model.Pet
-      required:
-        - name
-        - photoUrls
       type: object
+      additionalProperties: false
+      required: [id, name, photoUrls, tags, status, version, price, currency]
       properties:
         id:
-          type: integer
-          format: int64
-          example: 10
+          type: string
+          format: uuid
+          readOnly: true
+          example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
         name:
           type: string
-          example: doggie
+          minLength: 1
+          maxLength: 100
+          pattern: '.*\S.*'
+          example: Luna
         category:
-          $ref: '#/components/schemas/Category'
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Category'
         photoUrls:
           type: array
-          xml:
-            wrapped: true
+          maxItems: 20
+          nullable: true
           items:
             type: string
-            xml:
-              name: photoUrl
+            format: uri
+            minLength: 1
+            maxLength: 2048
+          example:
+            - https://example.com/pets/luna.jpg
         tags:
           type: array
-          xml:
-            wrapped: true
+          maxItems: 20
+          nullable: true
           items:
             $ref: '#/components/schemas/Tag'
         status:
           type: string
-          description: pet status in the store
-          enum:
-            - available
-            - pending
-            - sold
-      xml:
-        name: pet
-    ApiResponse:
-      type: object
-      properties:
-        code:
+          description: Текущий статус питомца в каталоге.
+          enum: [available, pending, reserved, sold]
+          example: available
+        version:
           type: integer
           format: int32
-        type:
+          minimum: 0
+          readOnly: true
+          description: Версия записи для защиты от одновременной перезаписи.
+          example: 0
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 15000.00
+        currency:
           type: string
+          readOnly: true
+          enum: [RUB]
+          example: RUB
+
+    PetCreateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PetCreateRequest
+      type: object
+      additionalProperties: false
+      required: [name, price]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '.*\S.*'
+          example: Luna
+        category:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Category'
+        photoUrls:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            type: string
+            format: uri
+            minLength: 1
+            maxLength: 2048
+        tags:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            $ref: '#/components/schemas/Tag'
+        status:
+          type: string
+          description: Начальный статус питомца. Статус reserved назначается только заказом.
+          enum: [available, pending, sold]
+          default: available
+          example: available
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 15000.00
+
+    PetUpdateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PetUpdateRequest
+      type: object
+      additionalProperties: false
+      required: [name, version, price]
+      properties:
+        version:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Версия из последнего ответа GET или POST.
+          example: 0
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '.*\S.*'
+          example: Luna
+        category:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Category'
+        photoUrls:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            type: string
+            format: uri
+            minLength: 1
+            maxLength: 2048
+        tags:
+          type: array
+          maxItems: 20
+          nullable: true
+          items:
+            $ref: '#/components/schemas/Tag'
+        status:
+          type: string
+          description: Новый статус питомца. Статус reserved назначается только заказом.
+          enum: [available, pending, sold]
+          example: pending
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 17500.00
+
+    OrderCreateRequest:
+      x-swagger-router-model: io.swagger.petstore.model.OrderCreateRequest
+      type: object
+      additionalProperties: false
+      required: [petId, quantity]
+      properties:
+        petId:
+          type: string
+          format: uuid
+          example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1
+          example: 1
+
+    DeliveryDetails:
+      x-swagger-router-model: io.swagger.petstore.model.DeliveryDetails
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, phone, address]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Иван
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Иванов
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          example: '+7 999 123-45-67'
+        address:
+          $ref: '#/components/schemas/Address'
+
+    Order:
+      x-swagger-router-model: io.swagger.petstore.model.Order
+      type: object
+      additionalProperties: false
+      required: [id, petId, userId, quantity, createdAt, unitPrice, totalAmount, currency,
+                 deliveryDetails, paymentStatus, paymentExpiresAt, status, complete]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: e3a724f6-580d-4d87-91c4-8f17e2027629
+        petId:
+          type: string
+          format: uuid
+          example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+        userId:
+          type: string
+          format: uuid
+          readOnly: true
+          example: b9ec3485-6954-4faf-813b-1c9d25ea750c
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          example: 1
+        shipDate:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-09-06T12:00:00Z'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+          example: '2026-09-06T11:00:00Z'
+        unitPrice:
+          type: number
+          format: decimal
+          minimum: 0.01
+          readOnly: true
+          example: 15000.00
+        totalAmount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          readOnly: true
+          example: 15000.00
+        currency:
+          type: string
+          readOnly: true
+          enum: [RUB]
+          example: RUB
+        deliveryDetails:
+          nullable: true
+          readOnly: true
+          allOf:
+            - $ref: '#/components/schemas/DeliveryDetails'
+        paymentStatus:
+          type: string
+          readOnly: true
+          enum: [NOT_REQUIRED, UNPAID, PAID, REFUNDED, EXPIRED]
+          example: UNPAID
+        paymentExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          example: '2026-09-06T11:15:00Z'
+        status:
+          type: string
+          enum: [placed, approved, shipped, delivered, cancelled, expired]
+          example: placed
+        complete:
+          type: boolean
+          example: false
+
+    PaymentRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PaymentRequest
+      type: object
+      additionalProperties: false
+      required: [cardNumber, expiryMonth, expiryYear, cvv, cardholderName]
+      properties:
+        cardNumber:
+          type: string
+          pattern: '^[0-9]{13,19}$'
+          writeOnly: true
+          example: '4242424242424242'
+        expiryMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 12
+        expiryYear:
+          type: integer
+          minimum: 2026
+          maximum: 2200
+          example: 2099
+        cvv:
+          type: string
+          pattern: '^[0-9]{3,4}$'
+          writeOnly: true
+          example: '123'
+        cardholderName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: IVAN IVANOV
+
+    Payment:
+      x-swagger-router-model: io.swagger.petstore.model.Payment
+      type: object
+      additionalProperties: false
+      required: [id, orderId, amount, currency, status, cardBrand, cardLast4, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: 51c0bd19-792f-4144-a775-87a660c53e37
+        orderId:
+          type: string
+          format: uuid
+          readOnly: true
+          example: e3a724f6-580d-4d87-91c4-8f17e2027629
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          readOnly: true
+          example: 15000.00
+        currency:
+          type: string
+          readOnly: true
+          enum: [RUB]
+          example: RUB
+        status:
+          type: string
+          readOnly: true
+          enum: [SUCCEEDED, DECLINED, REFUNDED]
+          example: SUCCEEDED
+        cardBrand:
+          type: string
+          readOnly: true
+          example: VISA
+        cardLast4:
+          type: string
+          pattern: '^[0-9]{4}$'
+          readOnly: true
+          example: '4242'
+        failureCode:
+          type: string
+          nullable: true
+          readOnly: true
+          enum: [PAYMENT_DECLINED, INSUFFICIENT_FUNDS]
+          example: PAYMENT_DECLINED
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    HealthResponse:
+      x-swagger-router-model: io.swagger.petstore.model.HealthResponse
+      type: object
+      additionalProperties: false
+      required: [status, service, database, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+          example: UP
+        service:
+          type: string
+          enum: [swagger-petstore]
+          example: swagger-petstore
+        database:
+          type: string
+          description: Состояние готовности PostgreSQL.
+          enum: [UP, DOWN]
+          example: UP
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-09-05T09:15:30.000Z'
+
+    ErrorDetail:
+      x-swagger-router-model: io.swagger.petstore.model.ErrorDetail
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: username
         message:
           type: string
-      xml:
-        name: '##default'
-  requestBodies:
-    Pet:
-      description: Pet object that needs to be added to the store
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Pet'
-        application/xml:
-          schema:
-            $ref: '#/components/schemas/Pet'
-    UserArray:
-      description: List of user object
-      content:
-        application/json:
-          schema:
-            type: array
-            items:
-              $ref: '#/components/schemas/User'
-  securitySchemes:
-    petstore_auth:
-      type: oauth2
-      flows:
-        implicit:
-          authorizationUrl: https://petstore3.swagger.io/oauth/authorize
-          scopes:
-            "write:pets": modify pets in your account
-            "read:pets": read your pets
-    api_key:
-      type: apiKey
-      name: api_key
-      in: header
+          minLength: 1
+          maxLength: 500
+          example: Username is required
+
+    ErrorResponse:
+      x-swagger-router-model: io.swagger.petstore.model.ErrorResponse
+      type: object
+      additionalProperties: false
+      required: [status, error, message, details]
+      properties:
+        status:
+          type: integer
+          format: int32
+          minimum: 400
+          maximum: 599
+          description: HTTP-код статуса, продублированный в теле ответа.
+          example: 422
+        error:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Request validation failed
+        details:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ErrorDetail'

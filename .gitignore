@@ -12,3 +12,5 @@ atlassian-ide-plugin.xml
 .java-version
 dependency-reduced-pom.xml
 *.pyc
+.pytest_cache/
+__pycache__/

@@ -23,22 +23,26 @@ import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.math.BigDecimal;
 
 @XmlRootElement(name = "Pet")
 public class Pet {
-    private Long id;
+    private UUID id;
     private Category category;
     private String name;
     private List<String> photoUrls = new ArrayList<>();
     private List<Tag> tags = new ArrayList<>();
-    private String status;
+    private PetStatus status;
+    private int version;
+    private BigDecimal price;
 
     @XmlElement(name = "id")
-    public long getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(final Long id) {
+    public void setId(final UUID id) {
         this.id = id;
     }
 
@@ -81,12 +85,35 @@ public class Pet {
     }
 
     @XmlElement(name = "status")
-    @Schema(description = "pet status in the store", allowableValues = "available,pending,sold")
-    public String getStatus() {
+    @Schema(description = "pet status in the store", allowableValues = "available,pending,reserved,sold")
+    public PetStatus getStatus() {
         return status;
     }
 
-    public void setStatus(final String status) {
+    public void setStatus(final PetStatus status) {
         this.status = status;
+    }
+
+    @XmlElement(name = "version")
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(final int version) {
+        this.version = version;
+    }
+
+    @XmlElement(name = "price")
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(final BigDecimal price) {
+        this.price = price;
+    }
+
+    @XmlElement(name = "currency")
+    public String getCurrency() {
+        return "RUB";
     }
 }

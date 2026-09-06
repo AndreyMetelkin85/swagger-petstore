@@ -21,59 +21,69 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.Date;
+import java.util.UUID;
+import java.math.BigDecimal;
 
 @XmlRootElement(name = "Order")
 public class Order {
-  private long id;
-  private long petId;
-  private int quantity;
+  private UUID id;
+  private UUID petId;
+  private Integer quantity;
   private Date shipDate;
-  private String status;
-  private boolean complete;
+  private OrderStatus status;
+  private Boolean complete;
+  private UUID userId;
+  private Date createdAt;
+  private BigDecimal unitPrice;
+  private BigDecimal totalAmount;
+  private String currency;
+  private DeliveryDetails deliveryDetails;
+  private PaymentStatus paymentStatus;
+  private Date paymentExpiresAt;
 
   @XmlElement(name = "id")
-  public long getId() {
+  public UUID getId() {
     return id;
   }
 
-  public void setId(long id) {
+  public void setId(UUID id) {
     this.id = id;
   }
 
-    public boolean isComplete() {
+    public Boolean isComplete() {
         return complete;
     }
 
-    public void setComplete(boolean complete) {
+    public void setComplete(Boolean complete) {
         this.complete = complete;
     }
 
 
   @XmlElement(name = "petId")
-  public long getPetId() {
+  public UUID getPetId() {
     return petId;
   }
 
-  public void setPetId(long petId) {
+  public void setPetId(UUID petId) {
     this.petId = petId;
   }
 
   @XmlElement(name = "quantity")
-  public int getQuantity() {
+  public Integer getQuantity() {
     return quantity;
   }
 
-  public void setQuantity(int quantity) {
+  public void setQuantity(Integer quantity) {
     this.quantity = quantity;
   }
 
   @XmlElement(name = "status")
-  @Schema(description = "Order Status", allowableValues = "placed, approved, delivered")
-  public String getStatus() {
+  @Schema(description = "Order Status", allowableValues = "placed,approved,shipped,delivered,cancelled")
+  public OrderStatus getStatus() {
     return status;
   }
 
-  public void setStatus(String status) {
+  public void setStatus(OrderStatus status) {
     this.status = status;
   }
 
@@ -84,5 +94,69 @@ public class Order {
 
   public void setShipDate(Date shipDate) {
     this.shipDate = shipDate;
+  }
+
+  public UUID getUserId() {
+    return userId;
+  }
+
+  public void setUserId(final UUID userId) {
+    this.userId = userId;
+  }
+
+  public Date getCreatedAt() {
+    return createdAt;
+  }
+
+  public void setCreatedAt(final Date createdAt) {
+    this.createdAt = createdAt;
+  }
+
+  public BigDecimal getUnitPrice() {
+    return unitPrice;
+  }
+
+  public void setUnitPrice(final BigDecimal unitPrice) {
+    this.unitPrice = unitPrice;
+  }
+
+  public BigDecimal getTotalAmount() {
+    return totalAmount;
+  }
+
+  public void setTotalAmount(final BigDecimal totalAmount) {
+    this.totalAmount = totalAmount;
+  }
+
+  public String getCurrency() {
+    return currency;
+  }
+
+  public void setCurrency(final String currency) {
+    this.currency = currency;
+  }
+
+  public DeliveryDetails getDeliveryDetails() {
+    return deliveryDetails;
+  }
+
+  public void setDeliveryDetails(final DeliveryDetails deliveryDetails) {
+    this.deliveryDetails = deliveryDetails;
+  }
+
+  public PaymentStatus getPaymentStatus() {
+    return paymentStatus;
+  }
+
+  public void setPaymentStatus(final PaymentStatus paymentStatus) {
+    this.paymentStatus = paymentStatus;
+  }
+
+  public Date getPaymentExpiresAt() {
+    return paymentExpiresAt;
+  }
+
+  public void setPaymentExpiresAt(final Date paymentExpiresAt) {
+    this.paymentExpiresAt = paymentExpiresAt;
   }
 }

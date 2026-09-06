@@ -1,0 +1,7 @@
+services:
+  petstore:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: swagger-petstore:local
+    pull_policy: never
