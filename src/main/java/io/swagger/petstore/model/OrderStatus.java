@@ -9,7 +9,8 @@ public enum OrderStatus {
     APPROVED("approved"),
     SHIPPED("shipped"),
     DELIVERED("delivered"),
-    CANCELLED("cancelled");
+    CANCELLED("cancelled"),
+    EXPIRED("expired");
 
     private final String value;
 
@@ -49,7 +50,7 @@ public enum OrderStatus {
     }
 
     public boolean isComplete() {
-        return this == DELIVERED || this == CANCELLED;
+        return this == DELIVERED || this == CANCELLED || this == EXPIRED;
     }
 
     @Override

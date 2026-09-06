@@ -13,6 +13,13 @@ import pytest
 
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8080/api/v3")
+DELIVERY_ADDRESS = {
+    "city": "Москва",
+    "street": "Федорова",
+    "house": "30",
+    "apartment": "12",
+    "postalCode": "123456",
+}
 KNOWN_EMAILS = {
     "admin": "admin@example.com",
     "user1": "test@example.com",
@@ -55,6 +62,7 @@ def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> d
             "tags": [{"name": "aqa"}],
             "photoUrls": [],
             "status": "available",
+            "price": 15000.00,
         },
         headers=bearer(admin_token),
     )
@@ -65,6 +73,37 @@ def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> d
     UUID(pet["category"]["id"])
     UUID(pet["tags"][0]["id"])
     return pet
+
+
+def complete_profile(client: httpx.Client, token: str) -> dict:
+    response = client.put(
+        "/user/me",
+        json={
+            "firstName": "Test",
+            "lastName": "User",
+            "phone": "+7 999 123-45-67",
+            "address": DELIVERY_ADDRESS,
+        },
+        headers=bearer(token),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["address"]["postalCode"] == "123456"
+    return response.json()
+
+
+def pay_order(client: httpx.Client, token: str, order_id: str,
+              card_number: str = "4242424242424242", key: str | None = None) -> httpx.Response:
+    return client.post(
+        f"/store/order/{order_id}/payments",
+        headers={**bearer(token), "Idempotency-Key": key or str(uuid4())},
+        json={
+            "cardNumber": card_number,
+            "expiryMonth": 12,
+            "expiryYear": 2099,
+            "cvv": "123",
+            "cardholderName": "IVAN IVANOV",
+        },
+    )
 
 
 def api_path(url: str) -> str:
@@ -239,6 +278,7 @@ def test_role_based_user_management(client: httpx.Client) -> None:
         "email": f"managed-{uuid4().hex[:8]}@example.test",
         "phone": "+1-555-0199",
         "role": "USER",
+        "address": DELIVERY_ADDRESS,
     }
     forbidden = client.put(
         f"/users/{user_id}", json=update_body, headers=bearer(user_token)
@@ -330,7 +370,7 @@ def test_password_reset_clears_five_attempt_login_lock(client: httpx.Client) -> 
 def test_user_cannot_create_pet_but_admin_can(client: httpx.Client) -> None:
     user_token = login(client, "user1", "password123")
     admin_token = login(client, "admin", "admin123")
-    pet = {"name": "Smoke Test Dog", "status": "available"}
+    pet = {"name": "Smoke Test Dog", "status": "available", "price": 15000.00}
 
     forbidden = client.post("/pet", json=pet, headers=bearer(user_token))
     assert_error(forbidden, 403, "FORBIDDEN")
@@ -346,7 +386,7 @@ def test_pet_create_and_update_models_have_separate_validation(
     admin_token = login(client, "admin", "admin123")
     nested = client.post(
         "/pet",
-        json={"name": "Invalid nested fields", "category": {}, "tags": [{}]},
+        json={"name": "Invalid nested fields", "category": {}, "tags": [{}], "price": 15000.00},
         headers=bearer(admin_token),
     )
     assert_error(nested, 422, "VALIDATION_ERROR")
@@ -355,7 +395,7 @@ def test_pet_create_and_update_models_have_separate_validation(
 
     invalid_status = client.post(
         "/pet",
-        json={"name": "Invalid status", "status": "unknown"},
+        json={"name": "Invalid status", "status": "unknown", "price": 15000.00},
         headers=bearer(admin_token),
     )
     assert_error(invalid_status, 422, "VALIDATION_ERROR")
@@ -380,6 +420,7 @@ def test_pet_update_uses_optimistic_lock(client: httpx.Client) -> None:
         "photoUrls": pet.get("photoUrls", []),
         "tags": pet.get("tags", []),
         "status": pet["status"],
+        "price": pet["price"],
     }
 
     first = client.put(f"/pet/{pet['id']}", json=update, headers=bearer(admin_token))
@@ -392,6 +433,7 @@ def test_pet_update_uses_optimistic_lock(client: httpx.Client) -> None:
 
 def test_user_can_create_and_read_own_order(client: httpx.Client) -> None:
     token = login(client, "user1", "password123")
+    complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet_id = create_pet(client, admin_token)["id"]
     created = client.post(
@@ -413,12 +455,21 @@ def test_user_can_create_and_read_own_order(client: httpx.Client) -> None:
     fetched = client.get(f"/store/order/{order_id}", headers=bearer(token))
     assert fetched.status_code == 200, fetched.text
     assert fetched.json()["id"] == order_id
+    assert fetched.json()["currency"] == "RUB"
+    assert fetched.json()["paymentStatus"] == "UNPAID"
+    assert fetched.json()["deliveryDetails"]["address"]["postalCode"] == "123456"
+
+    unpaid_approval = client.post(
+        f"/store/order/{order_id}/approve", headers=bearer(admin_token)
+    )
+    assert_error(unpaid_approval, 409, "ORDER_NOT_PAID")
 
 
 def test_order_reservation_is_atomic_and_cancellation_releases_pet(
     client: httpx.Client,
 ) -> None:
     token = login(client, "user1", "password123")
+    complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet_id = create_pet(client, admin_token, "Concurrent")["id"]
 
@@ -458,6 +509,7 @@ def test_order_lifecycle_requires_admin_and_follows_state_machine(
     client: httpx.Client,
 ) -> None:
     token = login(client, "user1", "password123")
+    complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet_id = create_pet(client, admin_token, "Lifecycle")["id"]
     created = client.post(
@@ -472,6 +524,10 @@ def test_order_lifecycle_requires_admin_and_follows_state_machine(
         f"/store/order/{order_id}/approve", headers=bearer(token)
     )
     assert_error(forbidden, 403, "FORBIDDEN")
+
+    paid = pay_order(client, token, order_id)
+    assert paid.status_code == 201, paid.text
+    assert paid.json()["status"] == "SUCCEEDED"
 
     approved = client.post(
         f"/store/order/{order_id}/approve", headers=bearer(admin_token)
@@ -513,6 +569,8 @@ def test_user_cannot_access_or_cancel_another_users_order(
 ) -> None:
     user_token = login(client, "user1", "password123")
     admin_token = login(client, "admin", "admin123")
+    complete_profile(client, user_token)
+    complete_profile(client, admin_token)
     pet_id = create_pet(client, admin_token, "Ownership")["id"]
     created = client.post(
         "/store/order",
@@ -541,6 +599,7 @@ def test_user_cannot_access_or_cancel_another_users_order(
 
 def test_order_rejects_unknown_pet(client: httpx.Client) -> None:
     token = login(client, "user1", "password123")
+    complete_profile(client, token)
     response = client.post(
         "/store/order",
         json={"petId": str(uuid4()), "quantity": 1},
@@ -566,6 +625,275 @@ def test_order_rejects_server_managed_fields(client: httpx.Client) -> None:
         "status",
         "complete",
     }
+
+
+def test_address_registration_validation_update_and_clear(
+    client: httpx.Client,
+) -> None:
+    suffix = uuid4().hex[:10]
+    email = f"address-{suffix}@example.test"
+    response = client.post(
+        "/auth/register",
+        json={
+            "username": f"address{suffix}",
+            "email": email,
+            "password": "AddressPass123",
+            "firstName": "Иван",
+            "lastName": "Иванов",
+            "phone": "+7 999 123-45-67",
+            "address": DELIVERY_ADDRESS,
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["user"]["address"] == DELIVERY_ADDRESS
+    assert client.get(api_path(response.json()["confirmationUrl"])).status_code == 200
+    token = login(client, email, "AddressPass123")
+
+    cleared = client.put(
+        "/user/me", json={"address": None}, headers=bearer(token)
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["address"] is None
+
+    leading_zero = dict(DELIVERY_ADDRESS, postalCode="012345")
+    restored = client.put(
+        "/user/me", json={"address": leading_zero}, headers=bearer(token)
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["address"]["postalCode"] == "012345"
+
+    invalid = client.put(
+        "/user/me",
+        json={"address": {"city": "Москва", "postalCode": "12345"}},
+        headers=bearer(token),
+    )
+    assert_error(invalid, 422, "VALIDATION_ERROR")
+    assert {item["field"] for item in invalid.json()["details"]} >= {
+        "address.street",
+        "address.house",
+        "address.postalCode",
+    }
+
+
+def test_order_requires_profile_and_keeps_delivery_and_price_snapshot(
+    client: httpx.Client,
+) -> None:
+    registration, _, email, password = register_user(client, "checkout")
+    assert client.get(api_path(registration["confirmationUrl"])).status_code == 200
+    token = login(client, email, password)
+    admin_token = login(client, "admin", "admin123")
+    pet = create_pet(client, admin_token, "Snapshot")
+
+    incomplete = client.post(
+        "/store/order",
+        json={"petId": pet["id"], "quantity": 1},
+        headers=bearer(token),
+    )
+    assert_error(incomplete, 409, "PROFILE_INCOMPLETE")
+    missing = {item["field"] for item in incomplete.json()["details"]}
+    assert {"firstName", "lastName", "phone", "address.city", "address.postalCode"} <= missing
+
+    profile = complete_profile(client, token)
+    created = client.post(
+        "/store/order",
+        json={"petId": pet["id"], "quantity": 1},
+        headers=bearer(token),
+    )
+    assert created.status_code == 201, created.text
+    order = created.json()
+    assert float(order["unitPrice"]) == 15000.0
+    assert order["deliveryDetails"]["address"] == profile["address"]
+
+    changed_address = dict(DELIVERY_ADDRESS, city="Казань", postalCode="420000")
+    assert client.put(
+        "/user/me", json={"address": changed_address}, headers=bearer(token)
+    ).status_code == 200
+    pet_update = {
+        "version": client.get(f"/pet/{pet['id']}").json()["version"],
+        "name": pet["name"],
+        "category": pet.get("category"),
+        "photoUrls": pet.get("photoUrls", []),
+        "tags": pet.get("tags", []),
+        "price": 19999.99,
+    }
+    changed_pet = client.put(
+        f"/pet/{pet['id']}", json=pet_update, headers=bearer(admin_token)
+    )
+    assert changed_pet.status_code == 200, changed_pet.text
+
+    stored = client.get(
+        f"/store/order/{order['id']}", headers=bearer(token)
+    ).json()
+    assert float(stored["unitPrice"]) == 15000.0
+    assert stored["deliveryDetails"]["address"]["city"] == "Москва"
+
+
+def test_payment_success_idempotency_history_and_paid_cancellation(
+    client: httpx.Client,
+) -> None:
+    token = login(client, "user1", "password123")
+    complete_profile(client, token)
+    admin_token = login(client, "admin", "admin123")
+    pet = create_pet(client, admin_token, "Payment")
+    order = client.post(
+        "/store/order",
+        json={"petId": pet["id"], "quantity": 1},
+        headers=bearer(token),
+    ).json()
+
+    key = str(uuid4())
+    paid = pay_order(client, token, order["id"], key=key)
+    assert paid.status_code == 201, paid.text
+    payment = paid.json()
+    assert payment["status"] == "SUCCEEDED"
+    assert payment["cardLast4"] == "4242"
+    assert "cardNumber" not in payment and "cvv" not in payment
+
+    replay = pay_order(client, token, order["id"], key=key)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["id"] == payment["id"]
+
+    conflict = pay_order(
+        client, token, order["id"], card_number="4000000000000002", key=key
+    )
+    assert_error(conflict, 409, "IDEMPOTENCY_KEY_REUSED")
+
+    history = client.get(
+        f"/store/order/{order['id']}/payments", headers=bearer(token)
+    )
+    assert history.status_code == 200, history.text
+    assert payment["id"] in {item["id"] for item in history.json()}
+    fetched = client.get(
+        f"/store/order/{order['id']}/payments/{payment['id']}",
+        headers=bearer(token),
+    )
+    assert fetched.status_code == 200, fetched.text
+
+    duplicate = pay_order(client, token, order["id"])
+    assert_error(duplicate, 409, "ORDER_ALREADY_PAID")
+
+    cancelled = client.post(
+        f"/store/order/{order['id']}/cancel", headers=bearer(token)
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["paymentStatus"] == "REFUNDED"
+    refunded = client.get(
+        f"/store/order/{order['id']}/payments/{payment['id']}",
+        headers=bearer(token),
+    ).json()
+    assert refunded["status"] == "REFUNDED"
+    assert client.get(f"/pet/{pet['id']}").json()["status"] == "available"
+
+
+@pytest.mark.parametrize(
+    ("card_number", "error"),
+    [
+        ("4000000000000002", "PAYMENT_DECLINED"),
+        ("4000000000009995", "INSUFFICIENT_FUNDS"),
+    ],
+)
+def test_declined_payment_can_be_retried(
+    client: httpx.Client, card_number: str, error: str
+) -> None:
+    token = login(client, "user1", "password123")
+    complete_profile(client, token)
+    admin_token = login(client, "admin", "admin123")
+    pet = create_pet(client, admin_token, "Decline")
+    order = client.post(
+        "/store/order",
+        json={"petId": pet["id"], "quantity": 1},
+        headers=bearer(token),
+    ).json()
+
+    declined = pay_order(client, token, order["id"], card_number=card_number)
+    assert_error(declined, 402, error)
+    assert client.get(
+        f"/store/order/{order['id']}", headers=bearer(token)
+    ).json()["paymentStatus"] == "UNPAID"
+
+    retry = pay_order(client, token, order["id"])
+    assert retry.status_code == 201, retry.text
+
+
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"cardNumber": "4242424242424241"},
+        {"expiryMonth": 1, "expiryYear": 2020},
+        {"cvv": "12"},
+    ],
+)
+def test_invalid_payment_details_return_validation_error(
+    client: httpx.Client, invalid_fields: dict
+) -> None:
+    token = login(client, "user1", "password123")
+    complete_profile(client, token)
+    admin_token = login(client, "admin", "admin123")
+    pet = create_pet(client, admin_token, "Invalid payment")
+    order_response = client.post(
+        "/store/order",
+        json={"petId": pet["id"], "quantity": 1},
+        headers=bearer(token),
+    )
+    assert order_response.status_code == 201, order_response.text
+    order = order_response.json()
+
+    payload = {
+        "cardNumber": "4242424242424242",
+        "expiryMonth": 12,
+        "expiryYear": 2099,
+        "cvv": "123",
+        "cardholderName": "IVAN IVANOV",
+    }
+    payload.update(invalid_fields)
+    response = client.post(
+        f"/store/order/{order['id']}/payments",
+        headers={**bearer(token), "Idempotency-Key": str(uuid4())},
+        json=payload,
+    )
+    assert_error(response, 422, "VALIDATION_ERROR")
+    assert client.get(
+        f"/store/order/{order['id']}", headers=bearer(token)
+    ).json()["paymentStatus"] == "UNPAID"
+
+
+def test_address_country_is_managed_by_server(client: httpx.Client) -> None:
+    username = f"addresscountry{uuid4().hex[:10]}"
+    response = client.post(
+        "/auth/register",
+        json={
+            "username": username,
+            "email": f"{username}@example.test",
+            "password": "StartPass123",
+            "address": {**DELIVERY_ADDRESS, "country": "RU"},
+        },
+    )
+    assert_error(response, 422, "VALIDATION_ERROR")
+    assert "address.country" in {item["field"] for item in response.json()["details"]}
+
+
+def test_parallel_payment_and_payment_ownership(client: httpx.Client) -> None:
+    user_token = login(client, "user1", "password123")
+    admin_token = login(client, "admin", "admin123")
+    complete_profile(client, user_token)
+    complete_profile(client, admin_token)
+    pet = create_pet(client, admin_token, "Parallel payment")
+    order = client.post(
+        "/store/order",
+        json={"petId": pet["id"], "quantity": 1},
+        headers=bearer(admin_token),
+    ).json()
+
+    forbidden = pay_order(client, user_token, order["id"])
+    assert_error(forbidden, 403, "ORDER_ACCESS_DENIED")
+
+    key = str(uuid4())
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(lambda _: pay_order(client, admin_token, order["id"], key=key), range(2))
+        )
+    assert sorted(response.status_code for response in results) == [200, 201]
+    assert len({response.json()["id"] for response in results}) == 1
 
 
 def test_destructive_user_and_order_operations_are_not_available(

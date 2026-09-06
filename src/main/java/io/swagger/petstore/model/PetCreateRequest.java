@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.math.BigDecimal;
 
 @XmlRootElement(name = "PetCreateRequest")
 public class PetCreateRequest {
@@ -18,6 +19,7 @@ public class PetCreateRequest {
     private List<String> photoUrls = new ArrayList<>();
     private List<Tag> tags = new ArrayList<>();
     private String status;
+    private BigDecimal price;
     private final Map<String, Object> unsupportedFields = new LinkedHashMap<>();
 
     @XmlElement(name = "category")
@@ -65,6 +67,15 @@ public class PetCreateRequest {
 
     public void setStatus(final String status) {
         this.status = status;
+    }
+
+    @XmlElement(name = "price")
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(final BigDecimal price) {
+        this.price = price;
     }
 
     @JsonAnySetter

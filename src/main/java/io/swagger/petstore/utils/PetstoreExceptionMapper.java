@@ -71,7 +71,17 @@ public class PetstoreExceptionMapper implements ExceptionMapper<Exception> {
                     return new ErrorIdentity("INVALID_RESET_LINK", "The one-time link is invalid");
                 }
             }
+            if (message.contains("missing required header parameter `Idempotency-Key`")) {
+                return new ErrorIdentity("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required");
+            }
             if (message.contains("couldn't convert") || message.contains("cannot convert")) {
+                if (message.contains("Idempotency-Key")) {
+                    return new ErrorIdentity("INVALID_IDEMPOTENCY_KEY",
+                            "Idempotency-Key must be a valid UUID");
+                }
+                if (requestPath.contains("/payments/")) {
+                    return new ErrorIdentity("BAD_REQUEST", "Payment id must be a valid UUID");
+                }
                 if (requestPath.contains("/store/order/")) {
                     return new ErrorIdentity("BAD_REQUEST", "Order id must be a valid UUID");
                 }

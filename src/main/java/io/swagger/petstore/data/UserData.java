@@ -2,6 +2,7 @@ package io.swagger.petstore.data;
 
 import io.swagger.petstore.model.AdminUserUpdateRequest;
 import io.swagger.petstore.model.AccountStatus;
+import io.swagger.petstore.model.Address;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
 import io.swagger.petstore.model.UserUpdateRequest;
@@ -24,7 +25,8 @@ public class UserData {
             "id, username, first_name, last_name, email, password, phone, "
             + "user_status, role, confirmed_at, confirmation_code_hash, "
             + "confirmation_expires_at, reset_code_hash, reset_expires_at, "
-            + "reset_used_at, token_version";
+            + "reset_used_at, token_version, address_city, address_street, address_house, "
+            + "address_apartment, address_postal_code";
 
     public User findUserByName(final String username) {
         return findOne("username = ?", username);
@@ -95,8 +97,9 @@ public class UserData {
         }
         final boolean suppliedId = user.getId() != null;
         final String columns = "username, first_name, last_name, email, password, phone, "
-                + "user_status, role, confirmed_at, confirmation_code_hash, confirmation_expires_at";
-        final String values = "?, ?, ?, ?, ?, ?, CAST(? AS account_status), ?, ?, ?, ?";
+                + "user_status, role, confirmed_at, confirmation_code_hash, confirmation_expires_at, "
+                + "address_city, address_street, address_house, address_apartment, address_postal_code";
+        final String values = "?, ?, ?, ?, ?, ?, CAST(? AS account_status), ?, ?, ?, ?, ?, ?, ?, ?, ?";
         final String sql = suppliedId
                 ? "INSERT INTO users (id, " + columns + ") VALUES (?, " + values + ") RETURNING " + COLUMNS
                 : "INSERT INTO users (" + columns + ") VALUES (" + values + ") RETURNING " + COLUMNS;
@@ -126,14 +129,31 @@ public class UserData {
         }
         final String sql = "UPDATE users SET "
                 + "first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name), "
-                + "phone = COALESCE(?, phone) "
+                + "phone = COALESCE(?, phone), "
+                + "address_city = CASE WHEN ? THEN ? ELSE address_city END, "
+                + "address_street = CASE WHEN ? THEN ? ELSE address_street END, "
+                + "address_house = CASE WHEN ? THEN ? ELSE address_house END, "
+                + "address_apartment = CASE WHEN ? THEN ? ELSE address_apartment END, "
+                + "address_postal_code = CASE WHEN ? THEN ? ELSE address_postal_code END "
                 + "WHERE username = ? RETURNING " + COLUMNS;
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, update.getFirstName());
             statement.setString(2, update.getLastName());
             statement.setString(3, update.getPhone());
-            statement.setString(4, username);
+            final Address address = update.getAddress();
+            int index = 4;
+            statement.setBoolean(index++, update.isAddressPresent());
+            statement.setString(index++, address == null ? null : address.getCity());
+            statement.setBoolean(index++, update.isAddressPresent());
+            statement.setString(index++, address == null ? null : address.getStreet());
+            statement.setBoolean(index++, update.isAddressPresent());
+            statement.setString(index++, address == null ? null : address.getHouse());
+            statement.setBoolean(index++, update.isAddressPresent());
+            statement.setString(index++, address == null ? null : address.getApartment());
+            statement.setBoolean(index++, update.isAddressPresent());
+            statement.setString(index++, address == null ? null : address.getPostalCode());
+            statement.setString(index, username);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? map(result) : null;
             }
@@ -169,7 +189,8 @@ public class UserData {
                 final boolean emailChanged = current.getEmail() == null
                         || !current.getEmail().equalsIgnoreCase(normalizedEmail);
                 final String sql = "UPDATE users SET username = ?, first_name = ?, last_name = ?, "
-                        + "email = ?, phone = ?, role = ?, "
+                        + "email = ?, phone = ?, address_city = ?, address_street = ?, address_house = ?, "
+                        + "address_apartment = ?, address_postal_code = ?, role = ?, "
                         + "confirmation_code_hash = CASE WHEN ? THEN NULL ELSE confirmation_code_hash END, "
                         + "confirmation_expires_at = CASE WHEN ? THEN NULL ELSE confirmation_expires_at END, "
                         + "reset_code_hash = CASE WHEN ? THEN NULL ELSE reset_code_hash END, "
@@ -183,11 +204,17 @@ public class UserData {
                     statement.setString(3, update.getLastName());
                     statement.setString(4, normalizedEmail);
                     statement.setString(5, update.getPhone());
-                    statement.setString(6, update.getRole().name());
-                    for (int index = 7; index <= 11; index++) {
+                    final Address address = update.getAddress();
+                    statement.setString(6, address == null ? null : address.getCity());
+                    statement.setString(7, address == null ? null : address.getStreet());
+                    statement.setString(8, address == null ? null : address.getHouse());
+                    statement.setString(9, address == null ? null : address.getApartment());
+                    statement.setString(10, address == null ? null : address.getPostalCode());
+                    statement.setString(11, update.getRole().name());
+                    for (int index = 12; index <= 16; index++) {
                         statement.setBoolean(index, emailChanged);
                     }
-                    statement.setObject(12, userId);
+                    statement.setObject(17, userId);
                     try (ResultSet rows = statement.executeQuery()) {
                         result = rows.next() ? map(rows) : null;
                     }
@@ -341,7 +368,13 @@ public class UserData {
         statement.setString(index++, user.getRole().name());
         setTimestamp(statement, index++, user.getConfirmedAt());
         statement.setString(index++, confirmationHash);
-        setTimestamp(statement, index, confirmationExpiresAt);
+        setTimestamp(statement, index++, confirmationExpiresAt);
+        final Address address = user.getAddress();
+        statement.setString(index++, address == null ? null : address.getCity());
+        statement.setString(index++, address == null ? null : address.getStreet());
+        statement.setString(index++, address == null ? null : address.getHouse());
+        statement.setString(index++, address == null ? null : address.getApartment());
+        statement.setString(index, address == null ? null : address.getPostalCode());
     }
 
     private static User map(final ResultSet result) throws SQLException {
@@ -357,6 +390,15 @@ public class UserData {
         user.setResetExpiresAt(toDate(result.getTimestamp("reset_expires_at")));
         user.setResetUsedAt(toDate(result.getTimestamp("reset_used_at")));
         user.setTokenVersion(result.getInt("token_version"));
+        if (result.getString("address_city") != null) {
+            final Address address = new Address();
+            address.setCity(result.getString("address_city"));
+            address.setStreet(result.getString("address_street"));
+            address.setHouse(result.getString("address_house"));
+            address.setApartment(result.getString("address_apartment"));
+            address.setPostalCode(result.getString("address_postal_code"));
+            user.setAddress(address);
+        }
         return user;
     }
 
@@ -370,6 +412,7 @@ public class UserData {
         target.setResetExpiresAt(source.getResetExpiresAt());
         target.setResetUsedAt(source.getResetUsedAt());
         target.setTokenVersion(source.getTokenVersion());
+        target.setAddress(source.getAddress());
     }
 
     private static Date toDate(final Timestamp timestamp) {

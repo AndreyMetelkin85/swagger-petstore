@@ -22,6 +22,7 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.Date;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @XmlRootElement(name = "Order")
 public class Order {
@@ -31,6 +32,14 @@ public class Order {
   private Date shipDate;
   private OrderStatus status;
   private Boolean complete;
+  private UUID userId;
+  private Date createdAt;
+  private BigDecimal unitPrice;
+  private BigDecimal totalAmount;
+  private String currency;
+  private DeliveryDetails deliveryDetails;
+  private PaymentStatus paymentStatus;
+  private Date paymentExpiresAt;
 
   @XmlElement(name = "id")
   public UUID getId() {
@@ -85,5 +94,69 @@ public class Order {
 
   public void setShipDate(Date shipDate) {
     this.shipDate = shipDate;
+  }
+
+  public UUID getUserId() {
+    return userId;
+  }
+
+  public void setUserId(final UUID userId) {
+    this.userId = userId;
+  }
+
+  public Date getCreatedAt() {
+    return createdAt;
+  }
+
+  public void setCreatedAt(final Date createdAt) {
+    this.createdAt = createdAt;
+  }
+
+  public BigDecimal getUnitPrice() {
+    return unitPrice;
+  }
+
+  public void setUnitPrice(final BigDecimal unitPrice) {
+    this.unitPrice = unitPrice;
+  }
+
+  public BigDecimal getTotalAmount() {
+    return totalAmount;
+  }
+
+  public void setTotalAmount(final BigDecimal totalAmount) {
+    this.totalAmount = totalAmount;
+  }
+
+  public String getCurrency() {
+    return currency;
+  }
+
+  public void setCurrency(final String currency) {
+    this.currency = currency;
+  }
+
+  public DeliveryDetails getDeliveryDetails() {
+    return deliveryDetails;
+  }
+
+  public void setDeliveryDetails(final DeliveryDetails deliveryDetails) {
+    this.deliveryDetails = deliveryDetails;
+  }
+
+  public PaymentStatus getPaymentStatus() {
+    return paymentStatus;
+  }
+
+  public void setPaymentStatus(final PaymentStatus paymentStatus) {
+    this.paymentStatus = paymentStatus;
+  }
+
+  public Date getPaymentExpiresAt() {
+    return paymentExpiresAt;
+  }
+
+  public void setPaymentExpiresAt(final Date paymentExpiresAt) {
+    this.paymentExpiresAt = paymentExpiresAt;
   }
 }

@@ -7,6 +7,7 @@ public class RegisterRequest {
     private String firstName;
     private String lastName;
     private String phone;
+    private Address address;
 
     public String getUsername() {
         return username;
@@ -54,5 +55,13 @@ public class RegisterRequest {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public Address getAddress() {
+        return address;
+    }
+
+    public void setAddress(final Address address) {
+        this.address = address;
     }
 }
