@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '0 19 * * 1'
 
+permissions:
+  contents: read
+  packages: read
+  security-events: write
+
 jobs:
   CodeQL-Build:
 
