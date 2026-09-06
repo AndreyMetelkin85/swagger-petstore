@@ -5,6 +5,8 @@ info:
   description: |-
     API зоомагазина, в котором пользователи могут регистрироваться, просматривать питомцев и оформлять заказы.
     Проект предназначен для практики ручного и автоматизированного тестирования на реалистичных сценариях успешной работы и обработки ошибок.
+    Для практики доступны два демо-аккаунта: admin (администратор) и user (обычный пользователь).
+    Служат для демонстрации ролей и проверки доступа в учебном окружении.
   contact:
     name: Training project
   license:
@@ -524,6 +526,15 @@ paths:
               examples:
                 invalidCredentials:
                   value: {status: 401, error: INVALID_CREDENTIALS, message: Username or password is incorrect, details: []}
+        '429':
+          description: Слишком много неверных попыток входа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                tooManyAttempts:
+                  value: {status: 429, error: LOGIN_RATE_LIMITED, message: Too many failed login attempts. Try again in 5 minute(s), details: []}
         '403':
           description: Состояние учётной записи запрещает авторизацию.
           content:
@@ -648,109 +659,6 @@ paths:
               examples:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
-    put:
-      tags: [Pets]
-      summary: Обновление питомца
-      description: Обновляет запись питомца по идентификатору из тела запроса.
-      operationId: updatePet
-      x-swagger-router-controller: PetController
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        description: Полное новое представление питомца с UUID.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PetUpdateRequest'
-            example:
-              id: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
-              version: 0
-              name: Dog 1 Updated
-              category:
-                id: 0e446653-3b7b-4ad1-81d3-b0a71af26f31
-                name: Dogs
-              photoUrls: []
-              tags: []
-              status: pending
-      responses:
-        '200':
-          description: Данные питомца обновлены.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Pet'
-        '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                missingBody:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
-        '401':
-          description: Bearer token отсутствует или недействителен.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                missingToken:
-                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
-                invalidToken:
-                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
-                expiredToken:
-                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
-        '403':
-          description: Операция недоступна для текущей учётной записи.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                roleForbidden:
-                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
-                accountBlocked:
-                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
-        '404':
-          description: Питомец с указанным UUID не найден.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                petNotFound:
-                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
-        '409':
-          description: Запись изменилась либо статус питомца управляется активным заказом.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                petHasActiveOrder:
-                  value: {status: 409, error: PET_HAS_ACTIVE_ORDER, message: Pet status is managed by its active order, details: []}
-                versionConflict:
-                  value: {status: 409, error: PET_VERSION_CONFLICT, message: Pet was changed by another request; reload it and retry, details: []}
-        '422':
-          description: Данные питомца не прошли проверку.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                invalidPet:
-                  value:
-                    status: 422
-                    error: VALIDATION_ERROR
-                    message: Request validation failed
-                    details:
-                      - {field: id, message: Pet id is required and must be a valid UUID}
-        '500':
-          description: Не удалось обновить питомца.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                internalError:
-                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
 
   /pet/findByStatus:
     get:
@@ -868,6 +776,110 @@ paths:
   /pet/{petId}:
     parameters:
       - $ref: '#/components/parameters/PetId'
+    put:
+      tags: [Pets]
+      summary: Обновление питомца
+      description: Обновляет запись питомца по идентификатору из пути.
+      operationId: updatePet
+      x-swagger-router-controller: PetController
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: Полное новое представление питомца. Идентификатор берётся только из petId.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PetUpdateRequest'
+            example:
+              version: 0
+              name: Dog 1 Updated
+              category:
+                id: 0e446653-3b7b-4ad1-81d3-b0a71af26f31
+                name: Dogs
+              photoUrls: []
+              tags: []
+              status: pending
+      responses:
+        '200':
+          description: Данные питомца обновлены.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '400':
+          description: Тело запроса отсутствует или содержит некорректные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+                invalidPetId:
+                  value: {status: 400, error: BAD_REQUEST, message: Pet id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '403':
+          description: Операция недоступна для текущей учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Питомец с указанным UUID не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: Запись изменилась либо статус питомца управляется активным заказом.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                petHasActiveOrder:
+                  value: {status: 409, error: PET_HAS_ACTIVE_ORDER, message: Pet status is managed by its active order, details: []}
+                versionConflict:
+                  value: {status: 409, error: PET_VERSION_CONFLICT, message: Pet was changed by another request; reload it and retry, details: []}
+        '422':
+          description: Данные питомца не прошли проверку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidPet:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: version, message: Pet version is required}
+        '500':
+          description: Не удалось обновить питомца.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
     get:
       tags: [Pets]
       summary: Получение питомца
@@ -2351,12 +2363,8 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.PetUpdateRequest
       type: object
       additionalProperties: false
-      required: [id, name, version]
+      required: [name, version]
       properties:
-        id:
-          type: string
-          format: uuid
-          example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
         version:
           type: integer
           format: int32

@@ -225,20 +225,19 @@ def test_pet_create_and_update_models_have_separate_validation(
     assert_error(invalid_status, 422, "VALIDATION_ERROR")
     assert invalid_status.json()["details"][0]["field"] == "status"
 
-    missing_id = client.put(
-        "/pet",
-        json={"name": "Missing id"},
+    invalid_pet_id = client.put(
+        "/pet/not-a-uuid",
+        json={"version": 0, "name": "Invalid id"},
         headers=bearer(admin_token),
     )
-    assert_error(missing_id, 422, "VALIDATION_ERROR")
-    assert "id" in {detail["field"] for detail in missing_id.json()["details"]}
+    assert_error(invalid_pet_id, 400, "BAD_REQUEST")
+    assert invalid_pet_id.json()["message"] == "Pet id must be a valid UUID"
 
 
 def test_pet_update_uses_optimistic_lock(client: httpx.Client) -> None:
     admin_token = login(client, "admin", "admin123")
     pet = create_pet(client, admin_token, "Versioned")
     update = {
-        "id": pet["id"],
         "version": pet["version"],
         "name": f"{pet['name']} updated",
         "category": pet.get("category"),
@@ -247,11 +246,11 @@ def test_pet_update_uses_optimistic_lock(client: httpx.Client) -> None:
         "status": pet["status"],
     }
 
-    first = client.put("/pet", json=update, headers=bearer(admin_token))
+    first = client.put(f"/pet/{pet['id']}", json=update, headers=bearer(admin_token))
     assert first.status_code == 200, first.text
     assert first.json()["version"] == pet["version"] + 1
 
-    stale = client.put("/pet", json=update, headers=bearer(admin_token))
+    stale = client.put(f"/pet/{pet['id']}", json=update, headers=bearer(admin_token))
     assert_error(stale, 409, "PET_VERSION_CONFLICT")
 
 

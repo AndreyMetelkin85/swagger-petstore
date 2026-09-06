@@ -96,11 +96,11 @@ public class PetData {
         }
     }
 
-    public Pet updatePet(final PetUpdateRequest request) {
+    public Pet updatePet(final UUID petId, final PetUpdateRequest request) {
         try (Connection connection = Database.connect()) {
             connection.setAutoCommit(false);
             try {
-                final LockedPet persisted = lockPet(connection, request.getId());
+                final LockedPet persisted = lockPet(connection, petId);
                 if (persisted == null) {
                     throw new PetException(Response.Status.NOT_FOUND, "PET_NOT_FOUND",
                             "Pet was not found");
@@ -109,11 +109,11 @@ public class PetData {
                     throw new PetException(Response.Status.CONFLICT, "PET_VERSION_CONFLICT",
                             "Pet was changed by another request; reload it and retry");
                 }
-                if (request.getStatus() != null && hasActiveOrder(connection, request.getId())) {
+                if (request.getStatus() != null && hasActiveOrder(connection, petId)) {
                     throw new PetException(Response.Status.CONFLICT, "PET_HAS_ACTIVE_ORDER",
                             "Pet status is managed by its active order");
                 }
-                final Pet pet = fromRequest(request, request.getId());
+                final Pet pet = fromRequest(request, petId);
                 if (request.getStatus() == null) {
                     pet.setStatus(persisted.status);
                 }

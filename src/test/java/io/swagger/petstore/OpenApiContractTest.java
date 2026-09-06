@@ -43,7 +43,9 @@ public class OpenApiContractTest {
         assertEquals("Swagger Petstore API", openAPI.getInfo().getTitle());
         assertEquals("API зоомагазина, в котором пользователи могут регистрироваться, просматривать питомцев "
                         + "и оформлять заказы.\nПроект предназначен для практики ручного и автоматизированного "
-                        + "тестирования на реалистичных сценариях успешной работы и обработки ошибок.",
+                        + "тестирования на реалистичных сценариях успешной работы и обработки ошибок.\n"
+                        + "Для практики доступны два демо-аккаунта: admin (администратор) и user (обычный пользователь).\n"
+                        + "Служат для демонстрации ролей и проверки доступа в учебном окружении.",
                 openAPI.getInfo().getDescription());
         assertEquals(Arrays.asList("Health", "Registration", "Authentication", "Pets", "Orders",
                         "Users", "Administration"),
@@ -115,7 +117,8 @@ public class OpenApiContractTest {
         final Schema orderCreate = openAPI.getComponents().getSchemas().get("OrderCreateRequest");
         assertEquals(Collections.singletonList("name"), petCreate.getRequired());
         assertFalse(petCreate.getProperties().containsKey("id"));
-        assertTrue(petUpdate.getRequired().containsAll(Arrays.asList("id", "name", "version")));
+        assertTrue(petUpdate.getRequired().containsAll(Arrays.asList("name", "version")));
+        assertFalse(petUpdate.getProperties().containsKey("id"));
         assertTrue(openAPI.getComponents().getSchemas().get("Pet").getRequired().contains("version"));
         assertEquals(new HashSet<>(Arrays.asList("petId", "quantity")),
                 new HashSet<>(orderCreate.getRequired()));
@@ -160,6 +163,8 @@ public class OpenApiContractTest {
                 "USER_ALREADY_EXISTS");
         assertErrorCodes(openAPI.getPaths().get("/auth/login").getPost(), "403",
                 "ACCOUNT_NOT_VERIFIED", "ACCOUNT_BLOCKED");
+        assertErrorCodes(openAPI.getPaths().get("/auth/login").getPost(), "429",
+                "LOGIN_RATE_LIMITED");
         assertErrorCodes(openAPI.getPaths().get("/auth/password/reset/{userId}").getPost(), "409",
                 "RESET_LINK_ALREADY_USED", "RESET_STATE_CHANGED");
         assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getGet(), "404", "PET_NOT_FOUND");
@@ -175,7 +180,7 @@ public class OpenApiContractTest {
                 "ORDER_ACCESS_DENIED", "ACCOUNT_NOT_VERIFIED", "ACCOUNT_BLOCKED");
         assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getDelete(), "409",
                 "PET_HAS_ORDERS");
-        assertErrorCodes(openAPI.getPaths().get("/pet").getPut(), "409",
+        assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getPut(), "409",
                 "PET_HAS_ACTIVE_ORDER", "PET_VERSION_CONFLICT");
         assertErrorCodes(openAPI.getPaths().get("/user/{username}").getGet(), "404",
                 "USER_NOT_FOUND");

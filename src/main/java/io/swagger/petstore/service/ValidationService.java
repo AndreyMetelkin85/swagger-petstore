@@ -106,7 +106,7 @@ public final class ValidationService {
     }
 
     public static List<ErrorDetail> validatePetUpdate(final PetUpdateRequest pet) {
-        final List<ErrorDetail> errors = validatePet(pet, true, pet == null ? null : pet.getId());
+        final List<ErrorDetail> errors = validatePet(pet, false, null);
         if (pet != null && pet.getVersion() == null) {
             errors.add(new ErrorDetail("version", "Pet version is required"));
         } else if (pet != null && pet.getVersion() < 0) {
