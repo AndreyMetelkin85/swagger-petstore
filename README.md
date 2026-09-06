@@ -22,6 +22,9 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - изменения питомца защищены версией записи: устаревший `PUT` получает `409 PET_VERSION_CONFLICT`;
 - заказ проходит состояния `placed`, `approved`, `shipped`, `delivered` или `cancelled`;
 - создание заказа резервирует питомца, отмена снимает резерв, доставка переводит его в `sold`;
+- профиль хранит один российский адрес, а заказ — неизменяемый снимок контактов и доставки;
+- цена питомца хранится в рублях и фиксируется в заказе на момент оформления;
+- добавлен локальный симулятор тестовых платежей с idempotency, отказами, refund и истечением резерва;
 - пользователи и заказы не удаляются через API, поэтому профиль владельца и история покупок не теряются;
 - операции изменения pets и управления пользователями защищены ролью `ADMIN`;
 - отсутствие/ошибка/истечение токена дают `401`, недостаточная роль — `403`;
@@ -37,13 +40,13 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - Flyway применяет версионированные миграции без удаления существующих данных;
 - внешние ключи запрещают удаление владельца заказа, а уникальный индекс не допускает два активных заказа на одного питомца;
 - Dockerfile стал multi-stage и не требует заранее выполнять Maven на хосте;
-- Compose публикует API только на loopback, оставляет PostgreSQL во внутренней сети и хранит БД в отдельном named volume;
+- Compose публикует API и PostgreSQL только на loopback и хранит БД в отдельном named volume;
 - добавлены Java contract tests и Pytest/httpx smoke tests.
 
 ## Стек и структура
 
-- Java 8, Maven, WAR;
-- Jetty 9 и Swagger Inflector (OpenAPI управляет маршрутизацией);
+- Java 17, Maven, WAR;
+- Tomcat 9 и Swagger Inflector (OpenAPI управляет маршрутизацией);
 - Swagger UI 5.32.11, упакованный внутрь WAR без внешних CDN;
 - PostgreSQL 16 и JDBC;
 - OpenAPI 3.0.4: `src/main/resources/openapi.yaml`;
@@ -58,18 +61,24 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 
 ## Быстрый запуск через Docker Compose
 
-Требуются Docker Desktop и Docker Compose. Команда собирает два image —
-`swagger-petstore:local` и `swagger-petstore-db:local`, запускает PostgreSQL, ждёт
+Требуются Docker Desktop и Docker Compose. Основной Compose скачивает проверенные
+`andymentor/swagger-petstore:dev` и `andymentor/swagger-petstore-db:16.15`, ждёт
 готовности БД и только затем запускает API:
 
 ```bash
-docker compose up --build
+docker compose up -d
+```
+
+Для разработки из локальных исходников подключите overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
 В Docker Desktop внутри Compose-проекта `swagger-petstore` должны быть видны два
 контейнера: `swagger-petstore` (API, `127.0.0.1:8080`) и `swagger-petstore-db`.
-Порт PostgreSQL доступен только контейнерам во внутренней Compose-сети и не публикуется
-на хост.
+PostgreSQL опубликован только на loopback: `127.0.0.1:${POSTGRES_PORT:-5432}`. Он
+недоступен из внешней сети; порт можно переопределить переменной `POSTGRES_PORT`.
 
 После успешного healthcheck доступны:
 
@@ -94,7 +103,7 @@ docker compose down
 
 ```bash
 docker compose down -v
-docker compose up --build
+docker compose up -d
 ```
 
 Посмотреть таблицы напрямую:
@@ -103,6 +112,19 @@ docker compose up --build
 docker compose exec postgres psql -U petstore -d petstore -c "SELECT id, username, role FROM users ORDER BY id;"
 ```
 
+Параметры подключения к PostgreSQL с хоста:
+
+| Параметр | Значение |
+|---|---|
+| Host | `localhost` |
+| Port | `5432` или значение `POSTGRES_PORT` |
+| Database | `petstore` |
+| Username | `petstore` |
+| Password | `petstore` |
+| JDBC URL | `jdbc:postgresql://localhost:5432/petstore` |
+
+Это учебные credentials. Порт привязан к `127.0.0.1` и не доступен извне компьютера.
+
 JWT secret, публичный адрес одноразовых ссылок и параметры БД можно передать через
 окружение или `.env`. Если `PETSTORE_TOKEN_SECRET` не задан, при каждом запуске создаётся
 случайный 256-битный secret: токены прежнего процесса после рестарта становятся
@@ -110,7 +132,7 @@ JWT secret, публичный адрес одноразовых ссылок и
 32 байт:
 
 ```bash
-PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret docker compose up --build
+PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret docker compose up -d
 ```
 
 В PowerShell:
@@ -118,30 +140,23 @@ PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret docker compose up --build
 ```powershell
 $env:PETSTORE_TOKEN_SECRET = "replace-with-a-long-local-secret"
 $env:PETSTORE_PUBLIC_BASE_URL = "http://localhost:8080/api/v3"
-docker compose up --build
+docker compose up -d
 ```
 
 `resetUrl` по умолчанию не возвращается из `POST /auth/password/forgot`. Для изолированных
 учебных прогонов, в которых тест должен сам перейти по ссылке, явно установите
 `PETSTORE_EXPOSE_TEST_LINKS=true`. Не включайте этот флаг в общем окружении.
 
-## Локальный запуск через Maven
+## Сборка через Maven
 
-Требуются JDK 8+, Maven 3.9+ и PostgreSQL. Compose по умолчанию не публикует порт БД;
-для запуска приложения вне Docker используйте отдельный локальный PostgreSQL или временно
-опубликуйте порт только на loopback:
+Для проверки без запуска контейнеров требуются JDK 17 и Maven 3.9+:
 
 ```bash
-docker compose run -d --name swagger-petstore-db-dev -p 127.0.0.1:5432:5432 postgres
-mvn clean package jetty:run
+mvn clean package
 ```
 
-При локальном запуске используются defaults `jdbc:postgresql://localhost:5432/petstore`
-и credentials `petstore/petstore`. Их можно заменить переменными `PETSTORE_DB_URL`,
-`PETSTORE_DB_USER`, `PETSTORE_DB_PASSWORD`.
-
-Приложение запускается на порту `8080`. Docker-вариант предпочтителен: он фиксирует
-среду исполнения и не требует Java/Maven на ноутбуке.
+Для запуска приложения используйте Docker Compose: runtime стандартизован на Tomcat 9
+и не требует локальной настройки application server.
 
 ## Предзагруженные демонстрационные пользователи
 
@@ -341,11 +356,11 @@ python -m pytest tests/smoke -v
 BASE_URL=http://localhost:8080/api/v3 python -m pytest tests/smoke -v
 ```
 
-31 smoke-сценарий проверяет health, авторизацию, регистрацию и подтверждение,
+44 smoke-сценария проверяют health, авторизацию, регистрацию и подтверждение,
 восстановление пароля, блокировку, отзыв старых tokens, роли, питомцев, заказы и
-единый формат ошибок для некорректных входных данных. Параллельные запросы отдельно
+платежи, а также единый формат ошибок для некорректных входных данных. Параллельные запросы отдельно
 проверяют атомарность подтверждения, сброса пароля, блокировки, разблокировки и
-резервирования одного питомца. Также проверяются запрет destructive user/order operations,
+резервирования и оплаты. Также проверяются запрет destructive user/order operations,
 невозможность подделать ADMIN token старым публичным secret и optimistic lock питомца.
 
 Для ручной проверки persistence создайте пользователя или pet, перезапустите только API и
@@ -357,13 +372,15 @@ docker compose restart petstore
 
 ## Docker-образ и Docker Hub
 
-Замените `<dockerhub_login>` на свой Docker Hub login. Самостоятельная публикация из
-этого репозитория не выполняется.
+Публичные dev-образы публикуются в `andymentor/swagger-petstore` и
+`andymentor/swagger-petstore-db`. Они собираются только из проверенного commit ветки
+`dev`; upstream-образы `swaggerapi/petstore3` не используются.
 
 Build image:
 
 ```bash
-docker build -t <dockerhub_login>/swagger-petstore:latest .
+docker build --pull -t andymentor/swagger-petstore:dev .
+docker build --pull -t andymentor/swagger-petstore-db:16.15 docker/postgres
 ```
 
 Run image:
@@ -374,31 +391,35 @@ docker volume create swagger-petstore-db-data
 docker run -d --name swagger-petstore-db --network swagger-petstore-net \
   -e POSTGRES_DB=petstore -e POSTGRES_USER=petstore -e POSTGRES_PASSWORD=petstore \
   -v swagger-petstore-db-data:/var/lib/postgresql/data \
-  postgres:16-alpine
+  -p 127.0.0.1:5432:5432 \
+  andymentor/swagger-petstore-db:16.15
 
 docker run --rm --name swagger-petstore --network swagger-petstore-net -p 127.0.0.1:8080:8080 \
   -e PETSTORE_TOKEN_SECRET=replace-with-a-long-local-secret \
   -e PETSTORE_PUBLIC_BASE_URL=http://localhost:8080/api/v3 \
   -e PETSTORE_DB_URL=jdbc:postgresql://swagger-petstore-db:5432/petstore \
   -e PETSTORE_DB_USER=petstore -e PETSTORE_DB_PASSWORD=petstore \
-  <dockerhub_login>/swagger-petstore:latest
+  andymentor/swagger-petstore:dev
 ```
 
-Для ежедневной локальной работы используйте `docker compose up --build`: Compose уже
-содержит сеть, порядок старта, healthchecks, volume и SQL initialization.
+Основной Compose использует этот образ. Локальная разработка выполняется через
+`docker-compose.dev.yml`.
 
 Push image:
 
 ```bash
 docker login
-docker push <dockerhub_login>/swagger-petstore:latest
+docker push andymentor/swagger-petstore:dev
+docker push andymentor/swagger-petstore-db:16.15
 ```
 
-Multi-arch build and push:
+Multi-arch build and push из проверенного `dev`:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t <dockerhub_login>/swagger-petstore:latest --push .
+  -t andymentor/swagger-petstore:dev --push .
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t andymentor/swagger-petstore-db:16.15 --push docker/postgres
 ```
 
 ## Ограничения и дальнейшие TODO
