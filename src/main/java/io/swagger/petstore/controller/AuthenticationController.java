@@ -22,17 +22,17 @@ public class AuthenticationController {
     private final AuthService authService = AuthService.getInstance();
 
     public ResponseContext login(final RequestContext request, final LoginRequest body) {
-        final String username = body == null ? null : body.getUsername();
+        final String email = body == null ? null : body.getEmail();
         final String password = body == null ? null : body.getPassword();
-        final List<ErrorDetail> errors = ValidationService.validateLogin(username, password);
+        final List<ErrorDetail> errors = ValidationService.validateLogin(email, password);
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
         try {
-            final LoginResponse response = authService.login(username, password);
+            final LoginResponse response = authService.login(email, password);
             if (response == null) {
                 return Responses.error(Response.Status.UNAUTHORIZED, "INVALID_CREDENTIALS",
-                        "Username or password is incorrect");
+                        "Email or password is incorrect");
             }
             return new ResponseContext().contentType(Util.getMediaType(request)).entity(response);
         } catch (AccountException exception) {

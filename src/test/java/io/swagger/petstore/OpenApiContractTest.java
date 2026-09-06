@@ -59,13 +59,16 @@ public class OpenApiContractTest {
         assertNotNull(openAPI.getPaths().get("/admin/users/{userId}/block"));
         assertNotNull(openAPI.getPaths().get("/admin/users/{userId}/unblock"));
         assertNotNull(openAPI.getPaths().get("/user/me"));
+        assertNotNull(openAPI.getPaths().get("/users"));
+        assertNotNull(openAPI.getPaths().get("/users/{userId}"));
+        assertNull(openAPI.getPaths().get("/admin/users/{userId}/email"));
+        assertNull(openAPI.getPaths().get("/user/{username}"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/approve"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/ship"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/deliver"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/cancel"));
         assertNotNull(openAPI.getComponents().getSecuritySchemes().get("bearerAuth"));
         assertNull(openAPI.getPaths().get("/user/me").getDelete());
-        assertNull(openAPI.getPaths().get("/user/{username}").getDelete());
         assertNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
         assertEquals(Collections.emptyList(), openAPI.getPaths().get("/health").getGet().getSecurity());
 
@@ -73,6 +76,9 @@ public class OpenApiContractTest {
         assertEquals("RegistrationController", extension(openAPI.getPaths().get("/auth/confirm/{userId}").getGet()));
         assertEquals("AuthenticationController", extension(openAPI.getPaths().get("/auth/login").getPost()));
         assertEquals("AuthenticationController", extension(openAPI.getPaths().get("/auth/password/forgot").getPost()));
+        assertEquals("UserController", extension(openAPI.getPaths().get("/users").getGet()));
+        assertEquals("UserController", extension(openAPI.getPaths().get("/users/{userId}").getGet()));
+        assertEquals("UserController", extension(openAPI.getPaths().get("/users/{userId}").getPut()));
 
         assertNull("Concrete reusable responses must not leak examples between endpoints",
                 openAPI.getComponents().getResponses());
@@ -99,6 +105,7 @@ public class OpenApiContractTest {
                 openAPI.getComponents().getSchemas().get("AccountStatus").getEnum());
         assertNotNull(property(openAPI, "User", "userStatus").get$ref());
         assertTrue(openAPI.getComponents().getSchemas().get("User").getRequired().contains("userStatus"));
+        assertFalse(openAPI.getComponents().getSchemas().get("User").getProperties().containsKey("password"));
 
         final Schema login = openAPI.getComponents().getSchemas().get("LoginResponse");
         assertEquals(new HashSet<>(Arrays.asList("access_token", "token_type", "expires_in", "user")),
@@ -125,6 +132,23 @@ public class OpenApiContractTest {
         assertFalse(orderCreate.getProperties().containsKey("id"));
         assertFalse(orderCreate.getProperties().containsKey("status"));
         assertFalse(orderCreate.getProperties().containsKey("complete"));
+
+        final Schema selfUpdate = openAPI.getComponents().getSchemas().get("UserUpdateRequest");
+        assertEquals(new HashSet<>(Arrays.asList("firstName", "lastName", "phone")),
+                new HashSet<>(selfUpdate.getProperties().keySet()));
+        assertFalse(selfUpdate.getProperties().containsKey("email"));
+        assertFalse(selfUpdate.getProperties().containsKey("password"));
+        assertFalse(selfUpdate.getProperties().containsKey("currentPassword"));
+
+        final Schema adminUpdate = openAPI.getComponents().getSchemas().get("AdminUserUpdateRequest");
+        assertEquals(new HashSet<>(Arrays.asList("username", "firstName", "lastName", "email", "phone", "role")),
+                new HashSet<>(adminUpdate.getProperties().keySet()));
+        assertEquals(new HashSet<>(Arrays.asList("username", "firstName", "lastName", "email", "phone", "role")),
+                new HashSet<>(adminUpdate.getRequired()));
+        assertFalse(adminUpdate.getProperties().containsKey("id"));
+        assertFalse(adminUpdate.getProperties().containsKey("userStatus"));
+        assertFalse(adminUpdate.getProperties().containsKey("password"));
+        assertFalse(adminUpdate.getProperties().containsKey("currentPassword"));
     }
 
     @Test
@@ -165,6 +189,8 @@ public class OpenApiContractTest {
                 "ACCOUNT_NOT_VERIFIED", "ACCOUNT_BLOCKED");
         assertErrorCodes(openAPI.getPaths().get("/auth/login").getPost(), "429",
                 "LOGIN_RATE_LIMITED");
+        assertErrorCodes(openAPI.getPaths().get("/auth/confirmation/resend").getPost(), "429",
+                "LOGIN_RATE_LIMITED");
         assertErrorCodes(openAPI.getPaths().get("/auth/password/reset/{userId}").getPost(), "409",
                 "RESET_LINK_ALREADY_USED", "RESET_STATE_CHANGED");
         assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getGet(), "404", "PET_NOT_FOUND");
@@ -182,7 +208,7 @@ public class OpenApiContractTest {
                 "PET_HAS_ORDERS");
         assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getPut(), "409",
                 "PET_HAS_ACTIVE_ORDER", "PET_VERSION_CONFLICT");
-        assertErrorCodes(openAPI.getPaths().get("/user/{username}").getGet(), "404",
+        assertErrorCodes(openAPI.getPaths().get("/users/{userId}").getGet(), "404",
                 "USER_NOT_FOUND");
         assertErrorCodes(openAPI.getPaths().get("/admin/users/{userId}/block").getPost(), "403",
                 "FORBIDDEN", "ACCOUNT_NOT_VERIFIED", "ACCOUNT_BLOCKED", "ADMIN_ACCOUNT_PROTECTED");
@@ -190,6 +216,11 @@ public class OpenApiContractTest {
                 "USER_NOT_FOUND");
         assertErrorCodes(openAPI.getPaths().get("/admin/users/{userId}/block").getPost(), "409",
                 "INVALID_STATUS_TRANSITION");
+        assertErrorCodes(openAPI.getPaths().get("/users/{userId}").getPut(), "409",
+                "USERNAME_ALREADY_EXISTS", "EMAIL_ALREADY_EXISTS", "INVALID_ROLE_TRANSITION",
+                "LAST_ADMIN_PROTECTED");
+        assertErrorCodes(openAPI.getPaths().get("/users/{userId}").getPut(), "422",
+                "VALIDATION_ERROR");
     }
 
     @Test
@@ -265,9 +296,9 @@ public class OpenApiContractTest {
         assertNull(openAPI.getPaths().get("/user/createWithList"));
         assertNull(openAPI.getPaths().get("/pet/{petId}/uploadImage"));
         assertNull(openAPI.getPaths().get("/pet/{petId}").getPost());
-        assertNull(openAPI.getPaths().get("/user/{username}").getPut());
         assertNull(openAPI.getPaths().get("/user/me").getDelete());
-        assertNull(openAPI.getPaths().get("/user/{username}").getDelete());
+        assertNull(openAPI.getPaths().get("/user/{username}"));
+        assertNull(openAPI.getPaths().get("/admin/users/{userId}/email"));
         assertNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
     }
 

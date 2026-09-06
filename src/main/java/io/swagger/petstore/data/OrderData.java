@@ -58,12 +58,21 @@ public class OrderData {
     }
 
     public List<Order> findOrdersForUser(final String username) {
+        return findOrders(" WHERE owner_username = ?", username);
+    }
+
+    public List<Order> findAll() {
+        return findOrders("", null);
+    }
+
+    private List<Order> findOrders(final String condition, final String username) {
         final List<Order> orders = new ArrayList<>();
-        final String sql = "SELECT " + COLUMNS
-                + " FROM store_orders WHERE owner_username = ? ORDER BY id";
+        final String sql = "SELECT " + COLUMNS + " FROM store_orders" + condition + " ORDER BY id";
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, username);
+            if (username != null) {
+                statement.setString(1, username);
+            }
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
                     orders.add(map(result));

@@ -1,7 +1,8 @@
 package io.swagger.petstore.service;
 
-import io.swagger.petstore.model.ErrorDetail;
+import io.swagger.petstore.model.AdminUserUpdateRequest;
 import io.swagger.petstore.model.Category;
+import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.OrderCreateRequest;
 import io.swagger.petstore.model.PasswordForgotRequest;
 import io.swagger.petstore.model.PasswordResetRequest;
@@ -44,11 +45,9 @@ public final class ValidationService {
         return errors;
     }
 
-    public static List<ErrorDetail> validateLogin(String username, String password) {
+    public static List<ErrorDetail> validateLogin(String email, String password) {
         final List<ErrorDetail> errors = new ArrayList<>();
-        if (username == null || username.trim().isEmpty()) {
-            errors.add(new ErrorDetail("username", "Username is required"));
-        }
+        validateEmail(email, true, errors);
         if (password == null || password.isEmpty()) {
             errors.add(new ErrorDetail("password", "Password is required"));
         }
@@ -61,20 +60,15 @@ public final class ValidationService {
             errors.add(new ErrorDetail("body", "Request body is required"));
             return errors;
         }
-        validatePassword(request.getPassword(), false, errors);
-        validateEmail(request.getEmail(), false, errors);
+        request.getUnsupportedFields().keySet().forEach(field ->
+                errors.add(new ErrorDetail(field, "Field is not allowed for profile update")));
         validateOptionalText("firstName", request.getFirstName(), 50, errors);
         validateOptionalText("lastName", request.getLastName(), 50, errors);
         if (request.getPhone() != null && (request.getPhone().length() < 7
                 || request.getPhone().length() > 30 || !PHONE.matcher(request.getPhone()).matches())) {
             errors.add(new ErrorDetail("phone", "Phone must contain 7-30 digits and phone punctuation"));
         }
-        if (request.getPassword() != null
-                && (request.getCurrentPassword() == null || request.getCurrentPassword().isEmpty())) {
-            errors.add(new ErrorDetail("currentPassword", "Current password is required to set a new password"));
-        }
         if (request.getFirstName() == null && request.getLastName() == null
-                && request.getEmail() == null && request.getPassword() == null
                 && request.getPhone() == null) {
             errors.add(new ErrorDetail("body", "At least one profile field is required"));
         }
@@ -98,6 +92,33 @@ public final class ValidationService {
             return errors;
         }
         validatePassword(request.getNewPassword(), true, "newPassword", errors);
+        return errors;
+    }
+
+    public static List<ErrorDetail> validateAdminUserUpdate(final AdminUserUpdateRequest request) {
+        final List<ErrorDetail> errors = new ArrayList<>();
+        if (request == null) {
+            errors.add(new ErrorDetail("body", "Request body is required"));
+            return errors;
+        }
+        request.getUnsupportedFields().keySet().forEach(field ->
+                errors.add(new ErrorDetail(field, "Field is not allowed for administrator profile update")));
+        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
+            errors.add(new ErrorDetail("username", "Username is required"));
+        } else if (!USERNAME.matcher(request.getUsername()).matches()) {
+            errors.add(new ErrorDetail("username",
+                    "Username must be 3-30 characters and contain only letters, digits, dot, underscore or hyphen"));
+        }
+        validateEmail(request.getEmail(), true, errors);
+        validateOptionalText("firstName", request.getFirstName(), 50, errors);
+        validateOptionalText("lastName", request.getLastName(), 50, errors);
+        if (request.getPhone() != null && (request.getPhone().length() < 7
+                || request.getPhone().length() > 30 || !PHONE.matcher(request.getPhone()).matches())) {
+            errors.add(new ErrorDetail("phone", "Phone must contain 7-30 digits and phone punctuation"));
+        }
+        if (request.getRole() == null) {
+            errors.add(new ErrorDetail("role", "Role is required"));
+        }
         return errors;
     }
 

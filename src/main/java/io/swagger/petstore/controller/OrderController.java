@@ -41,7 +41,9 @@ public class OrderController {
         }
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
-                .entity(ORDER_DATA.findOrdersForUser(auth.getUser().getUsername()));
+                .entity(auth.getUser().getRole() == Role.ADMIN
+                        ? ORDER_DATA.findAll()
+                        : ORDER_DATA.findOrdersForUser(auth.getUser().getUsername()));
     }
 
     public ResponseContext getOrderById(final RequestContext request, final UUID orderId) {
