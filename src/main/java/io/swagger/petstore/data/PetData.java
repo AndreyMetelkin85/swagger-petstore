@@ -28,7 +28,7 @@ import java.util.UUID;
 /** PostgreSQL-backed pet repository. Nested Pet fields are stored as JSON text. */
 public class PetData {
     private static final String COLUMNS =
-            "id, category_json, name, photo_urls_json, tags_json, status, version, price";
+            "id, name, status, category_json, photo_urls_json, tags_json, price, version";
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public Pet getPetById(final UUID petId) {

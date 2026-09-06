@@ -22,11 +22,10 @@ import java.util.UUID;
 /** PostgreSQL-backed user repository for local API testing. */
 public class UserData {
     private static final String COLUMNS =
-            "id, username, first_name, last_name, email, password, phone, "
-            + "user_status, role, confirmed_at, confirmation_code_hash, "
-            + "confirmation_expires_at, reset_code_hash, reset_expires_at, "
-            + "reset_used_at, token_version, address_city, address_street, address_house, "
-            + "address_apartment, address_postal_code";
+            "id, username, first_name, last_name, email, password, role, user_status, phone, "
+            + "address_city, address_street, address_house, address_apartment, "
+            + "address_postal_code, confirmation_code_hash, confirmation_expires_at, "
+            + "reset_code_hash, reset_expires_at, reset_used_at, token_version, confirmed_at";
 
     public User findUserByName(final String username) {
         return findOne("username = ?", username);

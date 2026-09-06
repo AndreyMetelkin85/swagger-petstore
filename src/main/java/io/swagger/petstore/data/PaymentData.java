@@ -29,8 +29,8 @@ public class PaymentData {
     private static final String SUCCESS_CARD = "4242424242424242";
     private static final String DECLINED_CARD = "4000000000000002";
     private static final String INSUFFICIENT_FUNDS_CARD = "4000000000009995";
-    private static final String COLUMNS = "id, order_id, amount, currency, status, card_brand, "
-            + "card_last4, failure_code, created_at, updated_at";
+    private static final String COLUMNS = "id, order_id, status, idempotency_key, request_hash, "
+            + "amount, currency, card_brand, card_last4, failure_code, created_at, updated_at";
 
     public PaymentResult createPayment(final UUID orderId, final UUID idempotencyKey,
                                        final PaymentRequest request, final User actor,
@@ -169,7 +169,7 @@ public class PaymentData {
 
     private static ExistingPayment findByIdempotencyKey(final Connection connection, final UUID key)
             throws SQLException {
-        final String sql = "SELECT " + COLUMNS + ", request_hash FROM payments "
+        final String sql = "SELECT " + COLUMNS + " FROM payments "
                 + "WHERE idempotency_key = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setObject(1, key);
