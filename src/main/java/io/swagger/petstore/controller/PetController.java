@@ -80,17 +80,22 @@ public class PetController {
                 .entity(created);
     }
 
-    public ResponseContext updatePet(final RequestContext request, final PetUpdateRequest pet) {
+    public ResponseContext updatePet(final RequestContext request, final UUID petId,
+                                    final PetUpdateRequest pet) {
         final AuthResult auth = authService.authorize(request, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
+        }
+        if (petId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Pet id must be a valid UUID");
         }
         final List<ErrorDetail> errors = ValidationService.validatePetUpdate(pet);
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
         try {
-            final Pet updated = PET_DATA.updatePet(pet);
+            final Pet updated = PET_DATA.updatePet(petId, pet);
             return new ResponseContext()
                     .contentType(Util.getMediaType(request))
                     .entity(updated);

@@ -51,14 +51,14 @@ public class RegistrationController {
     }
 
     public ResponseContext resendConfirmation(final RequestContext request, final LoginRequest body) {
-        final String username = body == null ? null : body.getUsername();
+        final String email = body == null ? null : body.getEmail();
         final String password = body == null ? null : body.getPassword();
-        final List<ErrorDetail> errors = ValidationService.validateLogin(username, password);
+        final List<ErrorDetail> errors = ValidationService.validateLogin(email, password);
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
         try {
-            final ConfirmationLinkResponse response = authService.resendConfirmation(username, password);
+            final ConfirmationLinkResponse response = authService.resendConfirmation(email, password);
             return new ResponseContext().contentType(Util.getMediaType(request)).entity(response);
         } catch (AccountException exception) {
             return accountError(exception);

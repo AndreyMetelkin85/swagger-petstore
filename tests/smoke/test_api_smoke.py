@@ -13,6 +13,14 @@ import pytest
 
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8080/api/v3")
+KNOWN_EMAILS = {
+    "admin": "admin@example.com",
+    "user1": "test@example.com",
+}
+
+
+def to_email(login: str) -> str:
+    return KNOWN_EMAILS.get(login, login)
 
 
 @pytest.fixture(scope="session")
@@ -21,9 +29,10 @@ def client() -> httpx.Client:
         yield session
 
 
-def login(client: httpx.Client, username: str, password: str) -> str:
+def login(client: httpx.Client, email_or_demo: str, password: str) -> str:
+    email = to_email(email_or_demo) if "@" not in email_or_demo else email_or_demo
     response = client.post(
-        "/auth/login", json={"username": username, "password": password}
+        "/auth/login", json={"email": email, "password": password}
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -180,6 +189,101 @@ def test_missing_required_query_uses_endpoint_specific_error(
     assert response.json()["message"] == "Status is required"
 
 
+def test_user_me_updates_only_self_service_profile_fields(client: httpx.Client) -> None:
+    user_token = login(client, "user1", "password123")
+    profile = client.get("/user/me", headers=bearer(user_token)).json()
+    original_email = profile["email"]
+
+    for forbidden_body in (
+        {"email": "hijacked@example.test"},
+        {"password": "DoNotChange123"},
+        {"currentPassword": "password123", "password": "DoNotChange123"},
+        {"username": "changed-by-user"},
+        {"role": "ADMIN"},
+        {"userStatus": "BLOCKED"},
+    ):
+        blocked = client.put(
+            "/user/me", json=forbidden_body, headers=bearer(user_token)
+        )
+        assert_error(blocked, 422, "VALIDATION_ERROR")
+
+    first_name = f"Updated-{uuid4().hex[:8]}"
+    updated = client.put(
+        "/user/me", json={"firstName": first_name}, headers=bearer(user_token)
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["firstName"] == first_name
+    refreshed = client.get("/user/me", headers=bearer(user_token)).json()
+    assert refreshed["email"] == original_email
+
+
+def test_role_based_user_management(client: httpx.Client) -> None:
+    registration, username, email, password = register_user(client, "managed")
+    confirmed = client.get(api_path(registration["confirmationUrl"]))
+    assert confirmed.status_code == 200, confirmed.text
+    user_id = registration["user"]["id"]
+    user_token = login(client, email, password)
+    admin_token = login(client, "admin", "admin123")
+
+    listed = client.get("/users", headers=bearer(admin_token))
+    assert listed.status_code == 200, listed.text
+    assert user_id in {user["id"] for user in listed.json()}
+    fetched = client.get(f"/users/{user_id}", headers=bearer(admin_token))
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["email"] == email
+
+    update_body = {
+        "username": f"managed_{uuid4().hex[:8]}",
+        "firstName": "Managed",
+        "lastName": "User",
+        "email": f"managed-{uuid4().hex[:8]}@example.test",
+        "phone": "+1-555-0199",
+        "role": "USER",
+    }
+    forbidden = client.put(
+        f"/users/{user_id}", json=update_body, headers=bearer(user_token)
+    )
+    assert_error(forbidden, 403, "FORBIDDEN")
+
+    password_update = dict(update_body, password="AdminMustNotSetPasswords123")
+    rejected_password = client.put(
+        f"/users/{user_id}", json=password_update, headers=bearer(admin_token)
+    )
+    assert_error(rejected_password, 422, "VALIDATION_ERROR")
+
+    updated = client.put(
+        f"/users/{user_id}",
+        json=update_body,
+        headers=bearer(admin_token),
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["username"] == update_body["username"]
+    assert updated.json()["email"] == update_body["email"]
+    assert updated.json()["role"] == "USER"
+    assert "password" not in updated.json()
+
+    revoked = client.get("/user/me", headers=bearer(user_token))
+    assert_error(revoked, 401, "INVALID_TOKEN")
+
+    old_login = client.post("/auth/login", json={"email": email, "password": password})
+    assert_error(old_login, 401, "INVALID_CREDENTIALS")
+    updated_user_token = login(client, update_body["email"], password)
+
+    promoted_body = dict(update_body, role="ADMIN")
+    promoted = client.put(
+        f"/users/{user_id}", json=promoted_body, headers=bearer(admin_token)
+    )
+    assert promoted.status_code == 200, promoted.text
+    assert promoted.json()["role"] == "ADMIN"
+    assert_error(
+        client.get("/user/me", headers=bearer(updated_user_token)),
+        401,
+        "INVALID_TOKEN",
+    )
+    promoted_token = login(client, update_body["email"], password)
+    assert client.get("/users", headers=bearer(promoted_token)).status_code == 200
+
+
 def test_password_reset_validation_names_new_password_field(
     client: httpx.Client,
 ) -> None:
@@ -189,6 +293,38 @@ def test_password_reset_validation_names_new_password_field(
     )
     assert_error(response, 422, "VALIDATION_ERROR")
     assert response.json()["details"][0]["field"] == "newPassword"
+
+
+def test_password_reset_clears_five_attempt_login_lock(client: httpx.Client) -> None:
+    registration, _, email, password = register_user(client, "lock-reset")
+    confirmed = client.get(api_path(registration["confirmationUrl"]))
+    assert confirmed.status_code == 200, confirmed.text
+
+    for _ in range(4):
+        assert_error(
+            client.post(
+                "/auth/login", json={"email": email, "password": "WrongPass123"}
+            ),
+            401,
+            "INVALID_CREDENTIALS",
+        )
+    fifth = client.post(
+        "/auth/login", json={"email": email, "password": "WrongPass123"}
+    )
+    assert_error(fifth, 429, "LOGIN_RATE_LIMITED")
+    resend_while_locked = client.post(
+        "/auth/confirmation/resend", json={"email": email, "password": password}
+    )
+    assert_error(resend_while_locked, 429, "LOGIN_RATE_LIMITED")
+
+    forgot = client.post("/auth/password/forgot", json={"email": email})
+    assert forgot.status_code == 200, forgot.text
+    new_password = "UnlockedByReset123"
+    reset = client.post(
+        api_path(forgot.json()["resetUrl"]), json={"newPassword": new_password}
+    )
+    assert reset.status_code == 204, reset.text
+    login(client, email, new_password)
 
 
 def test_user_cannot_create_pet_but_admin_can(client: httpx.Client) -> None:
@@ -225,20 +361,19 @@ def test_pet_create_and_update_models_have_separate_validation(
     assert_error(invalid_status, 422, "VALIDATION_ERROR")
     assert invalid_status.json()["details"][0]["field"] == "status"
 
-    missing_id = client.put(
-        "/pet",
-        json={"name": "Missing id"},
+    invalid_pet_id = client.put(
+        "/pet/not-a-uuid",
+        json={"version": 0, "name": "Invalid id"},
         headers=bearer(admin_token),
     )
-    assert_error(missing_id, 422, "VALIDATION_ERROR")
-    assert "id" in {detail["field"] for detail in missing_id.json()["details"]}
+    assert_error(invalid_pet_id, 400, "BAD_REQUEST")
+    assert invalid_pet_id.json()["message"] == "Pet id must be a valid UUID"
 
 
 def test_pet_update_uses_optimistic_lock(client: httpx.Client) -> None:
     admin_token = login(client, "admin", "admin123")
     pet = create_pet(client, admin_token, "Versioned")
     update = {
-        "id": pet["id"],
         "version": pet["version"],
         "name": f"{pet['name']} updated",
         "category": pet.get("category"),
@@ -247,11 +382,11 @@ def test_pet_update_uses_optimistic_lock(client: httpx.Client) -> None:
         "status": pet["status"],
     }
 
-    first = client.put("/pet", json=update, headers=bearer(admin_token))
+    first = client.put(f"/pet/{pet['id']}", json=update, headers=bearer(admin_token))
     assert first.status_code == 200, first.text
     assert first.json()["version"] == pet["version"] + 1
 
-    stale = client.put("/pet", json=update, headers=bearer(admin_token))
+    stale = client.put(f"/pet/{pet['id']}", json=update, headers=bearer(admin_token))
     assert_error(stale, 409, "PET_VERSION_CONFLICT")
 
 
@@ -440,7 +575,7 @@ def test_destructive_user_and_order_operations_are_not_available(
     admin_token = login(client, "admin", "admin123")
 
     assert client.delete("/user/me", headers=bearer(user_token)).status_code == 405
-    assert client.delete("/user/user1", headers=bearer(admin_token)).status_code == 405
+    assert client.delete("/user/user1", headers=bearer(admin_token)).status_code == 404
     assert (
         client.delete(f"/store/order/{uuid4()}", headers=bearer(admin_token)).status_code
         == 405
@@ -451,13 +586,13 @@ def test_registration_confirmation_resend_and_unique_email(client: httpx.Client)
     registration, username, email, password = register_user(client, "confirm")
 
     pending_login = client.post(
-        "/auth/login", json={"username": username, "password": password}
+        "/auth/login", json={"email": email, "password": password}
     )
     assert_error(pending_login, 403, "ACCOUNT_NOT_VERIFIED")
 
     resent = client.post(
         "/auth/confirmation/resend",
-        json={"username": username, "password": password},
+        json={"email": email, "password": password},
     )
     assert resent.status_code == 200, resent.text
     new_confirmation_url = resent.json()["confirmationUrl"]
@@ -474,7 +609,7 @@ def test_registration_confirmation_resend_and_unique_email(client: httpx.Client)
 
     resend_active = client.post(
         "/auth/confirmation/resend",
-        json={"username": username, "password": password},
+        json={"email": email, "password": password},
     )
     assert_error(resend_active, 409, "ACCOUNT_ALREADY_CONFIRMED")
 
@@ -493,7 +628,7 @@ def test_password_recovery_revokes_tokens(client: httpx.Client) -> None:
     registration, username, email, password = register_user(client, "recovery")
     confirmed = client.get(api_path(registration["confirmationUrl"]))
     assert confirmed.status_code == 200, confirmed.text
-    old_token = login(client, username, password)
+    old_token = login(client, email, password)
 
     missing = client.post(
         "/auth/password/forgot", json={"email": f"missing-{uuid4()}@example.test"}
@@ -515,14 +650,14 @@ def test_password_recovery_revokes_tokens(client: httpx.Client) -> None:
     assert_error(revoked, 401, "INVALID_TOKEN")
 
     old_password = client.post(
-        "/auth/login", json={"username": username, "password": password}
+        "/auth/login", json={"email": email, "password": password}
     )
     assert_error(old_password, 401, "INVALID_CREDENTIALS")
-    login(client, username, new_password)
+    login(client, email, new_password)
 
 
 def test_admin_block_unblock_and_pending_confirmation(client: httpx.Client) -> None:
-    registration, username, _, password = register_user(client, "blocked")
+    registration, username, email, password = register_user(client, "blocked")
     user_id = registration["user"]["id"]
     admin_token = login(client, "admin", "admin123")
 
@@ -542,7 +677,7 @@ def test_admin_block_unblock_and_pending_confirmation(client: httpx.Client) -> N
     assert confirmed.json()["userStatus"] == "BLOCKED"
 
     blocked_login = client.post(
-        "/auth/login", json={"username": username, "password": password}
+        "/auth/login", json={"email": email, "password": password}
     )
     assert_error(blocked_login, 403, "ACCOUNT_BLOCKED")
 
@@ -557,7 +692,7 @@ def test_admin_block_unblock_and_pending_confirmation(client: httpx.Client) -> N
     )
     assert_error(repeated_unblock, 409, "INVALID_STATUS_TRANSITION")
 
-    user_token = login(client, username, password)
+    user_token = login(client, email, password)
     blocked_again = client.post(
         f"/admin/users/{user_id}/block", headers=bearer(admin_token)
     )
@@ -571,7 +706,7 @@ def test_admin_block_unblock_and_pending_confirmation(client: httpx.Client) -> N
     assert restored.status_code == 200, restored.text
     still_revoked = client.get("/user/me", headers=bearer(user_token))
     assert_error(still_revoked, 401, "INVALID_TOKEN")
-    login(client, username, password)
+    login(client, email, password)
 
 
 def test_account_state_transitions_are_atomic(client: httpx.Client) -> None:
@@ -609,7 +744,7 @@ def test_account_state_transitions_are_atomic(client: httpx.Client) -> None:
     winning_password = passwords[
         next(index for index, response in enumerate(resets) if response.status_code == 204)
     ]
-    login(client, username, winning_password)
+    login(client, email, winning_password)
 
     admin_token = login(client, "admin", "admin123")
     user_id = registration["user"]["id"]

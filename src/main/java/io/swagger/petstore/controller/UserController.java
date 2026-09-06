@@ -2,7 +2,7 @@ package io.swagger.petstore.controller;
 
 import io.swagger.oas.inflector.models.RequestContext;
 import io.swagger.oas.inflector.models.ResponseContext;
-import io.swagger.petstore.data.UserData;
+import io.swagger.petstore.model.AdminUserUpdateRequest;
 import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
@@ -16,10 +16,10 @@ import io.swagger.petstore.utils.Util;
 
 import javax.ws.rs.core.Response;
 import java.util.List;
+import java.util.UUID;
 
 public class UserController {
     private final AuthService authService = AuthService.getInstance();
-    private final UserData userData = authService.getUserData();
 
     public ResponseContext getCurrentUser(final RequestContext request) {
         final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
@@ -50,18 +50,56 @@ public class UserController {
         }
     }
 
-    public ResponseContext getUserByName(final RequestContext request, final String username) {
+    public ResponseContext listUsers(final RequestContext request) {
         final AuthResult auth = authService.authorize(request, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
         }
-        final User user = userData.findUserByName(username);
-        if (user == null) {
-            return Responses.error(Response.Status.NOT_FOUND, "USER_NOT_FOUND", "User was not found");
-        }
         return new ResponseContext()
                 .contentType(Util.getMediaType(request))
-                .entity(user);
+                .entity(authService.listUsers());
+    }
+
+    public ResponseContext getUserById(final RequestContext request, final UUID userId) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (userId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "User id must be a valid UUID");
+        }
+        try {
+            return new ResponseContext()
+                    .contentType(Util.getMediaType(request))
+                    .entity(authService.getUser(userId));
+        } catch (AccountException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        }
+    }
+
+    public ResponseContext updateUserById(final RequestContext request, final UUID userId,
+                                          final AdminUserUpdateRequest body) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (userId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "User id must be a valid UUID");
+        }
+        final List<ErrorDetail> errors = ValidationService.validateAdminUserUpdate(body);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        try {
+            final User updated = authService.updateUserAsAdmin(userId, body);
+            return new ResponseContext()
+                    .contentType(Util.getMediaType(request))
+                    .entity(updated);
+        } catch (AccountException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        }
     }
 
 }

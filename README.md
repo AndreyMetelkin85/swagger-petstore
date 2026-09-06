@@ -13,9 +13,10 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - добавлены подтверждение регистрации, повторная выдача ссылки и восстановление пароля;
 - учётная запись проходит состояния `PENDING`, `ACTIVE`, `BLOCKED`;
 - добавлены Bearer JWT и роли `USER`/`ADMIN`;
-- смена пароля и блокировка немедленно отзывают ранее выданные Bearer tokens;
+- сброс пароля, блокировка и административное изменение профиля немедленно отзывают ранее выданные Bearer tokens;
 - новые пароли хранятся как BCrypt, старые обновляются при успешной авторизации;
-- добавлены self-service методы `/user/me` и просмотр собственных заказов;
+- добавлены self-service методы `/user/me`, административное управление профилями и просмотр заказов с учётом роли;
+- email, username и роль меняет только администратор; пароль меняется исключительно через восстановление пароля;
 - ID новых питомцев и заказов создаются сервером, create-модели отделены от update-моделей;
 - один питомец может иметь только один активный заказ, резервирование выполняется атомарно;
 - изменения питомца защищены версией записи: устаревший `PUT` получает `409 PET_VERSION_CONFLICT`;
@@ -144,10 +145,10 @@ mvn clean package jetty:run
 
 ## Предзагруженные демонстрационные пользователи
 
-| Роль | Username | Password | Назначение |
-|---|---|---|---|
-| ADMIN | `admin` | `admin123` | pets, inventory, управление users/orders |
-| USER | `user1` | `password123` | свой профиль и свои orders |
+| Роль | Email | Username | Password | Назначение |
+|---|---|---|---|---|
+| ADMIN | `admin@example.com` | `admin` | `admin123` | pets, inventory, управление users/orders |
+| USER | `test@example.com` | `user1` | `password123` | свой профиль и свои orders |
 
 Эти пользователи создаются только при первой инициализации volume. Их исходные пароли
 автоматически заменяются BCrypt-хешами при первом успешном входе. Не используйте эти
@@ -160,7 +161,7 @@ credentials вне локальной среды.
 ```bash
 curl -sS -X POST http://localhost:8080/api/v3/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"password123"}'
+  -d '{"email":"test@example.com","password":"password123"}'
 ```
 
 Ответ:
@@ -192,7 +193,7 @@ PowerShell-пример без ручного копирования token:
 $login = Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8080/api/v3/auth/login" `
   -ContentType "application/json" `
-  -Body '{"username":"user1","password":"password123"}'
+  -Body '{"email":"test@example.com","password":"password123"}'
 $headers = @{ Authorization = "Bearer $($login.access_token)" }
 Invoke-RestMethod -Uri "http://localhost:8080/api/v3/user/me" -Headers $headers
 ```
@@ -214,7 +215,7 @@ Invoke-RestMethod -Uri "http://localhost:8080/api/v3/user/me" -Headers $headers
 
 USER/ADMIN:
 
-- `GET`, `PUT /user/me`;
+- `GET`, `PUT /user/me` (`PUT` изменяет только firstName, lastName и phone);
 - `POST /store/order`;
 - `GET /store/order`;
 - `GET /store/order/{orderId}` (USER видит только свой заказ).
@@ -222,13 +223,14 @@ USER/ADMIN:
 
 ADMIN:
 
-- `POST`, `PUT /pet`;
-- `DELETE /pet/{petId}`;
+- `POST /pet`;
+- `PUT`, `DELETE /pet/{petId}`;
 - `GET /store/inventory`;
 - `POST /store/order/{orderId}/approve`;
 - `POST /store/order/{orderId}/ship`;
 - `POST /store/order/{orderId}/deliver`;
-- `GET /user/{username}`;
+- `GET /users`;
+- `GET`, `PUT /users/{userId}`;
 - `POST /admin/users/{userId}/block`;
 - `POST /admin/users/{userId}/unblock`.
 
@@ -251,7 +253,7 @@ curl -i -X POST http://localhost:8080/api/v3/auth/register \
 ```bash
 curl -i -X POST http://localhost:8080/api/v3/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"password123"}'
+  -d '{"email":"test@example.com","password":"password123"}'
 ```
 
 Ожидается `200 OK` и `access_token`.
@@ -275,7 +277,7 @@ curl -i http://localhost:8080/api/v3/user/me
 ```bash
 USER_TOKEN=$(curl -sS -X POST http://localhost:8080/api/v3/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"password123"}' | jq -r .access_token)
+  -d '{"email":"test@example.com","password":"password123"}' | jq -r .access_token)
 
 curl -i http://localhost:8080/api/v3/user/me \
   -H "Authorization: Bearer $USER_TOKEN"
@@ -299,7 +301,7 @@ curl -i -X POST http://localhost:8080/api/v3/pet \
 ```bash
 ADMIN_TOKEN=$(curl -sS -X POST http://localhost:8080/api/v3/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}' | jq -r .access_token)
+  -d '{"email":"admin@example.com","password":"admin123"}' | jq -r .access_token)
 
 curl -i -X POST http://localhost:8080/api/v3/pet \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
@@ -308,7 +310,7 @@ curl -i -X POST http://localhost:8080/api/v3/pet \
 ```
 
 Ожидается `201 Created`; UUID питомца создаётся сервером. В ответе также приходит
-`version`. При `PUT /pet` клиент передаёт текущую версию, а успешное обновление увеличивает
+`version`. При `PUT /pet/{petId}` клиент передаёт текущую версию, а успешное обновление увеличивает
 её на единицу. Это предотвращает незаметное перезаписывание чужих параллельных изменений.
 
 ### Жизненный цикл заказа

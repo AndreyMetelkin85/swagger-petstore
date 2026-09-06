@@ -1,9 +1,11 @@
 package io.swagger.petstore.data;
 
+import io.swagger.petstore.model.AdminUserUpdateRequest;
 import io.swagger.petstore.model.AccountStatus;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
 import io.swagger.petstore.model.UserUpdateRequest;
+import org.postgresql.util.PSQLException;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -124,27 +126,93 @@ public class UserData {
         }
         final String sql = "UPDATE users SET "
                 + "first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name), "
-                + "email = COALESCE(?, email), password = COALESCE(?, password), "
-                + "phone = COALESCE(?, phone), "
-                + "token_version = token_version + CASE WHEN ? IS NULL THEN 0 ELSE 1 END "
+                + "phone = COALESCE(?, phone) "
                 + "WHERE username = ? RETURNING " + COLUMNS;
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, update.getFirstName());
             statement.setString(2, update.getLastName());
-            statement.setString(3, update.getEmail());
-            statement.setString(4, update.getPassword());
-            statement.setString(5, update.getPhone());
-            statement.setString(6, update.getPassword());
-            statement.setString(7, username);
+            statement.setString(3, update.getPhone());
+            statement.setString(4, username);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? map(result) : null;
             }
         } catch (SQLException exception) {
-            if (Database.isUniqueViolation(exception)) {
-                throw new EmailAlreadyExistsException();
-            }
             throw Database.failure("update user", exception);
+        }
+    }
+
+    public User updateUserAsAdmin(final UUID userId, final AdminUserUpdateRequest update,
+                                  final String normalizedEmail) {
+        if (userId == null || update == null) {
+            return null;
+        }
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                try (Statement lock = connection.createStatement()) {
+                    lock.execute("LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE");
+                }
+                final User current = findUserById(connection, userId);
+                if (current == null) {
+                    connection.rollback();
+                    return null;
+                }
+                if (current.getRole() == Role.ADMIN && update.getRole() != Role.ADMIN
+                        && countAdministrators(connection) <= 1) {
+                    throw new LastAdministratorException();
+                }
+                if (current.getRole() != Role.ADMIN && update.getRole() == Role.ADMIN
+                        && current.getUserStatus() != AccountStatus.ACTIVE) {
+                    throw new InvalidRoleTransitionException();
+                }
+                final boolean emailChanged = current.getEmail() == null
+                        || !current.getEmail().equalsIgnoreCase(normalizedEmail);
+                final String sql = "UPDATE users SET username = ?, first_name = ?, last_name = ?, "
+                        + "email = ?, phone = ?, role = ?, "
+                        + "confirmation_code_hash = CASE WHEN ? THEN NULL ELSE confirmation_code_hash END, "
+                        + "confirmation_expires_at = CASE WHEN ? THEN NULL ELSE confirmation_expires_at END, "
+                        + "reset_code_hash = CASE WHEN ? THEN NULL ELSE reset_code_hash END, "
+                        + "reset_expires_at = CASE WHEN ? THEN NULL ELSE reset_expires_at END, "
+                        + "reset_used_at = CASE WHEN ? THEN NULL ELSE reset_used_at END, "
+                        + "token_version = token_version + 1 WHERE id = ? RETURNING " + COLUMNS;
+                final User result;
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    statement.setString(1, update.getUsername());
+                    statement.setString(2, update.getFirstName());
+                    statement.setString(3, update.getLastName());
+                    statement.setString(4, normalizedEmail);
+                    statement.setString(5, update.getPhone());
+                    statement.setString(6, update.getRole().name());
+                    for (int index = 7; index <= 11; index++) {
+                        statement.setBoolean(index, emailChanged);
+                    }
+                    statement.setObject(12, userId);
+                    try (ResultSet rows = statement.executeQuery()) {
+                        result = rows.next() ? map(rows) : null;
+                    }
+                }
+                connection.commit();
+                return result;
+            } catch (SQLException | RuntimeException exception) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackFailure) {
+                    exception.addSuppressed(rollbackFailure);
+                }
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            if (Database.isUniqueViolation(exception)) {
+                final String constraint = uniqueConstraint(exception);
+                if ("uq_users_email_lower".equals(constraint)) {
+                    throw new EmailAlreadyExistsException();
+                }
+                if ("users_username_key".equals(constraint)) {
+                    throw new UsernameAlreadyExistsException();
+                }
+            }
+            throw Database.failure("update user as administrator", exception);
         }
     }
 
@@ -164,7 +232,7 @@ public class UserData {
 
     public User setConfirmationLink(final UUID userId, final String hash, final Date expiresAt) {
         final String sql = "UPDATE users SET confirmation_code_hash = ?, confirmation_expires_at = ? "
-                + "WHERE id = ? RETURNING " + COLUMNS;
+                + "WHERE id = ? AND confirmed_at IS NULL RETURNING " + COLUMNS;
         return updateLink(sql, userId, hash, expiresAt, "set confirmation link");
     }
 
@@ -319,6 +387,48 @@ public class UserData {
 
     public static final class EmailAlreadyExistsException extends RuntimeException {
         private static final long serialVersionUID = 1L;
+    }
+
+    public static final class UsernameAlreadyExistsException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+
+    public static final class LastAdministratorException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+
+    public static final class InvalidRoleTransitionException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+
+    private static User findUserById(final Connection connection, final UUID userId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT " + COLUMNS + " FROM users WHERE id = ? FOR UPDATE")) {
+            statement.setObject(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? map(result) : null;
+            }
+        }
+    }
+
+    private static int countAdministrators(final Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM users WHERE role = 'ADMIN'")) {
+            result.next();
+            return result.getInt(1);
+        }
+    }
+
+    private static String uniqueConstraint(final SQLException exception) {
+        SQLException current = exception;
+        while (current != null) {
+            if (current instanceof PSQLException
+                    && ((PSQLException) current).getServerErrorMessage() != null) {
+                return ((PSQLException) current).getServerErrorMessage().getConstraint();
+            }
+            current = current.getNextException();
+        }
+        return null;
     }
 
     public static User createUser(final UUID id, final String username, final String firstName,
