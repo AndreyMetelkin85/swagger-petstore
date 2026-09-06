@@ -28,7 +28,7 @@ import java.util.UUID;
 /** PostgreSQL-backed pet repository. Nested Pet fields are stored as JSON text. */
 public class PetData {
     private static final String COLUMNS =
-            "id, category_json, name, photo_urls_json, tags_json, status";
+            "id, category_json, name, photo_urls_json, tags_json, status, version";
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public Pet getPetById(final UUID petId) {
@@ -77,7 +77,7 @@ public class PetData {
         assignNestedIds(pet);
         final String sql = "INSERT INTO pets "
                 + "(category_json, name, photo_urls_json, tags_json, status) "
-                + "VALUES (?, ?, ?, ?, CAST(? AS pet_status)) RETURNING id";
+                + "VALUES (?, ?, ?, ?, CAST(? AS pet_status)) RETURNING id, version";
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, toJson(pet.getCategory()));
@@ -87,7 +87,8 @@ public class PetData {
             statement.setString(5, pet.getStatus().getValue());
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
-                pet.setId((UUID) result.getObject(1));
+                pet.setId((UUID) result.getObject("id"));
+                pet.setVersion(result.getInt("version"));
             }
             return pet;
         } catch (SQLException exception) {
@@ -99,10 +100,14 @@ public class PetData {
         try (Connection connection = Database.connect()) {
             connection.setAutoCommit(false);
             try {
-                final PetStatus persistedStatus = lockPetStatus(connection, request.getId());
-                if (persistedStatus == null) {
+                final LockedPet persisted = lockPet(connection, request.getId());
+                if (persisted == null) {
                     throw new PetException(Response.Status.NOT_FOUND, "PET_NOT_FOUND",
                             "Pet was not found");
+                }
+                if (!request.getVersion().equals(persisted.version)) {
+                    throw new PetException(Response.Status.CONFLICT, "PET_VERSION_CONFLICT",
+                            "Pet was changed by another request; reload it and retry");
                 }
                 if (request.getStatus() != null && hasActiveOrder(connection, request.getId())) {
                     throw new PetException(Response.Status.CONFLICT, "PET_HAS_ACTIVE_ORDER",
@@ -110,10 +115,10 @@ public class PetData {
                 }
                 final Pet pet = fromRequest(request, request.getId());
                 if (request.getStatus() == null) {
-                    pet.setStatus(persistedStatus);
+                    pet.setStatus(persisted.status);
                 }
                 assignNestedIds(pet);
-                updatePet(connection, pet);
+                pet.setVersion(updatePet(connection, pet, persisted.version));
                 connection.commit();
                 return pet;
             } catch (SQLException | RuntimeException exception) {
@@ -124,23 +129,6 @@ public class PetData {
                 }
                 throw exception;
             }
-        } catch (SQLException exception) {
-            throw Database.failure("update pet", exception);
-        }
-    }
-
-    public void updatePet(final Pet pet) {
-        final String sql = "UPDATE pets SET category_json = ?, name = ?, photo_urls_json = ?, "
-                + "tags_json = ?, status = CAST(? AS pet_status) WHERE id = ?";
-        try (Connection connection = Database.connect();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, toJson(pet.getCategory()));
-            statement.setString(2, pet.getName());
-            statement.setString(3, toJson(pet.getPhotoUrls()));
-            statement.setString(4, toJson(pet.getTags()));
-            statement.setString(5, pet.getStatus().getValue());
-            statement.setObject(6, pet.getId());
-            statement.executeUpdate();
         } catch (SQLException exception) {
             throw Database.failure("update pet", exception);
         }
@@ -217,7 +205,7 @@ public class PetData {
                             new TypeReference<List<String>>() { }),
                     JSON.readValue(result.getString("tags_json"),
                             new TypeReference<List<Tag>>() { }),
-                    PetStatus.fromValue(result.getString("status")));
+                    PetStatus.fromValue(result.getString("status")), result.getInt("version"));
         } catch (IOException exception) {
             throw new IllegalStateException("Cannot deserialize pet JSON fields", exception);
         }
@@ -232,7 +220,8 @@ public class PetData {
     }
 
     public static Pet createPet(final UUID id, final Category category, final String name,
-                                final List<String> urls, final List<Tag> tags, final PetStatus status) {
+                                final List<String> urls, final List<Tag> tags, final PetStatus status,
+                                final int version) {
         final Pet pet = new Pet();
         pet.setId(id);
         pet.setCategory(category);
@@ -240,6 +229,7 @@ public class PetData {
         pet.setPhotoUrls(urls);
         pet.setTags(tags);
         pet.setStatus(status);
+        pet.setVersion(version);
         return pet;
     }
 
@@ -248,16 +238,19 @@ public class PetData {
                 request.getPhotoUrls() == null ? new ArrayList<String>() : request.getPhotoUrls(),
                 request.getTags() == null ? new ArrayList<Tag>() : request.getTags(),
                 request.getStatus() == null
-                        ? PetStatus.AVAILABLE : PetStatus.fromValue(request.getStatus()));
+                        ? PetStatus.AVAILABLE : PetStatus.fromValue(request.getStatus()), 0);
     }
 
-    private static PetStatus lockPetStatus(final Connection connection, final UUID petId)
+    private static LockedPet lockPet(final Connection connection, final UUID petId)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT status FROM pets WHERE id = ? FOR UPDATE")) {
+                "SELECT status, version FROM pets WHERE id = ? FOR UPDATE")) {
             statement.setObject(1, petId);
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? PetStatus.fromValue(result.getString(1)) : null;
+                return result.next()
+                        ? new LockedPet(PetStatus.fromValue(result.getString("status")),
+                                result.getInt("version"))
+                        : null;
             }
         }
     }
@@ -274,9 +267,11 @@ public class PetData {
         }
     }
 
-    private static void updatePet(final Connection connection, final Pet pet) throws SQLException {
+    private static int updatePet(final Connection connection, final Pet pet, final int expectedVersion)
+            throws SQLException {
         final String sql = "UPDATE pets SET category_json = ?, name = ?, photo_urls_json = ?, "
-                + "tags_json = ?, status = CAST(? AS pet_status) WHERE id = ?";
+                + "tags_json = ?, status = CAST(? AS pet_status), version = version + 1 "
+                + "WHERE id = ? AND version = ? RETURNING version";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, toJson(pet.getCategory()));
             statement.setString(2, pet.getName());
@@ -284,7 +279,24 @@ public class PetData {
             statement.setString(4, toJson(pet.getTags()));
             statement.setString(5, pet.getStatus().getValue());
             statement.setObject(6, pet.getId());
-            statement.executeUpdate();
+            statement.setInt(7, expectedVersion);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new PetException(Response.Status.CONFLICT, "PET_VERSION_CONFLICT",
+                            "Pet was changed by another request; reload it and retry");
+                }
+                return result.getInt(1);
+            }
+        }
+    }
+
+    private static final class LockedPet {
+        private final PetStatus status;
+        private final int version;
+
+        private LockedPet(final PetStatus status, final int version) {
+            this.status = status;
+            this.version = version;
         }
     }
 

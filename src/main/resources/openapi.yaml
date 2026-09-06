@@ -310,7 +310,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Запрос восстановления пароля
-      description: Создаёт ссылку сброса пароля для пользователя с указанным email.
+      description: Создаёт запрос на сброс пароля для пользователя с указанным email.
       operationId: forgotPassword
       x-swagger-router-controller: AuthenticationController
       security: []
@@ -322,7 +322,7 @@ paths:
               $ref: '#/components/schemas/PasswordForgotRequest'
       responses:
         '200':
-          description: Создана одноразовая ссылка, действующая 30 минут.
+          description: Запрос создан и действует 30 минут.
           content:
             application/json:
               schema:
@@ -665,6 +665,7 @@ paths:
               $ref: '#/components/schemas/PetUpdateRequest'
             example:
               id: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+              version: 0
               name: Dog 1 Updated
               category:
                 id: 0e446653-3b7b-4ad1-81d3-b0a71af26f31
@@ -720,13 +721,15 @@ paths:
                 petNotFound:
                   value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
         '409':
-          description: Статус питомца управляется активным заказом.
+          description: Запись изменилась либо статус питомца управляется активным заказом.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 petHasActiveOrder:
                   value: {status: 409, error: PET_HAS_ACTIVE_ORDER, message: Pet status is managed by its active order, details: []}
+                versionConflict:
+                  value: {status: 409, error: PET_VERSION_CONFLICT, message: Pet was changed by another request; reload it and retry, details: []}
         '422':
           description: Данные питомца не прошли проверку.
           content:
@@ -1248,66 +1251,6 @@ paths:
               examples:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
-    delete:
-      tags: [Orders]
-      summary: Удаление заказа
-      description: Удаляет заказ по идентификатору.
-      operationId: deleteOrder
-      x-swagger-router-controller: OrderController
-      security:
-        - bearerAuth: []
-      responses:
-        '204':
-          description: Заказ удалён; тело ответа отсутствует.
-        '400':
-          description: orderId не является корректным UUID.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                invalidOrderId:
-                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
-        '401':
-          description: Bearer token отсутствует или недействителен.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                missingToken:
-                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
-                invalidToken:
-                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
-                expiredToken:
-                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
-        '403':
-          description: Операция недоступна для текущей учётной записи.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                roleForbidden:
-                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
-                accountNotVerified:
-                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
-                accountBlocked:
-                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
-        '404':
-          description: Заказ с указанным UUID не найден.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                orderNotFound:
-                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
-        '500':
-          description: Не удалось удалить заказ.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                internalError:
-                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
-
   /store/order/{orderId}/approve:
     parameters:
       - $ref: '#/components/parameters/OrderId'
@@ -1686,7 +1629,7 @@ paths:
                 malformedJson:
                   value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
-          description: Bearer token отсутствует или недействителен.
+          description: Bearer token либо текущий пароль отсутствует или недействителен.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -1697,6 +1640,8 @@ paths:
                   value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
                 expiredToken:
                   value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+                invalidCurrentPassword:
+                  value: {status: 401, error: CURRENT_PASSWORD_INVALID, message: Current password is incorrect, details: []}
         '403':
           description: Учётная запись не подтверждена или заблокирована.
           content:
@@ -1736,48 +1681,6 @@ paths:
               examples:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
-    delete:
-      tags: [Users]
-      summary: Удаление профиля
-      description: Удаляет учётную запись текущего пользователя.
-      operationId: deleteCurrentUser
-      x-swagger-router-controller: UserController
-      security:
-        - bearerAuth: []
-      responses:
-        '204':
-          description: Текущая учётная запись удалена; тело ответа отсутствует.
-        '401':
-          description: Bearer token отсутствует или недействителен.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                missingToken:
-                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
-                invalidToken:
-                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
-                expiredToken:
-                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
-        '403':
-          description: Учётная запись не подтверждена или заблокирована.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                accountNotVerified:
-                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
-                accountBlocked:
-                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
-        '500':
-          description: Не удалось удалить профиль.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                internalError:
-                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
-
   /user/{username}:
     parameters:
       - $ref: '#/components/parameters/Username'
@@ -1844,66 +1747,6 @@ paths:
               examples:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
-    delete:
-      tags: [Users]
-      summary: Удаление пользователя
-      description: Удаляет пользователя по имени.
-      operationId: deleteUser
-      x-swagger-router-controller: UserController
-      security:
-        - bearerAuth: []
-      responses:
-        '204':
-          description: Пользователь удалён; тело ответа отсутствует.
-        '400':
-          description: username имеет недопустимый формат.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                invalidUsername:
-                  value: {status: 400, error: BAD_REQUEST, message: Username has an invalid format, details: []}
-        '401':
-          description: Bearer token отсутствует или недействителен.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                missingToken:
-                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
-                invalidToken:
-                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
-                expiredToken:
-                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
-        '403':
-          description: Операция недоступна для текущей учётной записи.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                roleForbidden:
-                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
-                accountNotVerified:
-                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
-                accountBlocked:
-                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
-        '404':
-          description: Пользователь не найден.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                userNotFound:
-                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
-        '500':
-          description: Не удалось удалить пользователя.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                internalError:
-                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
-
   /admin/users/{userId}/block:
     parameters:
       - $ref: '#/components/parameters/UserId'
@@ -2231,11 +2074,13 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.PasswordResetLinkResponse
       type: object
       additionalProperties: false
-      required: [resetUrl, expiresAt]
+      required: [expiresAt]
       properties:
         resetUrl:
           type: string
           format: uri
+          nullable: true
+          description: Доступна только при PETSTORE_EXPOSE_TEST_LINKS=true в изолированном учебном окружении.
         expiresAt:
           type: string
           format: date-time
@@ -2364,6 +2209,15 @@ components:
           maxLength: 100
           writeOnly: true
           nullable: true
+          description: Новый пароль. Для изменения необходимо передать currentPassword.
+        currentPassword:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 100
+          writeOnly: true
+          nullable: true
+          description: Текущий пароль, обязательный при изменении password.
         phone:
           type: string
           minLength: 7
@@ -2408,7 +2262,7 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.Pet
       type: object
       additionalProperties: false
-      required: [id, name, photoUrls, tags, status]
+      required: [id, name, photoUrls, tags, status, version]
       properties:
         id:
           type: string
@@ -2447,6 +2301,13 @@ components:
           description: Текущий статус питомца в каталоге.
           enum: [available, pending, reserved, sold]
           example: available
+        version:
+          type: integer
+          format: int32
+          minimum: 0
+          readOnly: true
+          description: Версия записи для защиты от одновременной перезаписи.
+          example: 0
 
     PetCreateRequest:
       x-swagger-router-model: io.swagger.petstore.model.PetCreateRequest
@@ -2490,12 +2351,18 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.PetUpdateRequest
       type: object
       additionalProperties: false
-      required: [id, name]
+      required: [id, name, version]
       properties:
         id:
           type: string
           format: uuid
           example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+        version:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Версия из последнего ответа GET или POST.
+          example: 0
         name:
           type: string
           minLength: 1

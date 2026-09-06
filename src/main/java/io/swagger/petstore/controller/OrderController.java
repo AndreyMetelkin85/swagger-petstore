@@ -103,21 +103,6 @@ public class OrderController {
         return transition(request, orderId, OrderStatus.CANCELLED, false);
     }
 
-    public ResponseContext deleteOrder(final RequestContext request, final UUID orderId) {
-        final AuthResult auth = authService.authorize(request, Role.ADMIN);
-        if (!auth.isAuthorized()) {
-            return auth.toResponse();
-        }
-        if (orderId == null) {
-            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
-                    "Order id must be a valid UUID");
-        }
-        if (!ORDER_DATA.deleteOrderById(orderId)) {
-            return Responses.error(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND", "Order was not found");
-        }
-        return new ResponseContext().status(Response.Status.NO_CONTENT);
-    }
-
     private ResponseContext transition(final RequestContext request, final UUID orderId,
                                        final OrderStatus target, final boolean adminOnly) {
         final AuthResult auth = adminOnly

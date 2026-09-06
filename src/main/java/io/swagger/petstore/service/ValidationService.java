@@ -14,6 +14,7 @@ import io.swagger.petstore.model.UserUpdateRequest;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -22,6 +23,7 @@ public final class ValidationService {
     private static final Pattern USERNAME = Pattern.compile("^[A-Za-z0-9_.-]{3,30}$");
     private static final Pattern TAG_NAME = Pattern.compile("^[A-Za-z0-9_.-]{1,30}$");
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final Pattern PHONE = Pattern.compile("^\\+?[0-9 ()-]+$");
     private ValidationService() {
     }
 
@@ -61,6 +63,21 @@ public final class ValidationService {
         }
         validatePassword(request.getPassword(), false, errors);
         validateEmail(request.getEmail(), false, errors);
+        validateOptionalText("firstName", request.getFirstName(), 50, errors);
+        validateOptionalText("lastName", request.getLastName(), 50, errors);
+        if (request.getPhone() != null && (request.getPhone().length() < 7
+                || request.getPhone().length() > 30 || !PHONE.matcher(request.getPhone()).matches())) {
+            errors.add(new ErrorDetail("phone", "Phone must contain 7-30 digits and phone punctuation"));
+        }
+        if (request.getPassword() != null
+                && (request.getCurrentPassword() == null || request.getCurrentPassword().isEmpty())) {
+            errors.add(new ErrorDetail("currentPassword", "Current password is required to set a new password"));
+        }
+        if (request.getFirstName() == null && request.getLastName() == null
+                && request.getEmail() == null && request.getPassword() == null
+                && request.getPhone() == null) {
+            errors.add(new ErrorDetail("body", "At least one profile field is required"));
+        }
         return errors;
     }
 
@@ -89,7 +106,13 @@ public final class ValidationService {
     }
 
     public static List<ErrorDetail> validatePetUpdate(final PetUpdateRequest pet) {
-        return validatePet(pet, true, pet == null ? null : pet.getId());
+        final List<ErrorDetail> errors = validatePet(pet, true, pet == null ? null : pet.getId());
+        if (pet != null && pet.getVersion() == null) {
+            errors.add(new ErrorDetail("version", "Pet version is required"));
+        } else if (pet != null && pet.getVersion() < 0) {
+            errors.add(new ErrorDetail("version", "Pet version must not be negative"));
+        }
+        return errors;
     }
 
     private static List<ErrorDetail> validatePet(final PetCreateRequest pet, final boolean idRequired,
@@ -215,6 +238,8 @@ public final class ValidationService {
             }
         } else if (password.length() < 6 || password.length() > 100) {
             errors.add(new ErrorDetail(field, "Password must be between 6 and 100 characters"));
+        } else if (password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            errors.add(new ErrorDetail(field, "Password must not exceed 72 UTF-8 bytes"));
         }
     }
 
@@ -225,6 +250,18 @@ public final class ValidationService {
             }
         } else if (email.length() > 254 || !EMAIL.matcher(email).matches()) {
             errors.add(new ErrorDetail("email", "Email must be a valid email address"));
+        }
+    }
+
+    private static void validateOptionalText(final String field, final String value, final int maxLength,
+                                             final List<ErrorDetail> errors) {
+        if (value == null) {
+            return;
+        }
+        if (value.trim().isEmpty()) {
+            errors.add(new ErrorDetail(field, field + " must not be blank"));
+        } else if (value.length() > maxLength) {
+            errors.add(new ErrorDetail(field, field + " must not exceed " + maxLength + " characters"));
         }
     }
 }

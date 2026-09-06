@@ -17,8 +17,6 @@ COPY --from=build /build/target/*.war ./server.war
 COPY --from=build /build/src/main/resources/openapi.yaml ./openapi.yaml
 COPY --from=build /build/inflector.yaml ./inflector.yaml
 
-ENV PETSTORE_TOKEN_SECRET=local-petstore-secret-change-me
-
 EXPOSE 8080
 USER petstore
 

@@ -9,6 +9,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,16 +18,19 @@ import java.util.Map;
 public class TokenService {
     public static final long DEFAULT_TTL_SECONDS = 3600L;
     private static final String ALGORITHM = "HmacSHA256";
-    private static final String DEFAULT_SECRET = "local-petstore-secret-change-me";
+    private static final int MIN_SECRET_BYTES = 32;
+    private static final String INSECURE_LEGACY_SECRET = "local-petstore-secret-change-me";
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final byte[] PROCESS_SECRET = loadProcessSecret();
 
     private final byte[] secret;
 
     public TokenService() {
-        final String configured = System.getenv("PETSTORE_TOKEN_SECRET");
-        final String value = configured == null || configured.trim().isEmpty()
-                ? DEFAULT_SECRET : configured;
-        this.secret = value.getBytes(StandardCharsets.UTF_8);
+        this.secret = PROCESS_SECRET.clone();
+    }
+
+    TokenService(final String configuredSecret) {
+        this.secret = validatedSecret(configuredSecret);
     }
 
     public String issueToken(final User user) {
@@ -95,6 +99,30 @@ public class TokenService {
 
     private String encode(final byte[] value) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
+    }
+
+    private static byte[] loadProcessSecret() {
+        final String configured = System.getenv("PETSTORE_TOKEN_SECRET");
+        if (configured == null || configured.trim().isEmpty()) {
+            final byte[] generated = new byte[MIN_SECRET_BYTES];
+            new SecureRandom().nextBytes(generated);
+            return generated;
+        }
+        return validatedSecret(configured);
+    }
+
+    private static byte[] validatedSecret(final String value) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("JWT secret must not be empty");
+        }
+        if (INSECURE_LEGACY_SECRET.equals(value)) {
+            throw new IllegalArgumentException("The legacy JWT secret is not allowed");
+        }
+        final byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalArgumentException("JWT secret must contain at least 32 UTF-8 bytes");
+        }
+        return bytes;
     }
 
     public static final class TokenClaims {

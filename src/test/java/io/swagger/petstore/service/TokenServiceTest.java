@@ -56,4 +56,24 @@ public class TokenServiceTest {
             assertEquals("TOKEN_EXPIRED", expected.getCode());
         }
     }
+
+    @Test
+    public void legacySecretIsRejected() {
+        try {
+            new TokenService("local-petstore-secret-change-me");
+            fail("Known legacy secret must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertEquals("The legacy JWT secret is not allowed", expected.getMessage());
+        }
+    }
+
+    @Test
+    public void shortSecretIsRejected() {
+        try {
+            new TokenService("too-short");
+            fail("Short secret must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertEquals("JWT secret must contain at least 32 UTF-8 bytes", expected.getMessage());
+        }
+    }
 }

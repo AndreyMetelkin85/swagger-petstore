@@ -32,18 +32,26 @@ public class AuthService {
     private final CredentialService credentialService;
     private final Clock clock;
     private final String publicBaseUrl;
+    private final boolean exposeTestLinks;
 
     public AuthService() {
-        this(new UserData(), new TokenService(), new CredentialService(), Clock.systemUTC(), configuredBaseUrl());
+        this(new UserData(), new TokenService(), new CredentialService(), Clock.systemUTC(), configuredBaseUrl(),
+                configuredTestLinkExposure());
     }
 
     AuthService(UserData userData, TokenService tokenService, CredentialService credentialService,
                 Clock clock, String publicBaseUrl) {
+        this(userData, tokenService, credentialService, clock, publicBaseUrl, true);
+    }
+
+    AuthService(UserData userData, TokenService tokenService, CredentialService credentialService,
+                Clock clock, String publicBaseUrl, boolean exposeTestLinks) {
         this.userData = userData;
         this.tokenService = tokenService;
         this.credentialService = credentialService;
         this.clock = clock;
         this.publicBaseUrl = trimTrailingSlash(publicBaseUrl);
+        this.exposeTestLinks = exposeTestLinks;
     }
 
     public static AuthService getInstance() {
@@ -114,7 +122,8 @@ public class AuthService {
         final String code = credentialService.newOneTimeCode();
         final Instant expiresAt = clock.instant().plus(PASSWORD_RESET_TTL_MINUTES, ChronoUnit.MINUTES);
         userData.setResetLink(user.getId(), credentialService.hashOneTimeCode(code), Date.from(expiresAt));
-        return new PasswordResetLinkResponse(resetUrl(user.getId(), code), expiresAt.toString());
+        final String resetUrl = exposeTestLinks ? resetUrl(user.getId(), code) : null;
+        return new PasswordResetLinkResponse(resetUrl, expiresAt.toString());
     }
 
     public void resetPassword(final UUID userId, final String code, final String newPassword) {
@@ -160,9 +169,22 @@ public class AuthService {
             }
         }
         if (update.getPassword() != null) {
+            if (!credentialService.passwordMatches(update.getCurrentPassword(), currentUser.getPassword())) {
+                throw new AccountException(Response.Status.UNAUTHORIZED, "CURRENT_PASSWORD_INVALID",
+                        "Current password is incorrect");
+            }
             update.setPassword(credentialService.hashPassword(update.getPassword()));
         }
-        return userData.updateUser(currentUser.getUsername(), update);
+        try {
+            final User updated = userData.updateUser(currentUser.getUsername(), update);
+            if (updated == null) {
+                throw new AccountException(Response.Status.NOT_FOUND, "USER_NOT_FOUND", "User was not found");
+            }
+            return updated;
+        } catch (UserData.EmailAlreadyExistsException exception) {
+            throw new AccountException(Response.Status.CONFLICT, "EMAIL_ALREADY_EXISTS",
+                    "A user with this email already exists");
+        }
     }
 
     public User blockUser(final User actor, final UUID userId) {
@@ -307,6 +329,10 @@ public class AuthService {
     private static String configuredBaseUrl() {
         final String configured = System.getenv("PETSTORE_PUBLIC_BASE_URL");
         return configured == null || configured.trim().isEmpty() ? DEFAULT_PUBLIC_BASE_URL : configured.trim();
+    }
+
+    private static boolean configuredTestLinkExposure() {
+        return Boolean.parseBoolean(System.getenv("PETSTORE_EXPOSE_TEST_LINKS"));
     }
 
     private static String trimTrailingSlash(String value) {

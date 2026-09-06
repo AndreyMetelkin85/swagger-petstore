@@ -5,6 +5,7 @@ public class UserUpdateRequest {
     private String lastName;
     private String email;
     private String password;
+    private String currentPassword;
     private String phone;
 
     public String getFirstName() {
@@ -37,6 +38,14 @@ public class UserUpdateRequest {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getCurrentPassword() {
+        return currentPassword;
+    }
+
+    public void setCurrentPassword(final String currentPassword) {
+        this.currentPassword = currentPassword;
     }
 
     public String getPhone() {

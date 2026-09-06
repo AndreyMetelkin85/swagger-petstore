@@ -1,4 +1,9 @@
 import os
+import base64
+import hashlib
+import hmac
+import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID, uuid4
 from urllib.parse import urlsplit
@@ -47,6 +52,7 @@ def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> d
     assert response.status_code == 201, response.text
     pet = response.json()
     UUID(pet["id"])
+    assert pet["version"] == 0
     UUID(pet["category"]["id"])
     UUID(pet["tags"][0]["id"])
     return pet
@@ -89,6 +95,23 @@ def assert_error(response: httpx.Response, status: int, error: str) -> None:
     assert isinstance(body["details"], list)
 
 
+def legacy_admin_token() -> str:
+    def encode(value: dict) -> str:
+        raw = json.dumps(value, separators=(",", ":")).encode()
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    now = int(time.time())
+    header = encode({"alg": "HS256", "typ": "JWT"})
+    payload = encode(
+        {"sub": "admin", "role": "ADMIN", "ver": 0, "iat": now, "exp": now + 300}
+    )
+    unsigned = f"{header}.{payload}"
+    signature = hmac.new(
+        b"local-petstore-secret-change-me", unsigned.encode(), hashlib.sha256
+    ).digest()
+    return f"{unsigned}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode()}"
+
+
 def test_public_health(client: httpx.Client) -> None:
     response = client.get("/health")
     assert response.status_code == 200
@@ -103,6 +126,13 @@ def test_private_endpoint_without_token_returns_401(client: httpx.Client) -> Non
 
 def test_invalid_token_returns_401(client: httpx.Client) -> None:
     response = client.get("/user/me", headers=bearer("not-a-valid-token"))
+    assert_error(response, 401, "INVALID_TOKEN")
+
+
+def test_legacy_public_secret_cannot_forge_admin_token(client: httpx.Client) -> None:
+    response = client.get(
+        "/store/inventory", headers=bearer(legacy_admin_token())
+    )
     assert_error(response, 401, "INVALID_TOKEN")
 
 
@@ -202,6 +232,27 @@ def test_pet_create_and_update_models_have_separate_validation(
     )
     assert_error(missing_id, 422, "VALIDATION_ERROR")
     assert "id" in {detail["field"] for detail in missing_id.json()["details"]}
+
+
+def test_pet_update_uses_optimistic_lock(client: httpx.Client) -> None:
+    admin_token = login(client, "admin", "admin123")
+    pet = create_pet(client, admin_token, "Versioned")
+    update = {
+        "id": pet["id"],
+        "version": pet["version"],
+        "name": f"{pet['name']} updated",
+        "category": pet.get("category"),
+        "photoUrls": pet.get("photoUrls", []),
+        "tags": pet.get("tags", []),
+        "status": pet["status"],
+    }
+
+    first = client.put("/pet", json=update, headers=bearer(admin_token))
+    assert first.status_code == 200, first.text
+    assert first.json()["version"] == pet["version"] + 1
+
+    stale = client.put("/pet", json=update, headers=bearer(admin_token))
+    assert_error(stale, 409, "PET_VERSION_CONFLICT")
 
 
 def test_user_can_create_and_read_own_order(client: httpx.Client) -> None:
@@ -380,6 +431,20 @@ def test_order_rejects_server_managed_fields(client: httpx.Client) -> None:
         "status",
         "complete",
     }
+
+
+def test_destructive_user_and_order_operations_are_not_available(
+    client: httpx.Client,
+) -> None:
+    user_token = login(client, "user1", "password123")
+    admin_token = login(client, "admin", "admin123")
+
+    assert client.delete("/user/me", headers=bearer(user_token)).status_code == 405
+    assert client.delete("/user/user1", headers=bearer(admin_token)).status_code == 405
+    assert (
+        client.delete(f"/store/order/{uuid4()}", headers=bearer(admin_token)).status_code
+        == 405
+    )
 
 
 def test_registration_confirmation_resend_and_unique_email(client: httpx.Client) -> None:

@@ -174,39 +174,6 @@ public class OrderData {
         }
     }
 
-    public boolean deleteOrderById(final UUID orderId) {
-        if (orderId == null) {
-            return false;
-        }
-        try (Connection connection = Database.connect()) {
-            connection.setAutoCommit(false);
-            try {
-                final LockedOrder current = lockOrder(connection, orderId);
-                if (current == null) {
-                    connection.rollback();
-                    return false;
-                }
-                try (PreparedStatement statement = connection.prepareStatement(
-                        "DELETE FROM store_orders WHERE id = ?")) {
-                    statement.setObject(1, orderId);
-                    statement.executeUpdate();
-                }
-                if (current.order.getStatus().isActive()) {
-                    if (!hasActiveOrder(connection, current.order.getPetId())) {
-                        updatePetStatus(connection, current.order.getPetId(), PetStatus.AVAILABLE);
-                    }
-                }
-                connection.commit();
-                return true;
-            } catch (SQLException | RuntimeException exception) {
-                rollback(connection, exception);
-                throw exception;
-            }
-        } catch (SQLException exception) {
-            throw Database.failure("delete order", exception);
-        }
-    }
-
     private boolean exists(final String sql, final UUID petId) {
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -294,7 +261,7 @@ public class OrderData {
     private static void updatePetStatus(final Connection connection, final UUID petId,
                                         final PetStatus status) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-                "UPDATE pets SET status = CAST(? AS pet_status) WHERE id = ?")) {
+                "UPDATE pets SET status = CAST(? AS pet_status), version = version + 1 WHERE id = ?")) {
             statement.setString(1, status.getValue());
             statement.setObject(2, petId);
             statement.executeUpdate();

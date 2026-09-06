@@ -33,6 +33,7 @@ public class Pet {
     private List<String> photoUrls = new ArrayList<>();
     private List<Tag> tags = new ArrayList<>();
     private PetStatus status;
+    private int version;
 
     @XmlElement(name = "id")
     public UUID getId() {
@@ -89,5 +90,14 @@ public class Pet {
 
     public void setStatus(final PetStatus status) {
         this.status = status;
+    }
+
+    @XmlElement(name = "version")
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(final int version) {
+        this.version = version;
     }
 }
