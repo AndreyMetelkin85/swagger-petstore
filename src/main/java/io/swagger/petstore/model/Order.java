@@ -29,7 +29,7 @@ public class Order {
   private UUID petId;
   private Integer quantity;
   private Date shipDate;
-  private String status;
+  private OrderStatus status;
   private Boolean complete;
 
   @XmlElement(name = "id")
@@ -69,12 +69,12 @@ public class Order {
   }
 
   @XmlElement(name = "status")
-  @Schema(description = "Order Status", allowableValues = "placed, approved, delivered")
-  public String getStatus() {
+  @Schema(description = "Order Status", allowableValues = "placed,approved,shipped,delivered,cancelled")
+  public OrderStatus getStatus() {
     return status;
   }
 
-  public void setStatus(String status) {
+  public void setStatus(OrderStatus status) {
     this.status = status;
   }
 

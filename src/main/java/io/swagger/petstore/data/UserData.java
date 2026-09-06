@@ -83,17 +83,6 @@ public class UserData {
         return insertUser(user, confirmationHash, confirmationExpiresAt);
     }
 
-    public boolean addUserIfAbsent(final User user) {
-        if (user != null && user.getUserStatus() == null) {
-            user.setUserStatus(AccountStatus.ACTIVE);
-        }
-        if (user != null && user.getUserStatus() == AccountStatus.ACTIVE
-                && user.getConfirmedAt() == null) {
-            user.setConfirmedAt(new Date());
-        }
-        return insertUser(user, null, null);
-    }
-
     private boolean insertUser(final User user, final String confirmationHash,
                                final Date confirmationExpiresAt) {
         if (user == null || user.getUsername() == null) {
@@ -129,39 +118,6 @@ public class UserData {
         }
     }
 
-    /** Legacy upsert behaviour retained for methods hidden from the current OpenAPI. */
-    public void addUser(final User user) {
-        if (user == null || user.getUsername() == null) {
-            return;
-        }
-        if (user.getRole() == null) {
-            user.setRole(Role.USER);
-        }
-        if (user.getUserStatus() == null) {
-            user.setUserStatus(AccountStatus.ACTIVE);
-        }
-        if (findUserByName(user.getUsername()) == null) {
-            addUserIfAbsent(user);
-            return;
-        }
-        final String sql = "UPDATE users SET first_name = ?, last_name = ?, email = ?, password = ?, "
-                + "phone = ?, user_status = CAST(? AS account_status), role = ? WHERE username = ?";
-        try (Connection connection = Database.connect();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, user.getFirstName());
-            statement.setString(2, user.getLastName());
-            statement.setString(3, user.getEmail());
-            statement.setString(4, user.getPassword());
-            statement.setString(5, user.getPhone());
-            statement.setString(6, user.getUserStatus().name());
-            statement.setString(7, user.getRole().name());
-            statement.setString(8, user.getUsername());
-            statement.executeUpdate();
-        } catch (SQLException exception) {
-            throw Database.failure("upsert user", exception);
-        }
-    }
-
     public User updateUser(final String username, final UserUpdateRequest update) {
         if (username == null || update == null) {
             return null;
@@ -185,6 +141,9 @@ public class UserData {
                 return result.next() ? map(result) : null;
             }
         } catch (SQLException exception) {
+            if (Database.isUniqueViolation(exception)) {
+                throw new EmailAlreadyExistsException();
+            }
             throw Database.failure("update user", exception);
         }
     }
@@ -286,19 +245,6 @@ public class UserData {
         }
     }
 
-    public void deleteUser(final String username) {
-        if (username == null) {
-            return;
-        }
-        try (Connection connection = Database.connect();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE username = ?")) {
-            statement.setString(1, username);
-            statement.executeUpdate();
-        } catch (SQLException exception) {
-            throw Database.failure("delete user", exception);
-        }
-    }
-
     public List<User> findAll() {
         final List<User> users = new ArrayList<>();
         try (Connection connection = Database.connect();
@@ -369,6 +315,10 @@ public class UserData {
         } else {
             statement.setTimestamp(index, new Timestamp(value.getTime()));
         }
+    }
+
+    public static final class EmailAlreadyExistsException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
     }
 
     public static User createUser(final UUID id, final String username, final String firstName,

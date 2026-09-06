@@ -1,7 +1,12 @@
 package io.swagger.petstore.data;
 
 import io.swagger.petstore.model.Order;
+import io.swagger.petstore.model.OrderCreateRequest;
+import io.swagger.petstore.model.OrderStatus;
+import io.swagger.petstore.model.PetStatus;
+import io.swagger.petstore.service.OrderException;
 
+import javax.ws.rs.core.Response;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** PostgreSQL-backed order repository with persisted ownership metadata. */
+/** PostgreSQL-backed order repository with transactional pet reservation. */
 public class OrderData {
     private static final String COLUMNS =
             "id, pet_id, quantity, ship_date, status, complete, owner_username";
@@ -86,75 +91,201 @@ public class OrderData {
         }
     }
 
-    public Order addOrder(final Order order, final String owner) {
-        if (order.getShipDate() == null) {
-            order.setShipDate(new Date());
+    public boolean hasOrdersForPet(final UUID petId) {
+        return exists("SELECT 1 FROM store_orders WHERE pet_id = ?", petId);
+    }
+
+    public boolean hasActiveOrderForPet(final UUID petId) {
+        return exists("SELECT 1 FROM store_orders WHERE pet_id = ? "
+                + "AND status IN ('placed', 'approved', 'shipped')", petId);
+    }
+
+    /** Locks the pet row so concurrent attempts cannot reserve the same animal. */
+    public Order placeOrder(final OrderCreateRequest request, final String owner) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                final PetStatus petStatus = lockPetStatus(connection, request.getPetId());
+                if (petStatus == null) {
+                    throw new OrderException(Response.Status.NOT_FOUND, "PET_NOT_FOUND",
+                            "Pet was not found");
+                }
+                if (petStatus != PetStatus.AVAILABLE || hasActiveOrder(connection, request.getPetId())) {
+                    throw new OrderException(Response.Status.CONFLICT, "PET_NOT_AVAILABLE",
+                            "Pet is not available for ordering");
+                }
+
+                final Order order = insertOrder(connection, request, owner);
+                updatePetStatus(connection, request.getPetId(), PetStatus.RESERVED);
+                connection.commit();
+                return order;
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("place order", exception);
         }
-        if (order.getStatus() == null) {
-            order.setStatus("placed");
+    }
+
+    /** Applies a validated state transition and updates the linked pet in one transaction. */
+    public Order transition(final UUID orderId, final OrderStatus target,
+                            final String actorUsername, final boolean admin) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                final LockedOrder current = lockOrder(connection, orderId);
+                if (current == null) {
+                    throw new OrderException(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND",
+                            "Order was not found");
+                }
+                if (!admin && !current.owner.equals(actorUsername)) {
+                    throw new OrderException(Response.Status.FORBIDDEN, "ORDER_ACCESS_DENIED",
+                            "Users may modify only their own orders");
+                }
+                if (!current.order.getStatus().canTransitionTo(target)) {
+                    throw new OrderException(Response.Status.CONFLICT, "INVALID_STATUS_TRANSITION",
+                            "Order cannot transition from " + current.order.getStatus().getValue()
+                                    + " to " + target.getValue());
+                }
+
+                final Date shipDate = target == OrderStatus.SHIPPED
+                        ? new Date() : current.order.getShipDate();
+                updateOrderStatus(connection, orderId, target, shipDate);
+                if (target == OrderStatus.CANCELLED) {
+                    if (!hasActiveOrder(connection, current.order.getPetId())) {
+                        updatePetStatus(connection, current.order.getPetId(), PetStatus.AVAILABLE);
+                    }
+                } else if (target == OrderStatus.DELIVERED) {
+                    updatePetStatus(connection, current.order.getPetId(), PetStatus.SOLD);
+                }
+                connection.commit();
+
+                current.order.setStatus(target);
+                current.order.setComplete(target.isComplete());
+                current.order.setShipDate(shipDate);
+                return current.order;
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("transition order", exception);
         }
-        if (order.isComplete() == null) {
-            order.setComplete(false);
-        }
-        final boolean suppliedId = order.getId() != null;
-        final String sql = suppliedId
-                ? "INSERT INTO store_orders (id, pet_id, quantity, ship_date, status, complete, owner_username) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET "
-                + "pet_id = EXCLUDED.pet_id, quantity = EXCLUDED.quantity, ship_date = EXCLUDED.ship_date, "
-                + "status = EXCLUDED.status, complete = EXCLUDED.complete, "
-                + "owner_username = EXCLUDED.owner_username RETURNING id"
-                : "INSERT INTO store_orders (pet_id, quantity, ship_date, status, complete, owner_username) "
-                + "VALUES (?, ?, ?, ?, ?, ?) RETURNING id";
+    }
+
+    private boolean exists(final String sql, final UUID petId) {
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            int index = 1;
-            if (suppliedId) {
-                statement.setObject(index++, order.getId());
+            statement.setObject(1, petId);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
             }
-            statement.setObject(index++, order.getPetId());
-            statement.setInt(index++, order.getQuantity());
-            statement.setTimestamp(index++, new Timestamp(order.getShipDate().getTime()));
-            statement.setString(index++, order.getStatus());
-            statement.setBoolean(index++, order.isComplete());
-            statement.setString(index, owner);
+        } catch (SQLException exception) {
+            throw Database.failure("check pet orders", exception);
+        }
+    }
+
+    private static PetStatus lockPetStatus(final Connection connection, final UUID petId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT status FROM pets WHERE id = ? FOR UPDATE")) {
+            statement.setObject(1, petId);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? PetStatus.fromValue(result.getString(1)) : null;
+            }
+        }
+    }
+
+    private static boolean hasActiveOrder(final Connection connection, final UUID petId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT 1 FROM store_orders WHERE pet_id = ? "
+                        + "AND status IN ('placed', 'approved', 'shipped') LIMIT 1")) {
+            statement.setObject(1, petId);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        }
+    }
+
+    private static Order insertOrder(final Connection connection, final OrderCreateRequest request,
+                                     final String owner) throws SQLException {
+        final String sql = "INSERT INTO store_orders "
+                + "(pet_id, quantity, ship_date, status, complete, owner_username) "
+                + "VALUES (?, ?, NULL, CAST(? AS order_status), ?, ?) RETURNING id";
+        final Order order = createOrder(null, request.getPetId(), request.getQuantity(), null,
+                OrderStatus.PLACED, false);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, request.getPetId());
+            statement.setInt(2, request.getQuantity());
+            statement.setString(3, OrderStatus.PLACED.getValue());
+            statement.setBoolean(4, false);
+            statement.setString(5, owner);
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
                 order.setId((UUID) result.getObject(1));
             }
             return order;
-        } catch (SQLException exception) {
-            throw Database.failure("create order", exception);
         }
     }
 
-    public void addOrder(final Order order) {
-        addOrder(order, "admin");
-    }
-
-    public boolean deleteOrderById(final UUID orderId) {
-        if (orderId == null) {
-            return false;
-        }
-        try (Connection connection = Database.connect();
-             PreparedStatement statement = connection.prepareStatement(
-                     "DELETE FROM store_orders WHERE id = ?")) {
+    private static LockedOrder lockOrder(final Connection connection, final UUID orderId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT " + COLUMNS + " FROM store_orders WHERE id = ? FOR UPDATE")) {
             statement.setObject(1, orderId);
-            return statement.executeUpdate() > 0;
-        } catch (SQLException exception) {
-            throw Database.failure("delete order", exception);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+                return new LockedOrder(map(result), result.getString("owner_username"));
+            }
+        }
+    }
+
+    private static void updateOrderStatus(final Connection connection, final UUID orderId,
+                                          final OrderStatus target, final Date shipDate)
+            throws SQLException {
+        final String sql = "UPDATE store_orders SET status = CAST(? AS order_status), complete = ?, "
+                + "ship_date = ? WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, target.getValue());
+            statement.setBoolean(2, target.isComplete());
+            statement.setTimestamp(3, shipDate == null ? null : new Timestamp(shipDate.getTime()));
+            statement.setObject(4, orderId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void updatePetStatus(final Connection connection, final UUID petId,
+                                        final PetStatus status) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE pets SET status = CAST(? AS pet_status), version = version + 1 WHERE id = ?")) {
+            statement.setString(1, status.getValue());
+            statement.setObject(2, petId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void rollback(final Connection connection, final Exception cause) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackFailure) {
+            cause.addSuppressed(rollbackFailure);
         }
     }
 
     private static Order map(final ResultSet result) throws SQLException {
         final Timestamp shipDate = result.getTimestamp("ship_date");
         return createOrder((UUID) result.getObject("id"), (UUID) result.getObject("pet_id"),
-                result.getInt("quantity"),
-                shipDate == null ? null : new Date(shipDate.getTime()),
-                result.getString("status"), result.getBoolean("complete"));
+                result.getInt("quantity"), shipDate == null ? null : new Date(shipDate.getTime()),
+                OrderStatus.fromValue(result.getString("status")), result.getBoolean("complete"));
     }
 
     public static Order createOrder(final UUID id, final UUID petId, final int quantity,
-                                    final Date shipDate, final String status, final boolean complete) {
+                                    final Date shipDate, final OrderStatus status,
+                                    final boolean complete) {
         final Order order = new Order();
         order.setId(id);
         order.setPetId(petId);
@@ -163,5 +294,15 @@ public class OrderData {
         order.setShipDate(shipDate);
         order.setStatus(status);
         return order;
+    }
+
+    private static final class LockedOrder {
+        private final Order order;
+        private final String owner;
+
+        private LockedOrder(final Order order, final String owner) {
+            this.order = order;
+            this.owner = owner;
+        }
     }
 }

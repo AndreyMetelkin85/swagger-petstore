@@ -57,7 +57,14 @@ public class OpenApiContractTest {
         assertNotNull(openAPI.getPaths().get("/admin/users/{userId}/block"));
         assertNotNull(openAPI.getPaths().get("/admin/users/{userId}/unblock"));
         assertNotNull(openAPI.getPaths().get("/user/me"));
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/approve"));
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/ship"));
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/deliver"));
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/cancel"));
         assertNotNull(openAPI.getComponents().getSecuritySchemes().get("bearerAuth"));
+        assertNull(openAPI.getPaths().get("/user/me").getDelete());
+        assertNull(openAPI.getPaths().get("/user/{username}").getDelete());
+        assertNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
         assertEquals(Collections.emptyList(), openAPI.getPaths().get("/health").getGet().getSecurity());
 
         assertEquals("RegistrationController", extension(openAPI.getPaths().get("/auth/register").getPost()));
@@ -82,6 +89,10 @@ public class OpenApiContractTest {
         assertEquals("uuid", property(openAPI, "Pet", "id").getFormat());
         assertEquals("uuid", property(openAPI, "Order", "id").getFormat());
         assertEquals("uuid", property(openAPI, "Order", "petId").getFormat());
+        assertEquals(Arrays.asList("available", "pending", "reserved", "sold"),
+                property(openAPI, "Pet", "status").getEnum());
+        assertEquals(Arrays.asList("placed", "approved", "shipped", "delivered", "cancelled"),
+                property(openAPI, "Order", "status").getEnum());
         assertEquals(Arrays.asList("PENDING", "ACTIVE", "BLOCKED"),
                 openAPI.getComponents().getSchemas().get("AccountStatus").getEnum());
         assertNotNull(property(openAPI, "User", "userStatus").get$ref());
@@ -98,6 +109,19 @@ public class OpenApiContractTest {
         assertFalse(login.getProperties().containsKey("expiresIn"));
         assertTrue(parseContract().source.contains("Authorization: Bearer <access_token>"));
         assertFalse(parseContract().source.contains("Bearer access token"));
+
+        final Schema petCreate = openAPI.getComponents().getSchemas().get("PetCreateRequest");
+        final Schema petUpdate = openAPI.getComponents().getSchemas().get("PetUpdateRequest");
+        final Schema orderCreate = openAPI.getComponents().getSchemas().get("OrderCreateRequest");
+        assertEquals(Collections.singletonList("name"), petCreate.getRequired());
+        assertFalse(petCreate.getProperties().containsKey("id"));
+        assertTrue(petUpdate.getRequired().containsAll(Arrays.asList("id", "name", "version")));
+        assertTrue(openAPI.getComponents().getSchemas().get("Pet").getRequired().contains("version"));
+        assertEquals(new HashSet<>(Arrays.asList("petId", "quantity")),
+                new HashSet<>(orderCreate.getRequired()));
+        assertFalse(orderCreate.getProperties().containsKey("id"));
+        assertFalse(orderCreate.getProperties().containsKey("status"));
+        assertFalse(orderCreate.getProperties().containsKey("complete"));
     }
 
     @Test
@@ -141,6 +165,18 @@ public class OpenApiContractTest {
         assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getGet(), "404", "PET_NOT_FOUND");
         assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}").getGet(), "404",
                 "ORDER_NOT_FOUND");
+        assertErrorCodes(openAPI.getPaths().get("/store/order").getPost(), "404",
+                "PET_NOT_FOUND");
+        assertErrorCodes(openAPI.getPaths().get("/store/order").getPost(), "409",
+                "PET_NOT_AVAILABLE");
+        assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}/approve").getPost(), "409",
+                "INVALID_STATUS_TRANSITION");
+        assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}/cancel").getPost(), "403",
+                "ORDER_ACCESS_DENIED", "ACCOUNT_NOT_VERIFIED", "ACCOUNT_BLOCKED");
+        assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getDelete(), "409",
+                "PET_HAS_ORDERS");
+        assertErrorCodes(openAPI.getPaths().get("/pet").getPut(), "409",
+                "PET_HAS_ACTIVE_ORDER", "PET_VERSION_CONFLICT");
         assertErrorCodes(openAPI.getPaths().get("/user/{username}").getGet(), "404",
                 "USER_NOT_FOUND");
         assertErrorCodes(openAPI.getPaths().get("/admin/users/{userId}/block").getPost(), "403",
@@ -187,7 +223,8 @@ public class OpenApiContractTest {
                         assertTrue(location, value.get("details") instanceof java.util.List);
                         final String code = String.valueOf(value.get("error"));
                         if (code.startsWith("PET_")) {
-                            assertTrue(location, path.getKey().startsWith("/pet"));
+                            assertTrue(location, path.getKey().startsWith("/pet")
+                                    || path.getKey().equals("/store/order"));
                         }
                         if (code.startsWith("ORDER_")) {
                             assertTrue(location, path.getKey().startsWith("/store/order"));
@@ -224,6 +261,9 @@ public class OpenApiContractTest {
         assertNull(openAPI.getPaths().get("/pet/{petId}/uploadImage"));
         assertNull(openAPI.getPaths().get("/pet/{petId}").getPost());
         assertNull(openAPI.getPaths().get("/user/{username}").getPut());
+        assertNull(openAPI.getPaths().get("/user/me").getDelete());
+        assertNull(openAPI.getPaths().get("/user/{username}").getDelete());
+        assertNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
     }
 
     private static String extension(Operation operation) {

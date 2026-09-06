@@ -5,8 +5,8 @@ swaggerUrl: openapi.yaml
 exceptionMappers:
 - io.swagger.petstore.utils.PetstoreExceptionMapper
 
-# Enforce OpenAPI request/response schemas at runtime so the documented
-# constraints are useful to API tests as well as to Swagger UI.
+# Business validation is handled by endpoint controllers so each operation
+# keeps its documented error codes and field-level details.
 validatePayloads: false
 
 exposedSpecOptions:

@@ -9,8 +9,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-petstore}
       POSTGRES_USER: ${POSTGRES_USER:-petstore}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-petstore}
-    ports:
-      - "5432:5432"
     volumes:
       - petstore-db-data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -28,13 +26,14 @@ services:
     image: swagger-petstore:local
     container_name: swagger-petstore
     environment:
-      PETSTORE_TOKEN_SECRET: ${PETSTORE_TOKEN_SECRET:-local-petstore-secret-change-me}
+      PETSTORE_TOKEN_SECRET: ${PETSTORE_TOKEN_SECRET:-}
       PETSTORE_PUBLIC_BASE_URL: ${PETSTORE_PUBLIC_BASE_URL:-http://localhost:8080/api/v3}
+      PETSTORE_EXPOSE_TEST_LINKS: ${PETSTORE_EXPOSE_TEST_LINKS:-false}
       PETSTORE_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-petstore}
       PETSTORE_DB_USER: ${POSTGRES_USER:-petstore}
       PETSTORE_DB_PASSWORD: ${POSTGRES_PASSWORD:-petstore}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,4 +47,4 @@ services:
 
 volumes:
   petstore-db-data:
-    name: swagger-petstore-db-data
+    name: ${PETSTORE_DB_VOLUME:-swagger-petstore-db-data}

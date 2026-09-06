@@ -32,7 +32,8 @@ public class Pet {
     private String name;
     private List<String> photoUrls = new ArrayList<>();
     private List<Tag> tags = new ArrayList<>();
-    private String status;
+    private PetStatus status;
+    private int version;
 
     @XmlElement(name = "id")
     public UUID getId() {
@@ -82,12 +83,21 @@ public class Pet {
     }
 
     @XmlElement(name = "status")
-    @Schema(description = "pet status in the store", allowableValues = "available,pending,sold")
-    public String getStatus() {
+    @Schema(description = "pet status in the store", allowableValues = "available,pending,reserved,sold")
+    public PetStatus getStatus() {
         return status;
     }
 
-    public void setStatus(final String status) {
+    public void setStatus(final PetStatus status) {
         this.status = status;
+    }
+
+    @XmlElement(name = "version")
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(final int version) {
+        this.version = version;
     }
 }
