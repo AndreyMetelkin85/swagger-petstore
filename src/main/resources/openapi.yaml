@@ -26,6 +26,8 @@ tags:
     description: Операции с питомцами.
   - name: Orders
     description: Операции с заказами.
+  - name: Payments
+    description: Оплата заказов тестовыми картами.
   - name: Users
     description: Операции с пользователями.
   - name: Administration
@@ -97,6 +99,12 @@ paths:
                   firstName: Alex
                   lastName: Smith
                   phone: '+1-555-0110'
+                  address:
+                    city: Москва
+                    street: Федорова
+                    house: '30'
+                    apartment: '12'
+                    postalCode: '123456'
               invalid:
                 summary: Данные, приводящие к ответу 422
                 value:
@@ -118,6 +126,12 @@ paths:
                   firstName: Alex
                   lastName: Smith
                   phone: '+1-555-0110'
+                  address:
+                    city: Москва
+                    street: Федорова
+                    house: '30'
+                    apartment: '12'
+                    postalCode: '123456'
                   userStatus: PENDING
                   role: USER
                 confirmationUrl: http://localhost:8080/api/v3/auth/confirm/b9ec3485-6954-4faf-813b-1c9d25ea750c?code=example
@@ -609,6 +623,7 @@ paths:
                     - id: f0c2308f-19f2-4689-a395-7926a5825cd0
                       name: friendly
                   status: available
+                  price: 15000.00
       responses:
         '201':
           description: Питомец создан.
@@ -810,6 +825,7 @@ paths:
               photoUrls: []
               tags: []
               status: pending
+              price: 17500.00
       responses:
         '200':
           description: Данные питомца обновлены.
@@ -1169,11 +1185,18 @@ paths:
                 petNotFound:
                   value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
         '409':
-          description: Питомец уже зарезервирован, продан или недоступен для заказа.
+          description: Профиль доставки не заполнен либо питомец недоступен для заказа.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
+                profileIncomplete:
+                  value:
+                    status: 409
+                    error: PROFILE_INCOMPLETE
+                    message: Complete the delivery profile before placing an order
+                    details:
+                      - {field: address.postalCode, message: Field is required to place an order}
                 petNotAvailable:
                   value: {status: 409, error: PET_NOT_AVAILABLE, message: Pet is not available for ordering, details: []}
         '422':
@@ -1336,6 +1359,8 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
+                orderNotPaid:
+                  value: {status: 409, error: ORDER_NOT_PAID, message: The order must be paid before approval, details: []}
                 invalidStatusTransition:
                   value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to approved, details: []}
         '500':
@@ -1569,6 +1594,272 @@ paths:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
 
+  /store/order/{orderId}/payments:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Payments]
+      summary: Оплата заказа
+      description: Выполняет оплату заказа одной из документированных тестовых карт.
+      operationId: createPayment
+      x-swagger-router-controller: PaymentController
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        description: Реквизиты тестовой карты. Полный номер и CVV после обработки не сохраняются.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+            example:
+              cardNumber: '4242424242424242'
+              expiryMonth: 12
+              expiryYear: 2099
+              cvv: '123'
+              cardholderName: IVAN IVANOV
+      responses:
+        '201':
+          description: Оплата успешно выполнена.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        '200':
+          description: Возвращён результат ранее выполненного запроса с тем же Idempotency-Key.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        '400':
+          description: Идентификатор, заголовок или тело запроса имеют неверный формат.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+                missingIdempotencyKey:
+                  value: {status: 400, error: IDEMPOTENCY_KEY_REQUIRED, message: Idempotency-Key header is required, details: []}
+                invalidIdempotencyKey:
+                  value: {status: 400, error: INVALID_IDEMPOTENCY_KEY, message: Idempotency-Key must be a valid UUID, details: []}
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+                expiredToken:
+                  value: {status: 401, error: TOKEN_EXPIRED, message: Access token has expired, details: []}
+        '402':
+          description: Тестовая карта отклонила оплату.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                paymentDeclined:
+                  value: {status: 402, error: PAYMENT_DECLINED, message: The test card payment was declined, details: []}
+                insufficientFunds:
+                  value: {status: 402, error: INSUFFICIENT_FUNDS, message: The test card has insufficient funds, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only payments for their own orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Повторно использован ключ либо текущее состояние заказа не допускает оплату.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                idempotencyKeyReused:
+                  value: {status: 409, error: IDEMPOTENCY_KEY_REUSED, message: Idempotency-Key was already used with another request, details: []}
+                orderAlreadyPaid:
+                  value: {status: 409, error: ORDER_ALREADY_PAID, message: The order already has a successful payment, details: []}
+                orderNotPayable:
+                  value: {status: 409, error: ORDER_NOT_PAYABLE, message: The order cannot be paid in its current state, details: []}
+                paymentStateConflict:
+                  value: {status: 409, error: PAYMENT_STATE_CONFLICT, message: The order payment state changed concurrently, details: []}
+        '410':
+          description: Период оплаты заказа истёк.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                paymentExpired:
+                  value: {status: 410, error: ORDER_PAYMENT_EXPIRED, message: The payment period for this order has expired, details: []}
+        '422':
+          description: Реквизиты тестовой карты не прошли проверку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidCard:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: cardNumber, message: Card number must be valid and pass the Luhn check}
+        '500':
+          description: Не удалось выполнить оплату.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    get:
+      tags: [Payments]
+      summary: Получение платежей заказа
+      description: Возвращает историю попыток оплаты указанного заказа.
+      operationId: listPayments
+      x-swagger-router-controller: PaymentController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: История платежей; массив может быть пустым.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Payment'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only payments for their own orders, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '500':
+          description: Не удалось получить историю платежей.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/payments/{paymentId}:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+      - $ref: '#/components/parameters/PaymentId'
+    get:
+      tags: [Payments]
+      summary: Получение платежа
+      description: Возвращает отдельную попытку оплаты указанного заказа.
+      operationId: getPayment
+      x-swagger-router-controller: PaymentController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Платёж найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        '400':
+          description: orderId или paymentId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+                invalidPaymentId:
+                  value: {status: 400, error: BAD_REQUEST, message: Payment id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Заказ принадлежит другому пользователю либо учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may access only payments for their own orders, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ или платёж не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+                paymentNotFound:
+                  value: {status: 404, error: PAYMENT_NOT_FOUND, message: Payment was not found, details: []}
+        '500':
+          description: Не удалось получить платёж.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /user/me:
     get:
       tags: [Users]
@@ -1633,6 +1924,12 @@ paths:
             example:
               firstName: Updated
               lastName: Petlover
+              address:
+                city: Москва
+                street: Федорова
+                house: '30'
+                apartment: '12'
+                postalCode: '123456'
       responses:
         '200':
           description: Обновлённый профиль текущего пользователя.
@@ -1828,6 +2125,12 @@ paths:
               email: qa.user@example.com
               phone: '+1-555-0110'
               role: USER
+              address:
+                city: Москва
+                street: Федорова
+                house: '30'
+                apartment: '12'
+                postalCode: '123456'
       responses:
         '200':
           description: Пользователь обновлён; ранее выданные ему Bearer tokens отозваны.
@@ -2095,6 +2398,24 @@ components:
         type: string
         format: uuid
       example: e3a724f6-580d-4d87-91c4-8f17e2027629
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      description: UUID платежа.
+      schema:
+        type: string
+        format: uuid
+      example: 51c0bd19-792f-4144-a775-87a660c53e37
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID для безопасного повтора запроса оплаты.
+      schema:
+        type: string
+        format: uuid
+      example: 12d39e45-5737-4c0a-8878-232793eddb62
     UserId:
       name: userId
       in: path
@@ -2126,6 +2447,40 @@ components:
       description: Состояние учётной записи пользователя.
       enum: [PENDING, ACTIVE, BLOCKED]
       example: ACTIVE
+
+    Address:
+      x-swagger-router-model: io.swagger.petstore.model.Address
+      type: object
+      additionalProperties: false
+      required: [city, street, house, postalCode]
+      properties:
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Москва
+        street:
+          type: string
+          minLength: 1
+          maxLength: 150
+          example: Федорова
+        house:
+          type: string
+          minLength: 1
+          maxLength: 30
+          example: '30'
+        apartment:
+          type: string
+          minLength: 1
+          maxLength: 30
+          nullable: true
+          example: '12'
+        postalCode:
+          type: string
+          pattern: '^[0-9]{6}$'
+          minLength: 6
+          maxLength: 6
+          example: '123456'
 
     RegisterRequest:
       x-swagger-router-model: io.swagger.petstore.model.RegisterRequest
@@ -2171,6 +2526,10 @@ components:
           pattern: '^\+?[0-9 ()-]+$'
           nullable: true
           example: '+1-555-0110'
+        address:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Address'
 
     RegistrationResponse:
       x-swagger-router-model: io.swagger.petstore.model.RegistrationResponse
@@ -2288,7 +2647,7 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.User
       type: object
       additionalProperties: false
-      required: [id, username, email, userStatus, role]
+      required: [id, username, email, userStatus, role, address]
       properties:
         id:
           type: string
@@ -2325,6 +2684,10 @@ components:
           pattern: '^\+?[0-9 ()-]+$'
           nullable: true
           example: '+1-555-0101'
+        address:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Address'
         userStatus:
           $ref: '#/components/schemas/AccountStatus'
         role:
@@ -2352,12 +2715,17 @@ components:
           maxLength: 30
           pattern: '^\+?[0-9 ()-]+$'
           nullable: true
+        address:
+          nullable: true
+          description: Передайте null, чтобы удалить текущий адрес целиком.
+          allOf:
+            - $ref: '#/components/schemas/Address'
 
     AdminUserUpdateRequest:
       x-swagger-router-model: io.swagger.petstore.model.AdminUserUpdateRequest
       type: object
       additionalProperties: false
-      required: [username, firstName, lastName, email, phone, role]
+      required: [username, firstName, lastName, email, phone, role, address]
       properties:
         username:
           type: string
@@ -2387,6 +2755,10 @@ components:
           nullable: true
         role:
           $ref: '#/components/schemas/Role'
+        address:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Address'
 
     Category:
       x-swagger-router-model: io.swagger.petstore.model.Category
@@ -2425,7 +2797,7 @@ components:
       x-swagger-router-model: io.swagger.petstore.model.Pet
       type: object
       additionalProperties: false
-      required: [id, name, photoUrls, tags, status, version]
+      required: [id, name, photoUrls, tags, status, version, price, currency]
       properties:
         id:
           type: string
@@ -2471,12 +2843,23 @@ components:
           readOnly: true
           description: Версия записи для защиты от одновременной перезаписи.
           example: 0
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 15000.00
+        currency:
+          type: string
+          readOnly: true
+          enum: [RUB]
+          example: RUB
 
     PetCreateRequest:
       x-swagger-router-model: io.swagger.petstore.model.PetCreateRequest
       type: object
       additionalProperties: false
-      required: [name]
+      required: [name, price]
       properties:
         name:
           type: string
@@ -2509,12 +2892,18 @@ components:
           enum: [available, pending, sold]
           default: available
           example: available
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 15000.00
 
     PetUpdateRequest:
       x-swagger-router-model: io.swagger.petstore.model.PetUpdateRequest
       type: object
       additionalProperties: false
-      required: [name, version]
+      required: [name, version, price]
       properties:
         version:
           type: integer
@@ -2552,6 +2941,12 @@ components:
           description: Новый статус питомца. Статус reserved назначается только заказом.
           enum: [available, pending, sold]
           example: pending
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 17500.00
 
     OrderCreateRequest:
       x-swagger-router-model: io.swagger.petstore.model.OrderCreateRequest
@@ -2570,11 +2965,36 @@ components:
           maximum: 1
           example: 1
 
+    DeliveryDetails:
+      x-swagger-router-model: io.swagger.petstore.model.DeliveryDetails
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, phone, address]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Иван
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Иванов
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          example: '+7 999 123-45-67'
+        address:
+          $ref: '#/components/schemas/Address'
+
     Order:
       x-swagger-router-model: io.swagger.petstore.model.Order
       type: object
       additionalProperties: false
-      required: [id, petId, quantity, status, complete]
+      required: [id, petId, userId, quantity, createdAt, unitPrice, totalAmount, currency,
+                 deliveryDetails, paymentStatus, paymentExpiresAt, status, complete]
       properties:
         id:
           type: string
@@ -2585,6 +3005,11 @@ components:
           type: string
           format: uuid
           example: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620
+        userId:
+          type: string
+          format: uuid
+          readOnly: true
+          example: b9ec3485-6954-4faf-813b-1c9d25ea750c
         quantity:
           type: integer
           format: int32
@@ -2596,13 +3021,139 @@ components:
           format: date-time
           nullable: true
           example: '2026-09-06T12:00:00Z'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+          example: '2026-09-06T11:00:00Z'
+        unitPrice:
+          type: number
+          format: decimal
+          minimum: 0.01
+          readOnly: true
+          example: 15000.00
+        totalAmount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          readOnly: true
+          example: 15000.00
+        currency:
+          type: string
+          readOnly: true
+          enum: [RUB]
+          example: RUB
+        deliveryDetails:
+          nullable: true
+          readOnly: true
+          allOf:
+            - $ref: '#/components/schemas/DeliveryDetails'
+        paymentStatus:
+          type: string
+          readOnly: true
+          enum: [NOT_REQUIRED, UNPAID, PAID, REFUNDED, EXPIRED]
+          example: UNPAID
+        paymentExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          example: '2026-09-06T11:15:00Z'
         status:
           type: string
-          enum: [placed, approved, shipped, delivered, cancelled]
+          enum: [placed, approved, shipped, delivered, cancelled, expired]
           example: placed
         complete:
           type: boolean
           example: false
+
+    PaymentRequest:
+      x-swagger-router-model: io.swagger.petstore.model.PaymentRequest
+      type: object
+      additionalProperties: false
+      required: [cardNumber, expiryMonth, expiryYear, cvv, cardholderName]
+      properties:
+        cardNumber:
+          type: string
+          pattern: '^[0-9]{13,19}$'
+          writeOnly: true
+          example: '4242424242424242'
+        expiryMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 12
+        expiryYear:
+          type: integer
+          minimum: 2026
+          maximum: 2200
+          example: 2099
+        cvv:
+          type: string
+          pattern: '^[0-9]{3,4}$'
+          writeOnly: true
+          example: '123'
+        cardholderName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: IVAN IVANOV
+
+    Payment:
+      x-swagger-router-model: io.swagger.petstore.model.Payment
+      type: object
+      additionalProperties: false
+      required: [id, orderId, amount, currency, status, cardBrand, cardLast4, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: 51c0bd19-792f-4144-a775-87a660c53e37
+        orderId:
+          type: string
+          format: uuid
+          readOnly: true
+          example: e3a724f6-580d-4d87-91c4-8f17e2027629
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          readOnly: true
+          example: 15000.00
+        currency:
+          type: string
+          readOnly: true
+          enum: [RUB]
+          example: RUB
+        status:
+          type: string
+          readOnly: true
+          enum: [SUCCEEDED, DECLINED, REFUNDED]
+          example: SUCCEEDED
+        cardBrand:
+          type: string
+          readOnly: true
+          example: VISA
+        cardLast4:
+          type: string
+          pattern: '^[0-9]{4}$'
+          readOnly: true
+          example: '4242'
+        failureCode:
+          type: string
+          nullable: true
+          readOnly: true
+          enum: [PAYMENT_DECLINED, INSUFFICIENT_FUNDS]
+          example: PAYMENT_DECLINED
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
 
     HealthResponse:
       x-swagger-router-model: io.swagger.petstore.model.HealthResponse

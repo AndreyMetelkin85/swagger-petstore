@@ -1,17 +1,20 @@
 package io.swagger.petstore.service;
 
 import io.swagger.petstore.model.AdminUserUpdateRequest;
+import io.swagger.petstore.model.Address;
 import io.swagger.petstore.model.Category;
 import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.OrderCreateRequest;
 import io.swagger.petstore.model.PasswordForgotRequest;
 import io.swagger.petstore.model.PasswordResetRequest;
+import io.swagger.petstore.model.PaymentRequest;
 import io.swagger.petstore.model.PetCreateRequest;
 import io.swagger.petstore.model.PetStatus;
 import io.swagger.petstore.model.PetUpdateRequest;
 import io.swagger.petstore.model.RegisterRequest;
 import io.swagger.petstore.model.Tag;
 import io.swagger.petstore.model.UserUpdateRequest;
+import io.swagger.petstore.model.User;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -19,12 +22,19 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.math.BigDecimal;
+import java.time.YearMonth;
 
 public final class ValidationService {
     private static final Pattern USERNAME = Pattern.compile("^[A-Za-z0-9_.-]{3,30}$");
     private static final Pattern TAG_NAME = Pattern.compile("^[A-Za-z0-9_.-]{1,30}$");
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern PHONE = Pattern.compile("^\\+?[0-9 ()-]+$");
+    private static final Pattern POSTAL_CODE = Pattern.compile("^[0-9]{6}$");
+    private static final Pattern CARD_NUMBER = Pattern.compile("^[0-9]{13,19}$");
+    private static final Pattern CVV = Pattern.compile("^[0-9]{3,4}$");
+    private static final java.util.Set<String> TEST_CARDS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "4242424242424242", "4000000000000002", "4000000000009995"));
     private ValidationService() {
     }
 
@@ -42,6 +52,10 @@ public final class ValidationService {
         }
         validatePassword(request.getPassword(), true, errors);
         validateEmail(request.getEmail(), true, errors);
+        validateOptionalText("firstName", request.getFirstName(), 50, errors);
+        validateOptionalText("lastName", request.getLastName(), 50, errors);
+        validatePhone(request.getPhone(), errors);
+        validateAddress(request.getAddress(), "address", errors);
         return errors;
     }
 
@@ -64,12 +78,12 @@ public final class ValidationService {
                 errors.add(new ErrorDetail(field, "Field is not allowed for profile update")));
         validateOptionalText("firstName", request.getFirstName(), 50, errors);
         validateOptionalText("lastName", request.getLastName(), 50, errors);
-        if (request.getPhone() != null && (request.getPhone().length() < 7
-                || request.getPhone().length() > 30 || !PHONE.matcher(request.getPhone()).matches())) {
-            errors.add(new ErrorDetail("phone", "Phone must contain 7-30 digits and phone punctuation"));
+        validatePhone(request.getPhone(), errors);
+        if (request.isAddressPresent()) {
+            validateAddress(request.getAddress(), "address", errors);
         }
         if (request.getFirstName() == null && request.getLastName() == null
-                && request.getPhone() == null) {
+                && request.getPhone() == null && !request.isAddressPresent()) {
             errors.add(new ErrorDetail("body", "At least one profile field is required"));
         }
         return errors;
@@ -112,9 +126,10 @@ public final class ValidationService {
         validateEmail(request.getEmail(), true, errors);
         validateOptionalText("firstName", request.getFirstName(), 50, errors);
         validateOptionalText("lastName", request.getLastName(), 50, errors);
-        if (request.getPhone() != null && (request.getPhone().length() < 7
-                || request.getPhone().length() > 30 || !PHONE.matcher(request.getPhone()).matches())) {
-            errors.add(new ErrorDetail("phone", "Phone must contain 7-30 digits and phone punctuation"));
+        validatePhone(request.getPhone(), errors);
+        validateAddress(request.getAddress(), "address", errors);
+        if (!request.isAddressPresent()) {
+            errors.add(new ErrorDetail("address", "Address field is required and may be null"));
         }
         if (request.getRole() == null) {
             errors.add(new ErrorDetail("role", "Role is required"));
@@ -151,6 +166,7 @@ public final class ValidationService {
         } else if (pet.getName().length() > 100) {
             errors.add(new ErrorDetail("name", "Pet name must not exceed 100 characters"));
         }
+        validatePrice(pet.getPrice(), errors);
         if (PetStatus.RESERVED.getValue().equals(pet.getStatus())) {
             errors.add(new ErrorDetail("status", "Reserved status is managed by the order lifecycle"));
         } else if (pet.getStatus() != null
@@ -185,6 +201,68 @@ public final class ValidationService {
         }
         for (String field : order.getUnsupportedFields().keySet()) {
             errors.add(new ErrorDetail(field, "Field is managed by the server"));
+        }
+        return errors;
+    }
+
+    public static List<ErrorDetail> missingOrderProfileFields(final User user) {
+        final List<ErrorDetail> errors = new ArrayList<>();
+        if (user == null) {
+            errors.add(new ErrorDetail("user", "User profile is required"));
+            return errors;
+        }
+        requireText("firstName", user.getFirstName(), errors);
+        requireText("lastName", user.getLastName(), errors);
+        requireText("phone", user.getPhone(), errors);
+        final Address address = user.getAddress();
+        if (address == null) {
+            errors.add(new ErrorDetail("address.city", "Field is required to place an order"));
+            errors.add(new ErrorDetail("address.street", "Field is required to place an order"));
+            errors.add(new ErrorDetail("address.house", "Field is required to place an order"));
+            errors.add(new ErrorDetail("address.postalCode", "Field is required to place an order"));
+        } else {
+            requireText("address.city", address.getCity(), errors);
+            requireText("address.street", address.getStreet(), errors);
+            requireText("address.house", address.getHouse(), errors);
+            requireText("address.postalCode", address.getPostalCode(), errors);
+        }
+        return errors;
+    }
+
+    public static List<ErrorDetail> validatePayment(final PaymentRequest payment) {
+        final List<ErrorDetail> errors = new ArrayList<>();
+        if (payment == null) {
+            errors.add(new ErrorDetail("body", "Request body is required"));
+            return errors;
+        }
+        final String cardNumber = payment.getCardNumber();
+        if (cardNumber == null || !CARD_NUMBER.matcher(cardNumber).matches() || !passesLuhn(cardNumber)) {
+            errors.add(new ErrorDetail("cardNumber", "Card number must be valid and pass the Luhn check"));
+        } else if (!TEST_CARDS.contains(cardNumber)) {
+            errors.add(new ErrorDetail("cardNumber", "Use one of the documented test card numbers"));
+        }
+        if (payment.getExpiryMonth() == null || payment.getExpiryMonth() < 1
+                || payment.getExpiryMonth() > 12) {
+            errors.add(new ErrorDetail("expiryMonth", "Expiry month must be between 1 and 12"));
+        }
+        if (payment.getExpiryYear() == null) {
+            errors.add(new ErrorDetail("expiryYear", "Expiry year is required"));
+        } else if (payment.getExpiryMonth() != null && payment.getExpiryMonth() >= 1
+                && payment.getExpiryMonth() <= 12
+                && YearMonth.of(payment.getExpiryYear(), payment.getExpiryMonth())
+                .isBefore(YearMonth.now())) {
+            errors.add(new ErrorDetail("expiryYear", "Card expiry date must not be in the past"));
+        }
+        if (payment.getCvv() == null || !CVV.matcher(payment.getCvv()).matches()) {
+            errors.add(new ErrorDetail("cvv", "CVV must contain three or four digits"));
+        }
+        if (payment.getCardholderName() == null || payment.getCardholderName().trim().isEmpty()) {
+            errors.add(new ErrorDetail("cardholderName", "Cardholder name is required"));
+        } else if (payment.getCardholderName().length() > 100) {
+            errors.add(new ErrorDetail("cardholderName", "Cardholder name must not exceed 100 characters"));
+        }
+        for (String field : payment.getUnsupportedFields().keySet()) {
+            errors.add(new ErrorDetail(field, "Field is not allowed for payment"));
         }
         return errors;
     }
@@ -245,6 +323,78 @@ public final class ValidationService {
                 errors.add(new ErrorDetail(field, "Photo URL must be a valid URI"));
             }
         }
+    }
+
+    private static void validateAddress(final Address address, final String prefix,
+                                        final List<ErrorDetail> errors) {
+        if (address == null) {
+            return;
+        }
+        validateRequiredText(prefix + ".city", address.getCity(), 100, errors);
+        validateRequiredText(prefix + ".street", address.getStreet(), 150, errors);
+        validateRequiredText(prefix + ".house", address.getHouse(), 30, errors);
+        validateOptionalText(prefix + ".apartment", address.getApartment(), 30, errors);
+        if (address.getPostalCode() == null || !POSTAL_CODE.matcher(address.getPostalCode()).matches()) {
+            errors.add(new ErrorDetail(prefix + ".postalCode", "Postal code must contain exactly six digits"));
+        }
+        address.getUnsupportedFields().keySet().forEach(field ->
+                errors.add(new ErrorDetail(prefix + "." + field,
+                        "Field is not allowed in a Russian delivery address")));
+    }
+
+    private static void validatePrice(final BigDecimal price, final List<ErrorDetail> errors) {
+        if (price == null) {
+            errors.add(new ErrorDetail("price", "Pet price is required"));
+        } else if (price.compareTo(new BigDecimal("0.01")) < 0) {
+            errors.add(new ErrorDetail("price", "Pet price must be at least 0.01"));
+        } else if (price.scale() > 2) {
+            errors.add(new ErrorDetail("price", "Pet price must have no more than two decimal places"));
+        } else if (price.compareTo(new BigDecimal("9999999999.99")) > 0) {
+            errors.add(new ErrorDetail("price", "Pet price is too large"));
+        }
+    }
+
+    private static void validatePhone(final String phone, final List<ErrorDetail> errors) {
+        if (phone != null && (phone.length() < 7 || phone.length() > 30
+                || !PHONE.matcher(phone).matches())) {
+            errors.add(new ErrorDetail("phone", "Phone must contain 7-30 digits and phone punctuation"));
+        }
+    }
+
+    private static void validateRequiredText(final String field, final String value,
+                                             final int maxLength, final List<ErrorDetail> errors) {
+        if (value == null || value.trim().isEmpty()) {
+            errors.add(new ErrorDetail(field, "Field is required"));
+        } else if (value.length() > maxLength) {
+            errors.add(new ErrorDetail(field, field + " must not exceed " + maxLength + " characters"));
+        }
+    }
+
+    private static void requireText(final String field, final String value,
+                                    final List<ErrorDetail> errors) {
+        if (value == null || value.trim().isEmpty()) {
+            errors.add(new ErrorDetail(field, "Field is required to place an order"));
+        }
+    }
+
+    private static boolean passesLuhn(final String value) {
+        if (value == null || !CARD_NUMBER.matcher(value).matches()) {
+            return false;
+        }
+        int sum = 0;
+        boolean doubled = false;
+        for (int index = value.length() - 1; index >= 0; index--) {
+            int digit = value.charAt(index) - '0';
+            if (doubled) {
+                digit *= 2;
+                if (digit > 9) {
+                    digit -= 9;
+                }
+            }
+            sum += digit;
+            doubled = !doubled;
+        }
+        return sum % 10 == 0;
     }
 
     private static void validatePassword(String password, boolean required, List<ErrorDetail> errors) {

@@ -76,6 +76,7 @@ public class AuthService {
                 request.getLastName(), request.getEmail(),
                 credentialService.hashPassword(request.getPassword()), request.getPhone(),
                 AccountStatus.PENDING, Role.USER);
+        user.setAddress(request.getAddress());
         if (!userData.addPendingUserIfAbsent(user, credentialService.hashOneTimeCode(code),
                 Date.from(expiresAt))) {
             throw new AccountException(Response.Status.CONFLICT, "USER_ALREADY_EXISTS",

@@ -2,6 +2,7 @@ package io.swagger.petstore.model;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonSetter;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -14,6 +15,8 @@ public class AdminUserUpdateRequest {
     private String email;
     private String phone;
     private Role role;
+    private Address address;
+    private boolean addressPresent;
     private final Map<String, Object> unsupportedFields = new LinkedHashMap<>();
 
     public String getUsername() {
@@ -62,6 +65,21 @@ public class AdminUserUpdateRequest {
 
     public void setRole(final Role role) {
         this.role = role;
+    }
+
+    public Address getAddress() {
+        return address;
+    }
+
+    @JsonSetter("address")
+    public void setAddress(final Address address) {
+        this.address = address;
+        this.addressPresent = true;
+    }
+
+    @JsonIgnore
+    public boolean isAddressPresent() {
+        return addressPresent;
     }
 
     @JsonAnySetter

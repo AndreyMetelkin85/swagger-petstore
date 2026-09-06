@@ -18,5 +18,7 @@ public class OrderStatusTest {
         assertFalse(OrderStatus.SHIPPED.canTransitionTo(OrderStatus.CANCELLED));
         assertFalse(OrderStatus.DELIVERED.canTransitionTo(OrderStatus.CANCELLED));
         assertFalse(OrderStatus.CANCELLED.canTransitionTo(OrderStatus.APPROVED));
+        assertFalse(OrderStatus.EXPIRED.canTransitionTo(OrderStatus.APPROVED));
+        assertTrue(OrderStatus.EXPIRED.isComplete());
     }
 }

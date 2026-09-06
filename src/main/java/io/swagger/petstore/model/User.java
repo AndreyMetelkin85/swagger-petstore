@@ -17,6 +17,7 @@
 package io.swagger.petstore.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -34,6 +35,7 @@ public class User {
   private String email;
   private String password;
   private String phone;
+  private Address address;
   private AccountStatus userStatus = AccountStatus.PENDING;
   private Role role = Role.USER;
   private Date confirmedAt;
@@ -106,6 +108,16 @@ public class User {
 
   public void setPhone(String phone) {
     this.phone = phone;
+  }
+
+  @XmlElement(name = "address")
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public Address getAddress() {
+    return address;
+  }
+
+  public void setAddress(final Address address) {
+    this.address = address;
   }
 
   @XmlElement(name = "userStatus")

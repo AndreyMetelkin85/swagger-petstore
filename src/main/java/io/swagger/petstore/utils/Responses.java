@@ -19,10 +19,19 @@ public final class Responses {
 
     public static ResponseContext error(Response.Status status, String error, String message,
                                         List<ErrorDetail> details) {
+        return error(status.getStatusCode(), error, message, details);
+    }
+
+    public static ResponseContext error(int status, String error, String message) {
+        return error(status, error, message, Collections.<ErrorDetail>emptyList());
+    }
+
+    public static ResponseContext error(int status, String error, String message,
+                                        List<ErrorDetail> details) {
         return new ResponseContext()
                 .status(status)
                 .contentType(MediaType.APPLICATION_JSON_TYPE)
-                .entity(new ErrorResponse(status.getStatusCode(), error, message, details));
+                .entity(new ErrorResponse(status, error, message, details));
     }
 
     public static ResponseContext validation(List<ErrorDetail> details) {

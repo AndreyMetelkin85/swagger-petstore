@@ -43,7 +43,7 @@ public class OrderController {
                 .contentType(Util.getMediaType(request))
                 .entity(auth.getUser().getRole() == Role.ADMIN
                         ? ORDER_DATA.findAll()
-                        : ORDER_DATA.findOrdersForUser(auth.getUser().getUsername()));
+                        : ORDER_DATA.findOrdersForUser(auth.getUser().getId()));
     }
 
     public ResponseContext getOrderById(final RequestContext request, final UUID orderId) {
@@ -60,7 +60,7 @@ public class OrderController {
             return Responses.error(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND", "Order was not found");
         }
         if (auth.getUser().getRole() != Role.ADMIN
-                && !Objects.equals(auth.getUser().getUsername(), ORDER_DATA.getOrderOwner(orderId))) {
+                && !Objects.equals(auth.getUser().getId(), ORDER_DATA.getOrderOwner(orderId))) {
             return Responses.error(Response.Status.FORBIDDEN, "ORDER_ACCESS_DENIED",
                     "Users may access only their own orders");
         }
@@ -78,8 +78,14 @@ public class OrderController {
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
+        final List<ErrorDetail> missingProfile =
+                ValidationService.missingOrderProfileFields(auth.getUser());
+        if (!missingProfile.isEmpty()) {
+            return Responses.error(Response.Status.CONFLICT, "PROFILE_INCOMPLETE",
+                    "Complete the delivery profile before placing an order", missingProfile);
+        }
         try {
-            final Order created = ORDER_DATA.placeOrder(order, auth.getUser().getUsername());
+            final Order created = ORDER_DATA.placeOrder(order, auth.getUser());
             return new ResponseContext()
                     .status(Response.Status.CREATED)
                     .contentType(Util.getMediaType(request))
@@ -119,7 +125,7 @@ public class OrderController {
         }
         try {
             final Order updated = ORDER_DATA.transition(orderId, target,
-                    auth.getUser().getUsername(), auth.getUser().getRole() == Role.ADMIN);
+                    auth.getUser().getId(), auth.getUser().getRole() == Role.ADMIN);
             return new ResponseContext()
                     .contentType(Util.getMediaType(request))
                     .entity(updated);

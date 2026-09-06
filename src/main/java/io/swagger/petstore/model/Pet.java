@@ -24,6 +24,7 @@ import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @XmlRootElement(name = "Pet")
 public class Pet {
@@ -34,6 +35,7 @@ public class Pet {
     private List<Tag> tags = new ArrayList<>();
     private PetStatus status;
     private int version;
+    private BigDecimal price;
 
     @XmlElement(name = "id")
     public UUID getId() {
@@ -99,5 +101,19 @@ public class Pet {
 
     public void setVersion(final int version) {
         this.version = version;
+    }
+
+    @XmlElement(name = "price")
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(final BigDecimal price) {
+        this.price = price;
+    }
+
+    @XmlElement(name = "currency")
+    public String getCurrency() {
+        return "RUB";
     }
 }

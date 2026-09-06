@@ -28,7 +28,7 @@ import java.util.UUID;
 /** PostgreSQL-backed pet repository. Nested Pet fields are stored as JSON text. */
 public class PetData {
     private static final String COLUMNS =
-            "id, category_json, name, photo_urls_json, tags_json, status, version";
+            "id, category_json, name, photo_urls_json, tags_json, status, version, price";
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public Pet getPetById(final UUID petId) {
@@ -76,8 +76,8 @@ public class PetData {
         final Pet pet = fromRequest(request, null);
         assignNestedIds(pet);
         final String sql = "INSERT INTO pets "
-                + "(category_json, name, photo_urls_json, tags_json, status) "
-                + "VALUES (?, ?, ?, ?, CAST(? AS pet_status)) RETURNING id, version";
+                + "(category_json, name, photo_urls_json, tags_json, status, price) "
+                + "VALUES (?, ?, ?, ?, CAST(? AS pet_status), ?) RETURNING id, version";
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, toJson(pet.getCategory()));
@@ -85,6 +85,7 @@ public class PetData {
             statement.setString(3, toJson(pet.getPhotoUrls()));
             statement.setString(4, toJson(pet.getTags()));
             statement.setString(5, pet.getStatus().getValue());
+            statement.setBigDecimal(6, pet.getPrice());
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
                 pet.setId((UUID) result.getObject("id"));
@@ -205,7 +206,8 @@ public class PetData {
                             new TypeReference<List<String>>() { }),
                     JSON.readValue(result.getString("tags_json"),
                             new TypeReference<List<Tag>>() { }),
-                    PetStatus.fromValue(result.getString("status")), result.getInt("version"));
+                    PetStatus.fromValue(result.getString("status")), result.getInt("version"),
+                    result.getBigDecimal("price"));
         } catch (IOException exception) {
             throw new IllegalStateException("Cannot deserialize pet JSON fields", exception);
         }
@@ -221,7 +223,7 @@ public class PetData {
 
     public static Pet createPet(final UUID id, final Category category, final String name,
                                 final List<String> urls, final List<Tag> tags, final PetStatus status,
-                                final int version) {
+                                final int version, final java.math.BigDecimal price) {
         final Pet pet = new Pet();
         pet.setId(id);
         pet.setCategory(category);
@@ -230,6 +232,7 @@ public class PetData {
         pet.setTags(tags);
         pet.setStatus(status);
         pet.setVersion(version);
+        pet.setPrice(price);
         return pet;
     }
 
@@ -238,7 +241,8 @@ public class PetData {
                 request.getPhotoUrls() == null ? new ArrayList<String>() : request.getPhotoUrls(),
                 request.getTags() == null ? new ArrayList<Tag>() : request.getTags(),
                 request.getStatus() == null
-                        ? PetStatus.AVAILABLE : PetStatus.fromValue(request.getStatus()), 0);
+                        ? PetStatus.AVAILABLE : PetStatus.fromValue(request.getStatus()), 0,
+                request.getPrice());
     }
 
     private static LockedPet lockPet(final Connection connection, final UUID petId)
@@ -270,7 +274,7 @@ public class PetData {
     private static int updatePet(final Connection connection, final Pet pet, final int expectedVersion)
             throws SQLException {
         final String sql = "UPDATE pets SET category_json = ?, name = ?, photo_urls_json = ?, "
-                + "tags_json = ?, status = CAST(? AS pet_status), version = version + 1 "
+                + "tags_json = ?, status = CAST(? AS pet_status), price = ?, version = version + 1 "
                 + "WHERE id = ? AND version = ? RETURNING version";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, toJson(pet.getCategory()));
@@ -278,8 +282,9 @@ public class PetData {
             statement.setString(3, toJson(pet.getPhotoUrls()));
             statement.setString(4, toJson(pet.getTags()));
             statement.setString(5, pet.getStatus().getValue());
-            statement.setObject(6, pet.getId());
-            statement.setInt(7, expectedVersion);
+            statement.setBigDecimal(6, pet.getPrice());
+            statement.setObject(7, pet.getId());
+            statement.setInt(8, expectedVersion);
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
                     throw new PetException(Response.Status.CONFLICT, "PET_VERSION_CONFLICT",
