@@ -102,4 +102,21 @@ public class UserController {
         }
     }
 
+    public ResponseContext deleteUserById(final RequestContext request, final UUID userId) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (userId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "User id must be a valid UUID");
+        }
+        try {
+            authService.deleteUser(auth.getUser(), userId);
+            return new ResponseContext().status(Response.Status.NO_CONTENT);
+        } catch (AccountException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        }
+    }
+
 }

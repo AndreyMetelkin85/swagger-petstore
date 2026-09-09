@@ -94,4 +94,26 @@ public class PaymentController {
             return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
         }
     }
+
+    public ResponseContext deletePayment(final RequestContext request, final UUID orderId,
+                                         final UUID paymentId) {
+        final AuthResult auth = authService.authorize(request, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (orderId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Order id must be a valid UUID");
+        }
+        if (paymentId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Payment id must be a valid UUID");
+        }
+        try {
+            PAYMENT_DATA.deleteDeclinedPayment(orderId, paymentId);
+            return new ResponseContext().status(Response.Status.NO_CONTENT);
+        } catch (PaymentException exception) {
+            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        }
+    }
 }

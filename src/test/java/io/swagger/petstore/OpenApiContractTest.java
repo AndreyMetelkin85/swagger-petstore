@@ -67,11 +67,14 @@ public class OpenApiContractTest {
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/ship"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/deliver"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/cancel"));
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/place"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/payments"));
         assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/payments/{paymentId}"));
         assertNotNull(openAPI.getComponents().getSecuritySchemes().get("bearerAuth"));
         assertNull(openAPI.getPaths().get("/user/me").getDelete());
-        assertNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
+        assertNotNull(openAPI.getPaths().get("/users/{userId}").getDelete());
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}/payments/{paymentId}").getDelete());
         assertEquals(Collections.emptyList(), openAPI.getPaths().get("/health").getGet().getSecurity());
 
         assertEquals("RegistrationController", extension(openAPI.getPaths().get("/auth/register").getPost()));
@@ -83,6 +86,8 @@ public class OpenApiContractTest {
         assertEquals("UserController", extension(openAPI.getPaths().get("/users/{userId}").getPut()));
         assertEquals("PaymentController",
                 extension(openAPI.getPaths().get("/store/order/{orderId}/payments").getPost()));
+        assertEquals("OrderController",
+                extension(openAPI.getPaths().get("/store/order/{orderId}/place").getPost()));
 
         assertNull("Concrete reusable responses must not leak examples between endpoints",
                 openAPI.getComponents().getResponses());
@@ -103,7 +108,7 @@ public class OpenApiContractTest {
         assertEquals("uuid", property(openAPI, "Order", "petId").getFormat());
         assertEquals(Arrays.asList("available", "pending", "reserved", "sold"),
                 property(openAPI, "Pet", "status").getEnum());
-        assertEquals(Arrays.asList("placed", "approved", "shipped", "delivered", "cancelled", "expired"),
+        assertEquals(Arrays.asList("draft", "placed", "approved", "shipped", "delivered", "cancelled", "expired"),
                 property(openAPI, "Order", "status").getEnum());
         assertEquals(Arrays.asList("PENDING", "ACTIVE", "BLOCKED"),
                 openAPI.getComponents().getSchemas().get("AccountStatus").getEnum());
@@ -162,7 +167,7 @@ public class OpenApiContractTest {
         assertTrue(openAPI.getComponents().getSchemas().get("User").getRequired().contains("address"));
         assertTrue(openAPI.getComponents().getSchemas().get("Pet").getRequired()
                 .containsAll(Arrays.asList("price", "currency")));
-        assertEquals(Arrays.asList("NOT_REQUIRED", "UNPAID", "PAID", "REFUNDED", "EXPIRED"),
+        assertEquals(Arrays.asList("NOT_STARTED", "NOT_REQUIRED", "UNPAID", "PAID", "REFUNDED", "EXPIRED"),
                 property(openAPI, "Order", "paymentStatus").getEnum());
         final Schema payment = openAPI.getComponents().getSchemas().get("Payment");
         assertFalse(payment.getProperties().containsKey("cardNumber"));
@@ -217,9 +222,17 @@ public class OpenApiContractTest {
         assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}").getGet(), "404",
                 "ORDER_NOT_FOUND");
         assertErrorCodes(openAPI.getPaths().get("/store/order").getPost(), "404",
-                "PET_NOT_FOUND");
-        assertErrorCodes(openAPI.getPaths().get("/store/order").getPost(), "409",
-                "PROFILE_INCOMPLETE", "PET_NOT_AVAILABLE");
+                "PET_NOT_FOUND", "USER_NOT_FOUND");
+        assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}/place").getPost(), "409",
+                "PROFILE_INCOMPLETE", "PET_NOT_AVAILABLE", "INVALID_STATUS_TRANSITION");
+        assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}").getPut(), "409",
+                "INVALID_STATUS_TRANSITION");
+        assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}").getDelete(), "409",
+                "ORDER_NOT_DELETABLE");
+        assertErrorCodes(openAPI.getPaths().get("/users/{userId}").getDelete(), "409",
+                "USER_HAS_ORDERS");
+        assertErrorCodes(openAPI.getPaths().get("/users/{userId}").getDelete(), "403",
+                "FORBIDDEN", "ADMIN_ACCOUNT_PROTECTED", "DEMO_ACCOUNT_PROTECTED", "ACCOUNT_BLOCKED");
         assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}/approve").getPost(), "409",
                 "ORDER_NOT_PAID", "INVALID_STATUS_TRANSITION");
         assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}/cancel").getPost(), "403",
@@ -250,6 +263,8 @@ public class OpenApiContractTest {
                 "ORDER_PAYMENT_EXPIRED");
         assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}/payments/{paymentId}").getGet(),
                 "404", "ORDER_NOT_FOUND", "PAYMENT_NOT_FOUND");
+        assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}/payments/{paymentId}").getDelete(),
+                "409", "PAYMENT_NOT_DELETABLE");
     }
 
     @Test
@@ -289,13 +304,14 @@ public class OpenApiContractTest {
                         final String code = String.valueOf(value.get("error"));
                         if (code.startsWith("PET_")) {
                             assertTrue(location, path.getKey().startsWith("/pet")
-                                    || path.getKey().equals("/store/order"));
+                                    || path.getKey().startsWith("/store/order"));
                         }
                         if (code.startsWith("ORDER_")) {
                             assertTrue(location, path.getKey().startsWith("/store/order"));
                         }
                         if (code.equals("ADMIN_ACCOUNT_PROTECTED")) {
-                            assertTrue(location, path.getKey().startsWith("/admin/users"));
+                            assertTrue(location, path.getKey().startsWith("/admin/users")
+                                    || path.getKey().equals("/users/{userId}"));
                         }
                     }
                 }
@@ -328,7 +344,17 @@ public class OpenApiContractTest {
         assertNull(openAPI.getPaths().get("/user/me").getDelete());
         assertNull(openAPI.getPaths().get("/user/{username}"));
         assertNull(openAPI.getPaths().get("/admin/users/{userId}/email"));
-        assertNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
+        assertNotNull(openAPI.getPaths().get("/store/order/{orderId}").getDelete());
+    }
+
+    @Test
+    public void swaggerUiHidesEmptyParameterSectionsGlobally() throws Exception {
+        final String html = new String(Files.readAllBytes(Paths.get("src/main/webapp/index.html")),
+                StandardCharsets.UTF_8);
+        assertTrue(html.contains("HideEmptyParametersPlugin"));
+        assertTrue(html.contains(".opblock-section > .parameters-container"));
+        assertTrue(html.contains("section.classList.toggle(\"empty-parameters\", !hasParameters)"));
+        assertTrue(html.contains("SwaggerUIBundle.plugins.DownloadUrl,\n        HideEmptyParametersPlugin"));
     }
 
     private static String extension(Operation operation) {

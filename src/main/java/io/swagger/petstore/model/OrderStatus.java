@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 /** Persisted order states and their allowed forward transitions. */
 public enum OrderStatus {
+    DRAFT("draft"),
     PLACED("placed"),
     APPROVED("approved"),
     SHIPPED("shipped"),
@@ -36,6 +37,9 @@ public enum OrderStatus {
     }
 
     public boolean canTransitionTo(final OrderStatus target) {
+        if (this == DRAFT) {
+            return target == PLACED;
+        }
         if (this == PLACED) {
             return target == APPROVED || target == CANCELLED;
         }
@@ -50,6 +54,10 @@ public enum OrderStatus {
     }
 
     public boolean isComplete() {
+        return this == DELIVERED || this == CANCELLED || this == EXPIRED;
+    }
+
+    public boolean isTerminal() {
         return this == DELIVERED || this == CANCELLED || this == EXPIRED;
     }
 

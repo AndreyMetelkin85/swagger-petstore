@@ -1,7 +1,7 @@
 openapi: 3.0.4
 info:
   title: Swagger Petstore API
-  version: 2.0.0
+  version: 2.1.0
   description: |-
     API зоомагазина, в котором пользователи могут регистрироваться, просматривать питомцев и оформлять заказы.
     Проект предназначен для практики ручного и автоматизированного тестирования на реалистичных сценариях успешной работы и обработки ошибок.
@@ -1119,15 +1119,15 @@ paths:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
     post:
       tags: [Orders]
-      summary: Создание заказа
-      description: Создаёт заказ от имени текущего пользователя.
-      operationId: placeOrder
+      summary: Создание черновика заказа
+      description: Создаёт черновик заказа без резерва питомца и платёжных данных.
+      operationId: createOrderDraft
       x-swagger-router-controller: OrderController
       security:
         - bearerAuth: []
       requestBody:
         required: true
-        description: Питомец и количество. Остальные поля заказа заполняются сервером.
+        description: Питомец и количество для черновика заказа.
         content:
           application/json:
             schema:
@@ -1139,7 +1139,7 @@ paths:
                   quantity: 1
       responses:
         '201':
-          description: Заказ создан.
+          description: Черновик заказа создан.
           content:
             application/json:
               schema:
@@ -1177,28 +1177,15 @@ paths:
                 accountBlocked:
                   value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
         '404':
-          description: Питомец с указанным UUID не найден.
+          description: Питомец или владелец заказа не найден.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 petNotFound:
                   value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
-        '409':
-          description: Профиль доставки не заполнен либо питомец недоступен для заказа.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorResponse'}
-              examples:
-                profileIncomplete:
-                  value:
-                    status: 409
-                    error: PROFILE_INCOMPLETE
-                    message: Complete the delivery profile before placing an order
-                    details:
-                      - {field: address.postalCode, message: Field is required to place an order}
-                petNotAvailable:
-                  value: {status: 409, error: PET_NOT_AVAILABLE, message: Pet is not available for ordering, details: []}
+                ownerNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: Order owner was not found, details: []}
         '422':
           description: Данные заказа не прошли проверку.
           content:
@@ -1222,7 +1209,7 @@ paths:
                       - {field: status, message: Field is managed by the server}
                       - {field: complete, message: Field is managed by the server}
         '500':
-          description: Не удалось создать заказ.
+          description: Не удалось создать черновик заказа.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -1296,6 +1283,241 @@ paths:
               examples:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    put:
+      tags: [Orders]
+      summary: Обновление черновика заказа
+      description: Полностью обновляет питомца и количество только у черновика заказа.
+      operationId: updateOrderDraft
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: Новое содержимое черновика без серверных полей.
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderCreateRequest'}
+            example: {petId: 7c1d1b70-f31e-42cd-9f78-6a5d87ed8620, quantity: 1}
+      responses:
+        '200':
+          description: Черновик обновлён.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: Идентификатор или тело запроса имеют неверный формат.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+                missingBody:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
+                malformedJson:
+                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Нет доступа к черновику или учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may modify only their own orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ или питомец не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: Текущее состояние заказа не допускает редактирование.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Only a draft order can be updated, details: []}
+        '422':
+          description: Поля черновика не прошли проверку.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrder:
+                  value: {status: 422, error: VALIDATION_ERROR, message: Request validation failed, details: [{field: quantity, message: Quantity must be 1 for an individual pet}]}
+        '500':
+          description: Не удалось обновить черновик.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    delete:
+      tags: [Orders]
+      summary: Удаление заказа
+      description: Удаляет доступный черновик или завершённый заказ по правилам текущей роли.
+      operationId: deleteOrder
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Заказ и разрешённые связанные платежи удалены.
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Заказ недоступен или роль не разрешает удаление завершённого заказа.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may modify only their own orders, details: []}
+                completedOrderForbidden:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Only administrators may delete completed orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+        '409':
+          description: Активный заказ нельзя удалить физически.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotDeletable:
+                  value: {status: 409, error: ORDER_NOT_DELETABLE, message: Active orders cannot be deleted, details: []}
+        '500':
+          description: Не удалось удалить заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
+  /store/order/{orderId}/place:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Orders]
+      summary: Оформление черновика заказа
+      description: Фиксирует доставку и цену, резервирует питомца и запускает срок оплаты.
+      operationId: placeOrderDraft
+      x-swagger-router-controller: OrderController
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Черновик оформлен и ожидает оплату.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: orderId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Нет доступа к заказу или учётная запись недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderOwnership:
+                  value: {status: 403, error: ORDER_ACCESS_DENIED, message: Users may modify only their own orders, details: []}
+                accountNotVerified:
+                  value: {status: 403, error: ACCOUNT_NOT_VERIFIED, message: The account has not been confirmed, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ, его владелец или питомец не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+                petNotFound:
+                  value: {status: 404, error: PET_NOT_FOUND, message: Pet was not found, details: []}
+        '409':
+          description: Профиль, статус заказа или доступность питомца не позволяют оформление.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                profileIncomplete:
+                  value: {status: 409, error: PROFILE_INCOMPLETE, message: Complete the delivery profile before placing an order, details: [{field: address.postalCode, message: Field is required to place an order}]}
+                petNotAvailable:
+                  value: {status: 409, error: PET_NOT_AVAILABLE, message: Pet is not available for ordering, details: []}
+                invalidStatusTransition:
+                  value: {status: 409, error: INVALID_STATUS_TRANSITION, message: Order cannot transition to placed, details: []}
+        '500':
+          description: Не удалось оформить заказ.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+
   /store/order/{orderId}/approve:
     parameters:
       - $ref: '#/components/parameters/OrderId'
@@ -1859,6 +2081,73 @@ paths:
               examples:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    delete:
+      tags: [Payments]
+      summary: Удаление неуспешного платежа
+      description: Удаляет попытку оплаты со статусом DECLINED. Операция доступна только администратору.
+      operationId: deletePayment
+      x-swagger-router-controller: PaymentController
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Неуспешная попытка оплаты удалена.
+        '400':
+          description: orderId или paymentId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidOrderId:
+                  value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
+                invalidPaymentId:
+                  value: {status: 400, error: BAD_REQUEST, message: Payment id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Операция недоступна для текущей роли или состояния учётной записи.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Заказ или платёж не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                orderNotFound:
+                  value: {status: 404, error: ORDER_NOT_FOUND, message: Order was not found, details: []}
+                paymentNotFound:
+                  value: {status: 404, error: PAYMENT_NOT_FOUND, message: Payment was not found, details: []}
+        '409':
+          description: Статус платежа не допускает отдельное удаление.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                paymentNotDeletable:
+                  value: {status: 409, error: PAYMENT_NOT_DELETABLE, message: Only declined payment attempts can be deleted separately, details: []}
+        '500':
+          description: Не удалось удалить платёж.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
 
   /user/me:
     get:
@@ -2209,6 +2498,73 @@ paths:
                       - {field: email, message: Email must be a valid email address}
         '500':
           description: Не удалось обновить пользователя.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                internalError:
+                  value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
+    delete:
+      tags: [Users]
+      summary: Удаление пользователя
+      description: Удаляет пользователя без заказов. Операция доступна только администратору.
+      operationId: deleteUserById
+      x-swagger-router-controller: UserController
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Пользователь удалён.
+        '400':
+          description: userId не является корректным UUID.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                invalidUserId:
+                  value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
+        '401':
+          description: Bearer token отсутствует или недействителен.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                missingToken:
+                  value: {status: 401, error: UNAUTHORIZED, message: Bearer token is required, details: []}
+                invalidToken:
+                  value: {status: 401, error: INVALID_TOKEN, message: Access token is invalid, details: []}
+        '403':
+          description: Роль или защищённая учётная запись не допускает удаление.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                roleForbidden:
+                  value: {status: 403, error: FORBIDDEN, message: The current role is not allowed to perform this operation, details: []}
+                adminProtected:
+                  value: {status: 403, error: ADMIN_ACCOUNT_PROTECTED, message: Administrator accounts cannot be deleted, details: []}
+                demoProtected:
+                  value: {status: 403, error: DEMO_ACCOUNT_PROTECTED, message: The demonstration user account cannot be deleted, details: []}
+                accountBlocked:
+                  value: {status: 403, error: ACCOUNT_BLOCKED, message: The account is blocked, details: []}
+        '404':
+          description: Пользователь не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                userNotFound:
+                  value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
+        '409':
+          description: У пользователя остались заказы.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              examples:
+                userHasOrders:
+                  value: {status: 409, error: USER_HAS_ORDERS, message: Delete the user's orders before deleting the account, details: []}
+        '500':
+          description: Не удалось удалить пользователя.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -3030,12 +3386,14 @@ components:
           type: number
           format: decimal
           minimum: 0.01
+          nullable: true
           readOnly: true
           example: 15000.00
         totalAmount:
           type: number
           format: decimal
           minimum: 0.01
+          nullable: true
           readOnly: true
           example: 15000.00
         currency:
@@ -3051,7 +3409,7 @@ components:
         paymentStatus:
           type: string
           readOnly: true
-          enum: [NOT_REQUIRED, UNPAID, PAID, REFUNDED, EXPIRED]
+          enum: [NOT_STARTED, NOT_REQUIRED, UNPAID, PAID, REFUNDED, EXPIRED]
           example: UNPAID
         paymentExpiresAt:
           type: string
@@ -3061,7 +3419,7 @@ components:
           example: '2026-09-06T11:15:00Z'
         status:
           type: string
-          enum: [placed, approved, shipped, delivered, cancelled, expired]
+          enum: [draft, placed, approved, shipped, delivered, cancelled, expired]
           example: placed
         complete:
           type: boolean

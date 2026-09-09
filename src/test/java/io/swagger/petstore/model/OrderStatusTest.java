@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 public class OrderStatusTest {
     @Test
     public void allowsOnlyConfiguredOrderLifecycleTransitions() {
+        assertTrue(OrderStatus.DRAFT.canTransitionTo(OrderStatus.PLACED));
         assertTrue(OrderStatus.PLACED.canTransitionTo(OrderStatus.APPROVED));
         assertTrue(OrderStatus.PLACED.canTransitionTo(OrderStatus.CANCELLED));
         assertTrue(OrderStatus.APPROVED.canTransitionTo(OrderStatus.SHIPPED));
@@ -15,10 +16,16 @@ public class OrderStatusTest {
         assertTrue(OrderStatus.SHIPPED.canTransitionTo(OrderStatus.DELIVERED));
 
         assertFalse(OrderStatus.PLACED.canTransitionTo(OrderStatus.DELIVERED));
+        assertFalse(OrderStatus.DRAFT.canTransitionTo(OrderStatus.APPROVED));
+        assertFalse(OrderStatus.DRAFT.isActive());
+        assertFalse(OrderStatus.DRAFT.isTerminal());
         assertFalse(OrderStatus.SHIPPED.canTransitionTo(OrderStatus.CANCELLED));
         assertFalse(OrderStatus.DELIVERED.canTransitionTo(OrderStatus.CANCELLED));
         assertFalse(OrderStatus.CANCELLED.canTransitionTo(OrderStatus.APPROVED));
         assertFalse(OrderStatus.EXPIRED.canTransitionTo(OrderStatus.APPROVED));
         assertTrue(OrderStatus.EXPIRED.isComplete());
+        assertTrue(OrderStatus.DELIVERED.isTerminal());
+        assertTrue(OrderStatus.CANCELLED.isTerminal());
+        assertTrue(OrderStatus.EXPIRED.isTerminal());
     }
 }

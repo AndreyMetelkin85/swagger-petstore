@@ -25,6 +25,11 @@
       margin:0;
       background: #fafafa;
     }
+
+    .opblock-section.empty-parameters > .opblock-section-header:first-child,
+    .opblock-section.empty-parameters > .parameters-container {
+      display: none;
+    }
   </style>
 </head>
 
@@ -69,6 +74,26 @@
 <script src="./swagger-ui-bundle.js"> </script>
 <script src="./swagger-ui-standalone-preset.js"> </script>
 <script>
+  const HideEmptyParametersPlugin = function() {
+    return {
+      afterLoad: function() {
+        const root = document.getElementById("swagger-ui");
+        const updateEmptyParameterSections = function() {
+          root.querySelectorAll(".opblock-section > .parameters-container").forEach(function(container) {
+            const section = container.parentElement;
+            const hasParameters = container.querySelector(".parameter__name") !== null;
+            section.classList.toggle("empty-parameters", !hasParameters);
+          });
+        };
+        new MutationObserver(updateEmptyParameterSections).observe(root, {
+          childList: true,
+          subtree: true
+        });
+        updateEmptyParameterSections();
+      }
+    };
+  };
+
   window.onload = function() {
     // Build a system
     const apiUrl = window.location.protocol + "//" + window.location.host + "/api/v3/openapi.json";
@@ -81,7 +106,8 @@
         SwaggerUIStandalonePreset
       ],
       plugins: [
-        SwaggerUIBundle.plugins.DownloadUrl
+        SwaggerUIBundle.plugins.DownloadUrl,
+        HideEmptyParametersPlugin
       ],
       layout: "StandaloneLayout",
       queryConfigEnabled: true
