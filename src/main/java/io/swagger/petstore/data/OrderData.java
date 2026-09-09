@@ -9,6 +9,7 @@ import io.swagger.petstore.model.PaymentStatus;
 import io.swagger.petstore.model.PetStatus;
 import io.swagger.petstore.model.User;
 import io.swagger.petstore.service.OrderException;
+import io.swagger.petstore.service.ValidationService;
 
 import javax.ws.rs.core.Response;
 import java.io.IOException;
@@ -123,26 +124,21 @@ public class OrderData {
                 + "AND status IN ('placed', 'approved', 'shipped')", petId);
     }
 
-    /** Locks the pet row so concurrent attempts cannot reserve the same animal. */
-    public Order placeOrder(final OrderCreateRequest request, final User owner) {
+    /** Creates an editable order draft without reserving the pet or capturing checkout data. */
+    public Order createDraft(final OrderCreateRequest request, final User owner) {
         try (Connection connection = Database.connect()) {
             connection.setAutoCommit(false);
             try {
-                expireExistingReservation(connection, request.getPetId());
+                if (UserData.findUserById(connection, owner.getId()) == null) {
+                    throw new OrderException(Response.Status.NOT_FOUND, "USER_NOT_FOUND",
+                            "Order owner was not found");
+                }
                 final LockedPet pet = lockPet(connection, request.getPetId());
                 if (pet == null) {
                     throw new OrderException(Response.Status.NOT_FOUND, "PET_NOT_FOUND",
                             "Pet was not found");
                 }
-                if (pet.status != PetStatus.AVAILABLE || hasActiveOrder(connection, request.getPetId())) {
-                    throw new OrderException(Response.Status.CONFLICT, "PET_NOT_AVAILABLE",
-                            "Pet is not available for ordering");
-                }
-
-                final DeliveryDetails delivery = new DeliveryDetails(owner.getFirstName(),
-                        owner.getLastName(), owner.getPhone(), owner.getAddress());
-                final Order order = insertOrder(connection, request, owner.getId(), pet.price, delivery);
-                updatePetStatus(connection, request.getPetId(), PetStatus.RESERVED);
+                final Order order = insertDraft(connection, request, owner.getId());
                 connection.commit();
                 return order;
             } catch (SQLException | RuntimeException exception) {
@@ -150,7 +146,131 @@ public class OrderData {
                 throw exception;
             }
         } catch (SQLException exception) {
-            throw Database.failure("place order", exception);
+            throw Database.failure("create order draft", exception);
+        }
+    }
+
+    /** Replaces the editable fields of an existing draft. */
+    public Order updateDraft(final UUID orderId, final OrderCreateRequest request,
+                             final UUID actorUserId, final boolean admin) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                final LockedOrder current = requiredLockedOrder(connection, orderId);
+                assertOrderAccess(current, actorUserId, admin);
+                if (current.order.getStatus() != OrderStatus.DRAFT) {
+                    throw new OrderException(Response.Status.CONFLICT, "INVALID_STATUS_TRANSITION",
+                            "Only a draft order can be updated");
+                }
+                if (lockPet(connection, request.getPetId()) == null) {
+                    throw new OrderException(Response.Status.NOT_FOUND, "PET_NOT_FOUND",
+                            "Pet was not found");
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE store_orders SET pet_id = ?, quantity = ? WHERE id = ? RETURNING "
+                                + COLUMNS)) {
+                    statement.setObject(1, request.getPetId());
+                    statement.setInt(2, request.getQuantity());
+                    statement.setObject(3, orderId);
+                    try (ResultSet result = statement.executeQuery()) {
+                        result.next();
+                        final Order updated = map(result);
+                        connection.commit();
+                        return updated;
+                    }
+                }
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("update order draft", exception);
+        }
+    }
+
+    /** Converts a draft into a payable order and captures price and delivery snapshots. */
+    public Order placeDraft(final UUID orderId, final UUID actorUserId, final boolean admin) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                final LockedOrder current = requiredLockedOrder(connection, orderId);
+                assertOrderAccess(current, actorUserId, admin);
+                if (current.order.getStatus() != OrderStatus.DRAFT) {
+                    throw new OrderException(Response.Status.CONFLICT, "INVALID_STATUS_TRANSITION",
+                            "Order cannot transition from " + current.order.getStatus().getValue()
+                                    + " to placed");
+                }
+                final User owner = UserData.findUserById(connection, current.ownerUserId);
+                final List<io.swagger.petstore.model.ErrorDetail> missing =
+                        ValidationService.missingOrderProfileFields(owner);
+                if (!missing.isEmpty()) {
+                    throw new OrderException(Response.Status.CONFLICT, "PROFILE_INCOMPLETE",
+                            "Complete the delivery profile before placing an order", missing);
+                }
+
+                expireExistingReservation(connection, current.order.getPetId());
+                final LockedPet pet = lockPet(connection, current.order.getPetId());
+                if (pet == null) {
+                    throw new OrderException(Response.Status.NOT_FOUND, "PET_NOT_FOUND",
+                            "Pet was not found");
+                }
+                if (pet.status != PetStatus.AVAILABLE
+                        || hasActiveOrder(connection, current.order.getPetId())) {
+                    throw new OrderException(Response.Status.CONFLICT, "PET_NOT_AVAILABLE",
+                            "Pet is not available for ordering");
+                }
+
+                final DeliveryDetails delivery = new DeliveryDetails(owner.getFirstName(),
+                        owner.getLastName(), owner.getPhone(), owner.getAddress());
+                final BigDecimal total = pet.price.multiply(
+                        BigDecimal.valueOf(current.order.getQuantity()));
+                final Order placed = markDraftPlaced(connection, current.order, pet.price,
+                        total, delivery);
+                updatePetStatus(connection, current.order.getPetId(), PetStatus.RESERVED);
+                connection.commit();
+                return placed;
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("place order draft", exception);
+        }
+    }
+
+    /** Deletes only drafts for owners, or drafts/terminal orders for administrators. */
+    public void deleteOrder(final UUID orderId, final UUID actorUserId, final boolean admin) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                final LockedOrder current = requiredLockedOrder(connection, orderId);
+                assertOrderAccess(current, actorUserId, admin);
+                final OrderStatus status = current.order.getStatus();
+                if (status.isActive()) {
+                    throw new OrderException(Response.Status.CONFLICT, "ORDER_NOT_DELETABLE",
+                            "Active orders cannot be deleted");
+                }
+                if (status != OrderStatus.DRAFT && !admin) {
+                    throw new OrderException(Response.Status.FORBIDDEN, "ORDER_ACCESS_DENIED",
+                            "Only administrators may delete completed orders");
+                }
+                try (PreparedStatement payments = connection.prepareStatement(
+                        "DELETE FROM payments WHERE order_id = ?")) {
+                    payments.setObject(1, orderId);
+                    payments.executeUpdate();
+                }
+                try (PreparedStatement order = connection.prepareStatement(
+                        "DELETE FROM store_orders WHERE id = ?")) {
+                    order.setObject(1, orderId);
+                    order.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("delete order", exception);
         }
     }
 
@@ -292,25 +412,42 @@ public class OrderData {
         }
     }
 
-    private static Order insertOrder(final Connection connection, final OrderCreateRequest request,
-                                     final UUID ownerUserId, final BigDecimal unitPrice,
-                                     final DeliveryDetails delivery) throws SQLException {
-        final BigDecimal total = unitPrice.multiply(BigDecimal.valueOf(request.getQuantity()));
+    private static Order insertDraft(final Connection connection, final OrderCreateRequest request,
+                                     final UUID ownerUserId) throws SQLException {
         final String sql = "INSERT INTO store_orders "
                 + "(pet_id, quantity, ship_date, status, complete, owner_user_id, created_at, "
                 + "unit_price, total_amount, currency, delivery_details, payment_status, payment_expires_at) "
-                + "VALUES (?, ?, NULL, 'placed', FALSE, ?, CURRENT_TIMESTAMP, ?, ?, 'RUB', "
-                + "CAST(? AS jsonb), 'UNPAID', CURRENT_TIMESTAMP + INTERVAL '15 minutes') "
+                + "VALUES (?, ?, NULL, 'draft', FALSE, ?, CURRENT_TIMESTAMP, NULL, NULL, 'RUB', "
+                + "NULL, 'NOT_STARTED', NULL) "
                 + "RETURNING " + COLUMNS;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setObject(1, request.getPetId());
             statement.setInt(2, request.getQuantity());
             statement.setObject(3, ownerUserId);
-            statement.setBigDecimal(4, unitPrice);
-            statement.setBigDecimal(5, total);
-            statement.setString(6, toJson(delivery));
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
+                return map(result);
+            }
+        }
+    }
+
+    private static Order markDraftPlaced(final Connection connection, final Order draft,
+                                         final BigDecimal unitPrice, final BigDecimal total,
+                                         final DeliveryDetails delivery) throws SQLException {
+        final String sql = "UPDATE store_orders SET status = 'placed', unit_price = ?, "
+                + "total_amount = ?, delivery_details = CAST(? AS jsonb), payment_status = 'UNPAID', "
+                + "payment_expires_at = CURRENT_TIMESTAMP + INTERVAL '15 minutes' "
+                + "WHERE id = ? AND status = 'draft' RETURNING " + COLUMNS;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBigDecimal(1, unitPrice);
+            statement.setBigDecimal(2, total);
+            statement.setString(3, toJson(delivery));
+            statement.setObject(4, draft.getId());
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new OrderException(Response.Status.CONFLICT, "INVALID_STATUS_TRANSITION",
+                            "The order status changed before it could be placed");
+                }
                 return map(result);
             }
         }
@@ -327,6 +464,25 @@ public class OrderData {
                 }
                 return new LockedOrder(map(result), (UUID) result.getObject("owner_user_id"));
             }
+        }
+    }
+
+    private static LockedOrder requiredLockedOrder(final Connection connection, final UUID orderId)
+            throws SQLException {
+        final LockedOrder order = lockOrder(connection, orderId);
+        if (order == null) {
+            throw new OrderException(Response.Status.NOT_FOUND, "ORDER_NOT_FOUND",
+                    "Order was not found");
+        }
+        expireLockedOrderIfNeeded(connection, order.order);
+        return order;
+    }
+
+    private static void assertOrderAccess(final LockedOrder order, final UUID actorUserId,
+                                          final boolean admin) {
+        if (!admin && !order.ownerUserId.equals(actorUserId)) {
+            throw new OrderException(Response.Status.FORBIDDEN, "ORDER_ACCESS_DENIED",
+                    "Users may modify only their own orders");
         }
     }
 

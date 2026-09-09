@@ -16,6 +16,7 @@
 
 package io.swagger.petstore.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import javax.xml.bind.annotation.XmlElement;
@@ -78,7 +79,7 @@ public class Order {
   }
 
   @XmlElement(name = "status")
-  @Schema(description = "Order Status", allowableValues = "placed,approved,shipped,delivered,cancelled")
+  @Schema(description = "Order Status", allowableValues = "draft,placed,approved,shipped,delivered,cancelled,expired")
   public OrderStatus getStatus() {
     return status;
   }
@@ -112,6 +113,7 @@ public class Order {
     this.createdAt = createdAt;
   }
 
+  @JsonInclude(JsonInclude.Include.ALWAYS)
   public BigDecimal getUnitPrice() {
     return unitPrice;
   }
@@ -120,6 +122,7 @@ public class Order {
     this.unitPrice = unitPrice;
   }
 
+  @JsonInclude(JsonInclude.Include.ALWAYS)
   public BigDecimal getTotalAmount() {
     return totalAmount;
   }
@@ -136,6 +139,7 @@ public class Order {
     this.currency = currency;
   }
 
+  @JsonInclude(JsonInclude.Include.ALWAYS)
   public DeliveryDetails getDeliveryDetails() {
     return deliveryDetails;
   }
@@ -152,6 +156,7 @@ public class Order {
     this.paymentStatus = paymentStatus;
   }
 
+  @JsonInclude(JsonInclude.Include.ALWAYS)
   public Date getPaymentExpiresAt() {
     return paymentExpiresAt;
   }

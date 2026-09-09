@@ -24,6 +24,9 @@ KNOWN_EMAILS = {
     "admin": "admin@example.com",
     "user1": "test@example.com",
 }
+CREATED_USER_IDS: set[str] = set()
+CREATED_PET_IDS: set[str] = set()
+CREATED_ORDER_IDS: set[str] = set()
 
 
 def to_email(login: str) -> str:
@@ -34,6 +37,57 @@ def to_email(login: str) -> str:
 def client() -> httpx.Client:
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as session:
         yield session
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_created_records(client: httpx.Client) -> None:
+    yield
+    try:
+        admin_token = login(client, "admin", "admin123")
+    except Exception:
+        return
+    headers = bearer(admin_token)
+    for order_id in list(CREATED_ORDER_IDS):
+        try:
+            response = client.get(f"/store/order/{order_id}", headers=headers)
+            if response.status_code == 404:
+                continue
+            if response.status_code != 200:
+                continue
+            status = response.json()["status"]
+            if status in {"placed", "approved"}:
+                client.post(f"/store/order/{order_id}/cancel", headers=headers)
+            client.delete(f"/store/order/{order_id}", headers=headers)
+        except Exception:
+            continue
+    for user_id in list(CREATED_USER_IDS):
+        try:
+            response = client.get(f"/users/{user_id}", headers=headers)
+            if response.status_code == 404:
+                continue
+            if response.status_code == 200 and response.json()["role"] == "ADMIN":
+                user = response.json()
+                client.put(
+                    f"/users/{user_id}",
+                    headers=headers,
+                    json={
+                        "username": user["username"],
+                        "firstName": user.get("firstName"),
+                        "lastName": user.get("lastName"),
+                        "email": user["email"],
+                        "phone": user.get("phone"),
+                        "role": "USER",
+                        "address": user.get("address"),
+                    },
+                )
+            client.delete(f"/users/{user_id}", headers=headers)
+        except Exception:
+            continue
+    for pet_id in list(CREATED_PET_IDS):
+        try:
+            client.delete(f"/pet/{pet_id}", headers=headers)
+        except Exception:
+            continue
 
 
 def login(client: httpx.Client, email_or_demo: str, password: str) -> str:
@@ -68,6 +122,7 @@ def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> d
     )
     assert response.status_code == 201, response.text
     pet = response.json()
+    CREATED_PET_IDS.add(pet["id"])
     UUID(pet["id"])
     assert pet["version"] == 0
     UUID(pet["category"]["id"])
@@ -106,6 +161,27 @@ def pay_order(client: httpx.Client, token: str, order_id: str,
     )
 
 
+def create_order_draft(
+    client: httpx.Client, token: str, pet_id: str
+) -> httpx.Response:
+    response = client.post(
+        "/store/order",
+        json={"petId": pet_id, "quantity": 1},
+        headers=bearer(token),
+    )
+    if response.status_code == 201:
+        CREATED_ORDER_IDS.add(response.json()["id"])
+    return response
+
+
+def place_order(client: httpx.Client, token: str, pet_id: str) -> httpx.Response:
+    draft = create_order_draft(client, token, pet_id)
+    assert draft.status_code == 201, draft.text
+    return client.post(
+        f"/store/order/{draft.json()['id']}/place", headers=bearer(token)
+    )
+
+
 def api_path(url: str) -> str:
     parsed = urlsplit(url)
     path = parsed.path
@@ -126,6 +202,7 @@ def register_user(client: httpx.Client, prefix: str) -> tuple[dict, str, str, st
     )
     assert response.status_code == 201, response.text
     body = response.json()
+    CREATED_USER_IDS.add(body["user"]["id"])
     UUID(body["user"]["id"])
     assert body["user"]["userStatus"] == "PENDING"
     assert "password" not in body["user"]
@@ -378,6 +455,7 @@ def test_user_cannot_create_pet_but_admin_can(client: httpx.Client) -> None:
     created = client.post("/pet", json=pet, headers=bearer(admin_token))
     assert created.status_code == 201, created.text
     UUID(created.json()["id"])
+    CREATED_PET_IDS.add(created.json()["id"])
 
 
 def test_pet_create_and_update_models_have_separate_validation(
@@ -436,12 +514,17 @@ def test_user_can_create_and_read_own_order(client: httpx.Client) -> None:
     complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet_id = create_pet(client, admin_token)["id"]
+    draft = create_order_draft(client, token, pet_id)
+    assert draft.status_code == 201, draft.text
+    assert draft.json()["status"] == "draft"
+    assert draft.json()["paymentStatus"] == "NOT_STARTED"
+    assert draft.json()["unitPrice"] is None
+    assert client.get(f"/pet/{pet_id}").json()["status"] == "available"
+
     created = client.post(
-        "/store/order",
-        json={"petId": pet_id, "quantity": 1},
-        headers=bearer(token),
+        f"/store/order/{draft.json()['id']}/place", headers=bearer(token)
     )
-    assert created.status_code == 201, created.text
+    assert created.status_code == 200, created.text
     order_id = created.json()["id"]
     UUID(order_id)
     assert created.json()["status"] == "placed"
@@ -465,6 +548,57 @@ def test_user_can_create_and_read_own_order(client: httpx.Client) -> None:
     assert_error(unpaid_approval, 409, "ORDER_NOT_PAID")
 
 
+def test_order_draft_can_be_replaced_and_deleted(client: httpx.Client) -> None:
+    token = login(client, "user1", "password123")
+    admin_token = login(client, "admin", "admin123")
+    first_pet = create_pet(client, admin_token, "Draft first")
+    second_pet = create_pet(client, admin_token, "Draft second")
+    draft = create_order_draft(client, token, first_pet["id"])
+    assert draft.status_code == 201, draft.text
+
+    updated = client.put(
+        f"/store/order/{draft.json()['id']}",
+        json={"petId": second_pet["id"], "quantity": 1},
+        headers=bearer(token),
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["petId"] == second_pet["id"]
+    assert updated.json()["status"] == "draft"
+
+    deleted = client.delete(
+        f"/store/order/{draft.json()['id']}", headers=bearer(token)
+    )
+    assert deleted.status_code == 204, deleted.text
+
+
+def test_concurrent_place_and_delete_are_serialized(client: httpx.Client) -> None:
+    token = login(client, "user1", "password123")
+    complete_profile(client, token)
+    admin_token = login(client, "admin", "admin123")
+    pet_id = create_pet(client, admin_token, "Place delete race")["id"]
+    draft = create_order_draft(client, token, pet_id).json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        place_future = pool.submit(
+            client.post,
+            f"/store/order/{draft['id']}/place",
+            headers=bearer(token),
+        )
+        delete_future = pool.submit(
+            client.delete,
+            f"/store/order/{draft['id']}",
+            headers=bearer(token),
+        )
+        placed = place_future.result()
+        deleted = delete_future.result()
+
+    assert (placed.status_code, deleted.status_code) in {(200, 409), (404, 204)}
+    if placed.status_code == 200:
+        assert_error(deleted, 409, "ORDER_NOT_DELETABLE")
+    else:
+        assert_error(placed, 404, "ORDER_NOT_FOUND")
+
+
 def test_order_reservation_is_atomic_and_cancellation_releases_pet(
     client: httpx.Client,
 ) -> None:
@@ -473,23 +607,23 @@ def test_order_reservation_is_atomic_and_cancellation_releases_pet(
     admin_token = login(client, "admin", "admin123")
     pet_id = create_pet(client, admin_token, "Concurrent")["id"]
 
-    def place_order(_: int) -> httpx.Response:
+    drafts = [create_order_draft(client, token, pet_id).json() for _ in range(2)]
+
+    def place_draft(index: int) -> httpx.Response:
         return client.post(
-            "/store/order",
-            json={"petId": pet_id, "quantity": 1},
-            headers=bearer(token),
+            f"/store/order/{drafts[index]['id']}/place", headers=bearer(token)
         )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(place_order, range(2)))
-    assert sorted(response.status_code for response in results) == [201, 409]
+        results = list(pool.map(place_draft, range(2)))
+    assert sorted(response.status_code for response in results) == [200, 409]
     assert_error(
         next(response for response in results if response.status_code == 409),
         409,
         "PET_NOT_AVAILABLE",
     )
 
-    order = next(response.json() for response in results if response.status_code == 201)
+    order = next(response.json() for response in results if response.status_code == 200)
     cancelled = client.post(
         f"/store/order/{order['id']}/cancel", headers=bearer(token)
     )
@@ -512,13 +646,15 @@ def test_order_lifecycle_requires_admin_and_follows_state_machine(
     complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet_id = create_pet(client, admin_token, "Lifecycle")["id"]
-    created = client.post(
-        "/store/order",
-        json={"petId": pet_id, "quantity": 1},
-        headers=bearer(token),
-    )
-    assert created.status_code == 201, created.text
+    created = place_order(client, token, pet_id)
+    assert created.status_code == 200, created.text
     order_id = created.json()["id"]
+
+    assert_error(
+        client.delete(f"/store/order/{order_id}", headers=bearer(admin_token)),
+        409,
+        "ORDER_NOT_DELETABLE",
+    )
 
     forbidden = client.post(
         f"/store/order/{order_id}/approve", headers=bearer(token)
@@ -572,12 +708,8 @@ def test_user_cannot_access_or_cancel_another_users_order(
     complete_profile(client, user_token)
     complete_profile(client, admin_token)
     pet_id = create_pet(client, admin_token, "Ownership")["id"]
-    created = client.post(
-        "/store/order",
-        json={"petId": pet_id, "quantity": 1},
-        headers=bearer(admin_token),
-    )
-    assert created.status_code == 201, created.text
+    created = place_order(client, admin_token, pet_id)
+    assert created.status_code == 200, created.text
     order_id = created.json()["id"]
 
     forbidden_get = client.get(
@@ -645,6 +777,7 @@ def test_address_registration_validation_update_and_clear(
         },
     )
     assert response.status_code == 201, response.text
+    CREATED_USER_IDS.add(response.json()["user"]["id"])
     assert response.json()["user"]["address"] == DELIVERY_ADDRESS
     assert client.get(api_path(response.json()["confirmationUrl"])).status_code == 200
     token = login(client, email, "AddressPass123")
@@ -684,10 +817,10 @@ def test_order_requires_profile_and_keeps_delivery_and_price_snapshot(
     admin_token = login(client, "admin", "admin123")
     pet = create_pet(client, admin_token, "Snapshot")
 
+    draft = create_order_draft(client, token, pet["id"])
+    assert draft.status_code == 201, draft.text
     incomplete = client.post(
-        "/store/order",
-        json={"petId": pet["id"], "quantity": 1},
-        headers=bearer(token),
+        f"/store/order/{draft.json()['id']}/place", headers=bearer(token)
     )
     assert_error(incomplete, 409, "PROFILE_INCOMPLETE")
     missing = {item["field"] for item in incomplete.json()["details"]}
@@ -695,11 +828,9 @@ def test_order_requires_profile_and_keeps_delivery_and_price_snapshot(
 
     profile = complete_profile(client, token)
     created = client.post(
-        "/store/order",
-        json={"petId": pet["id"], "quantity": 1},
-        headers=bearer(token),
+        f"/store/order/{draft.json()['id']}/place", headers=bearer(token)
     )
-    assert created.status_code == 201, created.text
+    assert created.status_code == 200, created.text
     order = created.json()
     assert float(order["unitPrice"]) == 15000.0
     assert order["deliveryDetails"]["address"] == profile["address"]
@@ -735,11 +866,9 @@ def test_payment_success_idempotency_history_and_paid_cancellation(
     complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet = create_pet(client, admin_token, "Payment")
-    order = client.post(
-        "/store/order",
-        json={"petId": pet["id"], "quantity": 1},
-        headers=bearer(token),
-    ).json()
+    order_response = place_order(client, token, pet["id"])
+    assert order_response.status_code == 200, order_response.text
+    order = order_response.json()
 
     key = str(uuid4())
     paid = pay_order(client, token, order["id"], key=key)
@@ -784,6 +913,29 @@ def test_payment_success_idempotency_history_and_paid_cancellation(
     assert refunded["status"] == "REFUNDED"
     assert client.get(f"/pet/{pet['id']}").json()["status"] == "available"
 
+    assert_error(
+        client.delete(
+            f"/store/order/{order['id']}/payments/{payment['id']}",
+            headers=bearer(admin_token),
+        ),
+        409,
+        "PAYMENT_NOT_DELETABLE",
+    )
+    assert_error(
+        client.delete(f"/store/order/{order['id']}", headers=bearer(token)),
+        403,
+        "ORDER_ACCESS_DENIED",
+    )
+    deleted = client.delete(
+        f"/store/order/{order['id']}", headers=bearer(admin_token)
+    )
+    assert deleted.status_code == 204, deleted.text
+    assert_error(
+        client.get(f"/store/order/{order['id']}", headers=bearer(admin_token)),
+        404,
+        "ORDER_NOT_FOUND",
+    )
+
 
 @pytest.mark.parametrize(
     ("card_number", "error"),
@@ -799,17 +951,25 @@ def test_declined_payment_can_be_retried(
     complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet = create_pet(client, admin_token, "Decline")
-    order = client.post(
-        "/store/order",
-        json={"petId": pet["id"], "quantity": 1},
-        headers=bearer(token),
-    ).json()
+    order_response = place_order(client, token, pet["id"])
+    assert order_response.status_code == 200, order_response.text
+    order = order_response.json()
 
     declined = pay_order(client, token, order["id"], card_number=card_number)
     assert_error(declined, 402, error)
     assert client.get(
         f"/store/order/{order['id']}", headers=bearer(token)
     ).json()["paymentStatus"] == "UNPAID"
+
+    history = client.get(
+        f"/store/order/{order['id']}/payments", headers=bearer(admin_token)
+    ).json()
+    declined_payment = next(item for item in history if item["status"] == "DECLINED")
+    deleted = client.delete(
+        f"/store/order/{order['id']}/payments/{declined_payment['id']}",
+        headers=bearer(admin_token),
+    )
+    assert deleted.status_code == 204, deleted.text
 
     retry = pay_order(client, token, order["id"])
     assert retry.status_code == 201, retry.text
@@ -830,12 +990,8 @@ def test_invalid_payment_details_return_validation_error(
     complete_profile(client, token)
     admin_token = login(client, "admin", "admin123")
     pet = create_pet(client, admin_token, "Invalid payment")
-    order_response = client.post(
-        "/store/order",
-        json={"petId": pet["id"], "quantity": 1},
-        headers=bearer(token),
-    )
-    assert order_response.status_code == 201, order_response.text
+    order_response = place_order(client, token, pet["id"])
+    assert order_response.status_code == 200, order_response.text
     order = order_response.json()
 
     payload = {
@@ -878,11 +1034,9 @@ def test_parallel_payment_and_payment_ownership(client: httpx.Client) -> None:
     complete_profile(client, user_token)
     complete_profile(client, admin_token)
     pet = create_pet(client, admin_token, "Parallel payment")
-    order = client.post(
-        "/store/order",
-        json={"petId": pet["id"], "quantity": 1},
-        headers=bearer(admin_token),
-    ).json()
+    order_response = place_order(client, admin_token, pet["id"])
+    assert order_response.status_code == 200, order_response.text
+    order = order_response.json()
 
     forbidden = pay_order(client, user_token, order["id"])
     assert_error(forbidden, 403, "ORDER_ACCESS_DENIED")
@@ -896,17 +1050,45 @@ def test_parallel_payment_and_payment_ownership(client: httpx.Client) -> None:
     assert len({response.json()["id"] for response in results}) == 1
 
 
-def test_destructive_user_and_order_operations_are_not_available(
+def test_safe_order_and_user_cleanup_rules(
     client: httpx.Client,
 ) -> None:
-    user_token = login(client, "user1", "password123")
     admin_token = login(client, "admin", "admin123")
+    registration, _, email, password = register_user(client, "cleanup")
+    user_id = registration["user"]["id"]
+    assert client.get(api_path(registration["confirmationUrl"])).status_code == 200
+    user_token = login(client, email, password)
+    pet = create_pet(client, admin_token, "Cleanup")
+    draft = create_order_draft(client, user_token, pet["id"])
+    assert draft.status_code == 201, draft.text
+
+    has_orders = client.delete(f"/users/{user_id}", headers=bearer(admin_token))
+    assert_error(has_orders, 409, "USER_HAS_ORDERS")
+
+    deleted_draft = client.delete(
+        f"/store/order/{draft.json()['id']}", headers=bearer(user_token)
+    )
+    assert deleted_draft.status_code == 204, deleted_draft.text
+
+    deleted_user = client.delete(f"/users/{user_id}", headers=bearer(admin_token))
+    assert deleted_user.status_code == 204, deleted_user.text
+    assert_error(client.get("/user/me", headers=bearer(user_token)), 401, "INVALID_TOKEN")
 
     assert client.delete("/user/me", headers=bearer(user_token)).status_code == 405
     assert client.delete("/user/user1", headers=bearer(admin_token)).status_code == 404
-    assert (
-        client.delete(f"/store/order/{uuid4()}", headers=bearer(admin_token)).status_code
-        == 405
+
+    admin = client.get("/user/me", headers=bearer(admin_token)).json()
+    assert_error(
+        client.delete(f"/users/{admin['id']}", headers=bearer(admin_token)),
+        403,
+        "ADMIN_ACCOUNT_PROTECTED",
+    )
+    demo_token = login(client, "user1", "password123")
+    demo = client.get("/user/me", headers=bearer(demo_token)).json()
+    assert_error(
+        client.delete(f"/users/{demo['id']}", headers=bearer(admin_token)),
+        403,
+        "DEMO_ACCOUNT_PROTECTED",
     )
 
 

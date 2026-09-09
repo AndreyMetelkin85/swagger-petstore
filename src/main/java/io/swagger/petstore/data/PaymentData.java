@@ -138,6 +138,48 @@ public class PaymentData {
         }
     }
 
+    /** Deletes a declined attempt while serializing against all order payment operations. */
+    public void deleteDeclinedPayment(final UUID orderId, final UUID paymentId) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                if (OrderData.lockOrder(connection, orderId) == null) {
+                    throw new PaymentException(404, "ORDER_NOT_FOUND", "Order was not found");
+                }
+                final Payment payment;
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT " + COLUMNS + " FROM payments "
+                                + "WHERE order_id = ? AND id = ? FOR UPDATE")) {
+                    statement.setObject(1, orderId);
+                    statement.setObject(2, paymentId);
+                    try (ResultSet result = statement.executeQuery()) {
+                        if (!result.next()) {
+                            throw new PaymentException(404, "PAYMENT_NOT_FOUND",
+                                    "Payment was not found");
+                        }
+                        payment = map(result);
+                    }
+                }
+                if (payment.getStatus() != PaymentAttemptStatus.DECLINED) {
+                    throw new PaymentException(409, "PAYMENT_NOT_DELETABLE",
+                            "Only declined payment attempts can be deleted separately");
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM payments WHERE id = ? AND order_id = ?")) {
+                    statement.setObject(1, paymentId);
+                    statement.setObject(2, orderId);
+                    statement.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                OrderData.rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("delete payment", exception);
+        }
+    }
+
     private static void assertOrderAccess(final UUID orderId, final User actor, final boolean admin) {
         try (Connection connection = Database.connect();
              PreparedStatement statement = connection.prepareStatement(
