@@ -237,6 +237,28 @@ public class AuthService {
         }
     }
 
+    public void deleteUser(final User actor, final UUID userId) {
+        final UserData.DeletionResult result = userData.deleteUser(actor.getId(), userId);
+        switch (result) {
+            case DELETED:
+                return;
+            case NOT_FOUND:
+                throw new AccountException(Response.Status.NOT_FOUND, "USER_NOT_FOUND",
+                        "User was not found");
+            case ADMIN_PROTECTED:
+                throw new AccountException(Response.Status.FORBIDDEN, "ADMIN_ACCOUNT_PROTECTED",
+                        "Administrator accounts cannot be deleted");
+            case DEMO_PROTECTED:
+                throw new AccountException(Response.Status.FORBIDDEN, "DEMO_ACCOUNT_PROTECTED",
+                        "The demonstration user account cannot be deleted");
+            case HAS_ORDERS:
+                throw new AccountException(Response.Status.CONFLICT, "USER_HAS_ORDERS",
+                        "Delete the user's orders before deleting the account");
+            default:
+                throw new IllegalStateException("Unsupported user deletion result: " + result);
+        }
+    }
+
     public User blockUser(final User actor, final UUID userId) {
         final User target = manageableUser(actor, userId);
         if (target.getUserStatus() == AccountStatus.BLOCKED) {

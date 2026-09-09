@@ -16,6 +16,8 @@ import static org.junit.Assert.assertTrue;
 public class DatabaseMigrationContractTest {
     private static final String MIGRATION =
             "/db/migration/V7__reorder_database_columns.sql";
+    private static final String ORDER_DRAFT_MIGRATION =
+            "/db/migration/V8__order_drafts_and_protected_accounts.sql";
 
     @Test
     public void v7DefinesTheRequiredPhysicalColumnOrder() throws IOException {
@@ -53,6 +55,18 @@ public class DatabaseMigrationContractTest {
                 "FOREIGN KEY (pet_id) REFERENCES pets(id) ON DELETE RESTRICT NOT VALID"));
     }
 
+    @Test
+    public void v8AddsDraftsWithoutChangingRestrictiveForeignKeys() throws IOException {
+        final String sql = readResource(ORDER_DRAFT_MIGRATION);
+
+        assertTrue(sql.contains("ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'draft'"));
+        assertTrue(sql.contains("ALTER TYPE order_payment_status ADD VALUE IF NOT EXISTS 'NOT_STARTED'"));
+        assertTrue(sql.contains("CREATE TABLE protected_user_accounts"));
+        assertTrue(sql.contains("REFERENCES users(id) ON DELETE RESTRICT"));
+        assertTrue(sql.contains("ALTER COLUMN unit_price DROP NOT NULL"));
+        assertTrue(sql.contains("ALTER COLUMN total_amount DROP NOT NULL"));
+    }
+
     private static List<String> columnsOf(final String sql, final String table) {
         final String marker = "CREATE TABLE " + table + " (";
         final int start = sql.indexOf(marker);
@@ -66,8 +80,12 @@ public class DatabaseMigrationContractTest {
     }
 
     private static String readMigration() throws IOException {
-        try (InputStream input = DatabaseMigrationContractTest.class.getResourceAsStream(MIGRATION)) {
-            return new String(Objects.requireNonNull(input, "Missing " + MIGRATION).readAllBytes(),
+        return readResource(MIGRATION);
+    }
+
+    private static String readResource(final String resource) throws IOException {
+        try (InputStream input = DatabaseMigrationContractTest.class.getResourceAsStream(resource)) {
+            return new String(Objects.requireNonNull(input, "Missing " + resource).readAllBytes(),
                     StandardCharsets.UTF_8);
         }
     }

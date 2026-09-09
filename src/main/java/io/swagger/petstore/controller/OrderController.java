@@ -69,7 +69,7 @@ public class OrderController {
                 .entity(order);
     }
 
-    public ResponseContext placeOrder(final RequestContext request, final OrderCreateRequest order) {
+    public ResponseContext createOrderDraft(final RequestContext request, final OrderCreateRequest order) {
         final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
         if (!auth.isAuthorized()) {
             return auth.toResponse();
@@ -78,20 +78,73 @@ public class OrderController {
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
-        final List<ErrorDetail> missingProfile =
-                ValidationService.missingOrderProfileFields(auth.getUser());
-        if (!missingProfile.isEmpty()) {
-            return Responses.error(Response.Status.CONFLICT, "PROFILE_INCOMPLETE",
-                    "Complete the delivery profile before placing an order", missingProfile);
-        }
         try {
-            final Order created = ORDER_DATA.placeOrder(order, auth.getUser());
+            final Order created = ORDER_DATA.createDraft(order, auth.getUser());
             return new ResponseContext()
                     .status(Response.Status.CREATED)
                     .contentType(Util.getMediaType(request))
                     .entity(created);
         } catch (OrderException exception) {
-            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+            return orderError(exception);
+        }
+    }
+
+    public ResponseContext updateOrderDraft(final RequestContext request, final UUID orderId,
+                                            final OrderCreateRequest order) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (orderId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Order id must be a valid UUID");
+        }
+        final List<ErrorDetail> errors = ValidationService.validateOrder(order);
+        if (!errors.isEmpty()) {
+            return Responses.validation(errors);
+        }
+        try {
+            final Order updated = ORDER_DATA.updateDraft(orderId, order, auth.getUser().getId(),
+                    auth.getUser().getRole() == Role.ADMIN);
+            return new ResponseContext().contentType(Util.getMediaType(request)).entity(updated);
+        } catch (OrderException exception) {
+            return orderError(exception);
+        }
+    }
+
+    public ResponseContext placeOrderDraft(final RequestContext request, final UUID orderId) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (orderId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Order id must be a valid UUID");
+        }
+        try {
+            final Order placed = ORDER_DATA.placeDraft(orderId, auth.getUser().getId(),
+                    auth.getUser().getRole() == Role.ADMIN);
+            return new ResponseContext().contentType(Util.getMediaType(request)).entity(placed);
+        } catch (OrderException exception) {
+            return orderError(exception);
+        }
+    }
+
+    public ResponseContext deleteOrder(final RequestContext request, final UUID orderId) {
+        final AuthResult auth = authService.authorize(request, Role.USER, Role.ADMIN);
+        if (!auth.isAuthorized()) {
+            return auth.toResponse();
+        }
+        if (orderId == null) {
+            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
+                    "Order id must be a valid UUID");
+        }
+        try {
+            ORDER_DATA.deleteOrder(orderId, auth.getUser().getId(),
+                    auth.getUser().getRole() == Role.ADMIN);
+            return new ResponseContext().status(Response.Status.NO_CONTENT);
+        } catch (OrderException exception) {
+            return orderError(exception);
         }
     }
 
@@ -130,8 +183,13 @@ public class OrderController {
                     .contentType(Util.getMediaType(request))
                     .entity(updated);
         } catch (OrderException exception) {
-            return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+            return orderError(exception);
         }
+    }
+
+    private ResponseContext orderError(final OrderException exception) {
+        return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage(),
+                exception.getDetails());
     }
 
 }

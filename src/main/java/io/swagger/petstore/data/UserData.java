@@ -353,6 +353,53 @@ public class UserData {
         }
     }
 
+    /** Deletes a user only when protected-account and order-retention rules allow it. */
+    public DeletionResult deleteUser(final UUID actorUserId, final UUID userId) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                final User target = findUserById(connection, userId);
+                if (target == null) {
+                    connection.rollback();
+                    return DeletionResult.NOT_FOUND;
+                }
+                if (actorUserId.equals(userId) || target.getRole() == Role.ADMIN) {
+                    connection.rollback();
+                    return DeletionResult.ADMIN_PROTECTED;
+                }
+                if (exists(connection,
+                        "SELECT 1 FROM protected_user_accounts WHERE user_id = ?", userId)) {
+                    connection.rollback();
+                    return DeletionResult.DEMO_PROTECTED;
+                }
+                if (exists(connection,
+                        "SELECT 1 FROM store_orders WHERE owner_user_id = ?", userId)) {
+                    connection.rollback();
+                    return DeletionResult.HAS_ORDERS;
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM users WHERE id = ?")) {
+                    statement.setObject(1, userId);
+                    if (statement.executeUpdate() != 1) {
+                        connection.rollback();
+                        return DeletionResult.NOT_FOUND;
+                    }
+                }
+                connection.commit();
+                return DeletionResult.DELETED;
+            } catch (SQLException | RuntimeException exception) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackFailure) {
+                    exception.addSuppressed(rollbackFailure);
+                }
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("delete user", exception);
+        }
+    }
+
     private static void bindUser(final PreparedStatement statement, final int start, final User user,
                                  final String confirmationHash, final Date confirmationExpiresAt)
             throws SQLException {
@@ -443,12 +490,30 @@ public class UserData {
         private static final long serialVersionUID = 1L;
     }
 
-    private static User findUserById(final Connection connection, final UUID userId) throws SQLException {
+    public enum DeletionResult {
+        DELETED,
+        NOT_FOUND,
+        ADMIN_PROTECTED,
+        DEMO_PROTECTED,
+        HAS_ORDERS
+    }
+
+    static User findUserById(final Connection connection, final UUID userId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT " + COLUMNS + " FROM users WHERE id = ? FOR UPDATE")) {
             statement.setObject(1, userId);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? map(result) : null;
+            }
+        }
+    }
+
+    private static boolean exists(final Connection connection, final String sql, final UUID id)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, id);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
             }
         }
     }

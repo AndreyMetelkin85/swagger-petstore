@@ -20,16 +20,17 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - ID новых питомцев и заказов создаются сервером, create-модели отделены от update-моделей;
 - один питомец может иметь только один активный заказ, резервирование выполняется атомарно;
 - изменения питомца защищены версией записи: устаревший `PUT` получает `409 PET_VERSION_CONFLICT`;
-- заказ проходит состояния `placed`, `approved`, `shipped`, `delivered` или `cancelled`;
-- создание заказа резервирует питомца, отмена снимает резерв, доставка переводит его в `sold`;
+- заказ проходит состояния `draft`, `placed`, `approved`, `shipped`, `delivered`, `cancelled` или `expired`;
+- черновик не резервирует питомца; резерв, цена и доставка фиксируются только при оформлении;
 - профиль хранит один российский адрес, а заказ — неизменяемый снимок контактов и доставки;
 - цена питомца хранится в рублях и фиксируется в заказе на момент оформления;
 - добавлен локальный симулятор тестовых платежей с idempotency, отказами, refund и истечением резерва;
-- пользователи и заказы не удаляются через API, поэтому профиль владельца и история покупок не теряются;
+- добавлена безопасная очистка тестовых пользователей, черновиков, завершённых заказов и отклонённых платежей;
 - операции изменения pets и управления пользователями защищены ролью `ADMIN`;
 - отсутствие/ошибка/истечение токена дают `401`, недостаточная роль — `403`;
 - ошибки имеют единый JSON-контракт `status`, `error`, `message`, `details`;
 - устаревшие зачёркнутые операции удалены из Swagger UI;
+- пустой раздел `Parameters / No parameters` скрывается во всех операциях без параметров;
 - разделы Swagger имеют английские названия, а операции — нейтральные русские названия;
 - OpenAPI содержит подробные описания, `operationId`, примеры, перечисления,
   форматы и ограничения;
@@ -38,7 +39,7 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - идентификаторы users, pets, categories, tags и orders имеют формат UUID;
 - статусы аккаунтов, питомцев и заказов представлены PostgreSQL ENUM;
 - Flyway применяет версионированные миграции без удаления существующих данных;
-- внешние ключи запрещают удаление владельца заказа, а уникальный индекс не допускает два активных заказа на одного питомца;
+- внешние ключи запрещают обход правил удаления, а уникальный индекс не допускает два активных заказа на одного питомца;
 - Dockerfile стал multi-stage и не требует заранее выполнять Maven на хосте;
 - Compose публикует API и PostgreSQL только на loopback и хранит БД в отдельном named volume;
 - добавлены Java contract tests и Pytest/httpx smoke tests.
@@ -258,10 +259,11 @@ Invoke-RestMethod -Uri "http://localhost:8080/api/v3/user/me" -Headers $headers
 
 USER/ADMIN:
 
-- `GET`, `PUT /user/me` (`PUT` изменяет только firstName, lastName и phone);
-- `POST /store/order`;
+- `GET`, `PUT /user/me` (`PUT` изменяет firstName, lastName, phone и address);
+- `POST /store/order` (создание `draft`);
 - `GET /store/order`;
-- `GET /store/order/{orderId}` (USER видит только свой заказ).
+- `GET`, `PUT`, `DELETE /store/order/{orderId}` (USER управляет только своим `draft`);
+- `POST /store/order/{orderId}/place`;
 - `POST /store/order/{orderId}/cancel` (USER отменяет только свой заказ).
 
 ADMIN:
@@ -272,8 +274,10 @@ ADMIN:
 - `POST /store/order/{orderId}/approve`;
 - `POST /store/order/{orderId}/ship`;
 - `POST /store/order/{orderId}/deliver`;
+- `DELETE /store/order/{orderId}` для `draft`, `delivered`, `cancelled` и `expired`;
+- `DELETE /store/order/{orderId}/payments/{paymentId}` для платежа `DECLINED`;
 - `GET /users`;
-- `GET`, `PUT /users/{userId}`;
+- `GET`, `PUT`, `DELETE /users/{userId}`;
 - `POST /admin/users/{userId}/block`;
 - `POST /admin/users/{userId}/unblock`.
 
@@ -358,10 +362,12 @@ curl -i -X POST http://localhost:8080/api/v3/pet \
 
 ### Жизненный цикл заказа
 
-Новый заказ создаётся в состоянии `placed`, после чего администратор последовательно
-переводит его в `approved`, `shipped` и `delivered`. Заказ можно отменить из состояний
-`placed` и `approved`. Питомец в активном заказе имеет статус `reserved`; после отмены
-он снова становится `available`, после доставки — `sold`.
+`POST /store/order` создаёт `draft`, который можно менять и удалять без резерва питомца.
+`POST /store/order/{orderId}/place` проверяет профиль и доступность питомца, фиксирует
+цену и адрес, переводит заказ в `placed` и запускает 15-минутный срок оплаты. После
+оплаты администратор переводит заказ в `approved`, `shipped` и `delivered`. Отмена
+разрешена в `placed` и `approved`; оплаченная отмена выполняет refund. Физическое
+удаление активных `placed`, `approved` и `shipped` запрещено.
 
 ## Проверки
 

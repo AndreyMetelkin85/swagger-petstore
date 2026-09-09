@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 /** Payment state stored on an order. */
 public enum PaymentStatus {
+    NOT_STARTED,
     NOT_REQUIRED,
     UNPAID,
     PAID,
