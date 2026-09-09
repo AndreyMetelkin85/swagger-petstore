@@ -354,6 +354,8 @@ public class OpenApiContractTest {
         assertTrue(html.contains("HideEmptyParametersPlugin"));
         assertTrue(html.contains(".opblock-section > .parameters-container"));
         assertTrue(html.contains("section.classList.toggle(\"empty-parameters\", !hasParameters)"));
+        assertTrue(html.contains(".opblock-section.empty-parameters > .opblock-section-header:first-child > .tab-header"));
+        assertFalse(html.contains(".opblock-section.empty-parameters > .opblock-section-header:first-child,"));
         assertTrue(html.contains("SwaggerUIBundle.plugins.DownloadUrl,\n        HideEmptyParametersPlugin"));
     }
 
