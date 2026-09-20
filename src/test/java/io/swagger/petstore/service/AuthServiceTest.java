@@ -2,6 +2,7 @@ package io.swagger.petstore.service;
 
 import io.swagger.petstore.data.UserData;
 import io.swagger.petstore.model.AccountStatus;
+import io.swagger.petstore.model.PasswordResetLinkResponse;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
 import org.junit.Test;
@@ -16,6 +17,7 @@ import java.util.UUID;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class AuthServiceTest {
@@ -73,6 +75,27 @@ public class AuthServiceTest {
             assertEquals(Response.Status.GONE, expected.getStatus());
             assertEquals("RESET_LINK_EXPIRED", expected.getCode());
         }
+    }
+
+    @Test
+    public void forgotPasswordReturnsResetLinkInTrainingMode() {
+        final User user = user();
+        final PasswordResetLinkResponse response = service(user).forgotPassword(user.getEmail());
+
+        assertTrue(response.getResetUrl().startsWith(
+                "http://localhost/api/v3/auth/password/reset/" + USER_ID + "?code="));
+        assertEquals(NOW.plusSeconds(30 * 60).toString(), response.getExpiresAt());
+        assertNotNull(user.getResetCodeHash());
+    }
+
+    @Test
+    public void forgotPasswordHidesResetLinkWhenExplicitlyDisabled() {
+        final User user = user();
+        final PasswordResetLinkResponse response = service(user, false).forgotPassword(user.getEmail());
+
+        assertNull(response.getResetUrl());
+        assertEquals(NOW.plusSeconds(30 * 60).toString(), response.getExpiresAt());
+        assertNotNull(user.getResetCodeHash());
     }
 
     @Test
@@ -152,6 +175,10 @@ public class AuthServiceTest {
     }
 
     private AuthService service(final User user) {
+        return service(user, true);
+    }
+
+    private AuthService service(final User user, final boolean exposeTestLinks) {
         final UserData repository = new UserData() {
             @Override
             public User findUserById(UUID id) {
@@ -166,6 +193,17 @@ public class AuthServiceTest {
             @Override
             public User findUserByEmail(final String email) {
                 return user.getEmail().equalsIgnoreCase(email) ? user : null;
+            }
+
+            @Override
+            public User setResetLink(final UUID userId, final String hash, final Date expiresAt) {
+                if (!USER_ID.equals(userId)) {
+                    return null;
+                }
+                user.setResetCodeHash(hash);
+                user.setResetExpiresAt(expiresAt);
+                user.setResetUsedAt(null);
+                return user;
             }
 
             @Override
@@ -192,7 +230,7 @@ public class AuthServiceTest {
             }
         };
         return new AuthService(repository, new TokenService(), credentials,
-                Clock.fixed(NOW, ZoneOffset.UTC), "http://localhost/api/v3");
+                Clock.fixed(NOW, ZoneOffset.UTC), "http://localhost/api/v3", exposeTestLinks);
     }
 
     private User user() {

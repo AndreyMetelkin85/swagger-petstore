@@ -21,7 +21,7 @@ ENV JAVA_HOME=/opt/java/openjdk \
     PATH=/opt/java/openjdk/bin:/usr/local/tomcat/bin:$PATH \
     CATALINA_OPTS="-Dconfig=/app/inflector.yaml -DswaggerUrl=/app/openapi.yaml" \
     PETSTORE_PUBLIC_BASE_URL=http://localhost:8080/api/v3 \
-    PETSTORE_EXPOSE_TEST_LINKS=false
+    PETSTORE_EXPOSE_TEST_LINKS=true
 
 COPY --from=tomcat /opt/java/openjdk /opt/java/openjdk
 COPY --from=tomcat /usr/local/tomcat /usr/local/tomcat

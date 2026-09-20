@@ -2950,7 +2950,7 @@ components:
           type: string
           format: uri
           nullable: true
-          description: Доступна только при PETSTORE_EXPOSE_TEST_LINKS=true в изолированном учебном окружении.
+          description: Возвращается по умолчанию в учебном окружении; отсутствует при PETSTORE_EXPOSE_TEST_LINKS=false.
         expiresAt:
           type: string
           format: date-time
