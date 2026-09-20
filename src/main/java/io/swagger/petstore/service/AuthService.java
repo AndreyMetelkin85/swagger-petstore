@@ -477,7 +477,8 @@ public class AuthService {
     }
 
     private static boolean configuredTestLinkExposure() {
-        return Boolean.parseBoolean(System.getenv("PETSTORE_EXPOSE_TEST_LINKS"));
+        final String configured = System.getenv("PETSTORE_EXPOSE_TEST_LINKS");
+        return configured == null || Boolean.parseBoolean(configured);
     }
 
     private static String trimTrailingSlash(String value) {
