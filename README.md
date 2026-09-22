@@ -255,7 +255,7 @@ Invoke-RestMethod -Uri "http://localhost:8080/api/v3/user/me" -Headers $headers
 - `POST /auth/confirmation/resend`;
 - `POST /auth/login`;
 - `POST /auth/password/forgot`;
-- `POST /auth/password/reset/{userId}`;
+- `POST /auth/password/reset`;
 - `GET /pet/findByStatus`;
 - `GET /pet/findByTags`;
 - `GET /pet/{petId}`.

@@ -18,6 +18,8 @@ public class DatabaseMigrationContractTest {
             "/db/migration/V7__reorder_database_columns.sql";
     private static final String ORDER_DRAFT_MIGRATION =
             "/db/migration/V8__order_drafts_and_protected_accounts.sql";
+    private static final String PASSWORD_RESET_INDEX_MIGRATION =
+            "/db/migration/V9__index_password_reset_code.sql";
 
     @Test
     public void v7DefinesTheRequiredPhysicalColumnOrder() throws IOException {
@@ -65,6 +67,15 @@ public class DatabaseMigrationContractTest {
         assertTrue(sql.contains("REFERENCES users(id) ON DELETE RESTRICT"));
         assertTrue(sql.contains("ALTER COLUMN unit_price DROP NOT NULL"));
         assertTrue(sql.contains("ALTER COLUMN total_amount DROP NOT NULL"));
+    }
+
+    @Test
+    public void v9IndexesPasswordResetCodeLookup() throws IOException {
+        final String sql = readResource(PASSWORD_RESET_INDEX_MIGRATION);
+
+        assertTrue(sql.contains("CREATE INDEX idx_users_reset_code_hash"));
+        assertTrue(sql.contains("ON users (reset_code_hash)"));
+        assertTrue(sql.contains("WHERE reset_code_hash IS NOT NULL"));
     }
 
     private static List<String> columnsOf(final String sql, final String table) {
