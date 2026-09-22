@@ -143,12 +143,17 @@ public class AuthService {
         final String code = credentialService.newOneTimeCode();
         final Instant expiresAt = clock.instant().plus(PASSWORD_RESET_TTL_MINUTES, ChronoUnit.MINUTES);
         userData.setResetLink(user.getId(), credentialService.hashOneTimeCode(code), Date.from(expiresAt));
-        final String resetUrl = exposeTestLinks ? resetUrl(user.getId(), code) : null;
+        final String resetUrl = exposeTestLinks ? resetUrl(code) : null;
         return new PasswordResetLinkResponse(resetUrl, expiresAt.toString());
     }
 
-    public void resetPassword(final UUID userId, final String code, final String newPassword) {
-        final User user = requiredUser(userId);
+    public void resetPassword(final String code, final String newPassword) {
+        final String codeHash = credentialService.hashOneTimeCode(code);
+        final User user = userData.findUserByResetCodeHash(codeHash);
+        if (user == null) {
+            throw new AccountException(Response.Status.BAD_REQUEST, "INVALID_RESET_LINK",
+                    "The one-time link is invalid");
+        }
         if (user.getResetUsedAt() != null
                 && credentialService.codeMatches(code, user.getResetCodeHash())) {
             throw new AccountException(Response.Status.CONFLICT, "RESET_LINK_ALREADY_USED",
@@ -156,10 +161,10 @@ public class AuthService {
         }
         validateCode(code, user.getResetCodeHash(), user.getResetExpiresAt(),
                 "INVALID_RESET_LINK", "RESET_LINK_EXPIRED");
-        final User reset = userData.resetPassword(userId, user.getResetCodeHash(),
+        final User reset = userData.resetPassword(user.getId(), user.getResetCodeHash(),
                 credentialService.hashPassword(newPassword));
         if (reset == null) {
-            final User current = requiredUser(userId);
+            final User current = requiredUser(user.getId());
             if (current.getResetUsedAt() != null
                     && credentialService.codeMatches(code, current.getResetCodeHash())) {
                 throw new AccountException(Response.Status.CONFLICT, "RESET_LINK_ALREADY_USED",
@@ -467,8 +472,8 @@ public class AuthService {
         return publicBaseUrl + "/auth/confirm/" + userId + "?code=" + code;
     }
 
-    private String resetUrl(UUID userId, String code) {
-        return publicBaseUrl + "/auth/password/reset/" + userId + "?code=" + code;
+    private String resetUrl(String code) {
+        return publicBaseUrl + "/auth/password/reset?code=" + code;
     }
 
     private static String configuredBaseUrl() {

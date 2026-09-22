@@ -52,7 +52,7 @@ public class AuthServiceTest {
         final AuthService service = service(user);
 
         try {
-            service.resetPassword(USER_ID, code, "NewSecurePass123");
+            service.resetPassword(code, "NewSecurePass123");
             fail("Consumed reset link must be rejected");
         } catch (AccountException expected) {
             assertEquals(Response.Status.CONFLICT, expected.getStatus());
@@ -69,11 +69,25 @@ public class AuthServiceTest {
         final AuthService service = service(user);
 
         try {
-            service.resetPassword(USER_ID, code, "NewSecurePass123");
+            service.resetPassword(code, "NewSecurePass123");
             fail("Expired reset link must be rejected");
         } catch (AccountException expected) {
             assertEquals(Response.Status.GONE, expected.getStatus());
             assertEquals("RESET_LINK_EXPIRED", expected.getCode());
+        }
+    }
+
+    @Test
+    public void unknownResetCodeReturnsInvalidLink() {
+        final User user = user();
+        final AuthService service = service(user);
+
+        try {
+            service.resetPassword("unknown-reset-code", "NewSecurePass123");
+            fail("Unknown reset code must be rejected");
+        } catch (AccountException expected) {
+            assertEquals(Response.Status.BAD_REQUEST, expected.getStatus());
+            assertEquals("INVALID_RESET_LINK", expected.getCode());
         }
     }
 
@@ -83,7 +97,7 @@ public class AuthServiceTest {
         final PasswordResetLinkResponse response = service(user).forgotPassword(user.getEmail());
 
         assertTrue(response.getResetUrl().startsWith(
-                "http://localhost/api/v3/auth/password/reset/" + USER_ID + "?code="));
+                "http://localhost/api/v3/auth/password/reset?code="));
         assertEquals(NOW.plusSeconds(30 * 60).toString(), response.getExpiresAt());
         assertNotNull(user.getResetCodeHash());
     }
@@ -170,7 +184,7 @@ public class AuthServiceTest {
             assertEquals("LOGIN_RATE_LIMITED", expected.getCode());
         }
 
-        service.resetPassword(USER_ID, code, "NewSecurePass123");
+        service.resetPassword(code, "NewSecurePass123");
         assertNotNull(service.login(user.getEmail(), "NewSecurePass123"));
     }
 
@@ -193,6 +207,11 @@ public class AuthServiceTest {
             @Override
             public User findUserByEmail(final String email) {
                 return user.getEmail().equalsIgnoreCase(email) ? user : null;
+            }
+
+            @Override
+            public User findUserByResetCodeHash(final String resetCodeHash) {
+                return resetCodeHash != null && resetCodeHash.equals(user.getResetCodeHash()) ? user : null;
             }
 
             @Override

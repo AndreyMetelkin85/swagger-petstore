@@ -63,6 +63,10 @@ public class UserData {
         }
     }
 
+    public User findUserByResetCodeHash(final String resetCodeHash) {
+        return findOne("reset_code_hash = ?", resetCodeHash);
+    }
+
     private User findOne(final String condition, final String value) {
         if (value == null) {
             return null;

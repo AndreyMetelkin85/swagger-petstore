@@ -405,7 +405,7 @@ def test_password_reset_validation_names_new_password_field(
     client: httpx.Client,
 ) -> None:
     response = client.post(
-        f"/auth/password/reset/{uuid4()}?code=unused-test-code",
+        "/auth/password/reset?code=unused-test-code",
         json={"newPassword": "short"},
     )
     assert_error(response, 422, "VALIDATION_ERROR")
