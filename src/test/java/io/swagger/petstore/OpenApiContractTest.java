@@ -55,7 +55,8 @@ public class OpenApiContractTest {
         assertNotNull(openAPI.getPaths().get("/auth/confirm/{userId}"));
         assertNotNull(openAPI.getPaths().get("/auth/confirmation/resend"));
         assertNotNull(openAPI.getPaths().get("/auth/password/forgot"));
-        assertNotNull(openAPI.getPaths().get("/auth/password/reset/{userId}"));
+        assertNotNull(openAPI.getPaths().get("/auth/password/reset"));
+        assertNull(openAPI.getPaths().get("/auth/password/reset/{userId}"));
         assertNotNull(openAPI.getPaths().get("/admin/users/{userId}/block"));
         assertNotNull(openAPI.getPaths().get("/admin/users/{userId}/unblock"));
         assertNotNull(openAPI.getPaths().get("/user/me"));
@@ -216,7 +217,7 @@ public class OpenApiContractTest {
                 "LOGIN_RATE_LIMITED");
         assertErrorCodes(openAPI.getPaths().get("/auth/confirmation/resend").getPost(), "429",
                 "LOGIN_RATE_LIMITED");
-        assertErrorCodes(openAPI.getPaths().get("/auth/password/reset/{userId}").getPost(), "409",
+        assertErrorCodes(openAPI.getPaths().get("/auth/password/reset").getPost(), "409",
                 "RESET_LINK_ALREADY_USED", "RESET_STATE_CHANGED");
         assertErrorCodes(openAPI.getPaths().get("/pet/{petId}").getGet(), "404", "PET_NOT_FOUND");
         assertErrorCodes(openAPI.getPaths().get("/store/order/{orderId}").getGet(), "404",

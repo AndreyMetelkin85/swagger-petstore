@@ -15,6 +15,8 @@ public class PetstoreExceptionMapperTest {
                 "Input error: missing required query parameter `status`", "/api/v3/pet/findByStatus");
         assertIdentity("BAD_REQUEST", "Request body contains malformed or incompatible JSON",
                 "Input error: unable to convert input to LoginRequest", "/api/v3/auth/login");
+        assertIdentity("INVALID_RESET_LINK", "The one-time link is invalid",
+                "Input error: missing required query parameter `code`", "/api/v3/auth/password/reset");
     }
 
     private void assertIdentity(String error, String message, String source, String path) {

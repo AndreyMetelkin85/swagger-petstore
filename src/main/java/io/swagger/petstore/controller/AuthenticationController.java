@@ -16,7 +16,6 @@ import io.swagger.petstore.utils.Util;
 
 import javax.ws.rs.core.Response;
 import java.util.List;
-import java.util.UUID;
 
 public class AuthenticationController {
     private final AuthService authService = AuthService.getInstance();
@@ -53,18 +52,14 @@ public class AuthenticationController {
         }
     }
 
-    public ResponseContext resetPassword(final RequestContext request, final UUID userId,
-                                         final String code, final PasswordResetRequest body) {
+    public ResponseContext resetPassword(final RequestContext request, final String code,
+                                         final PasswordResetRequest body) {
         final List<ErrorDetail> errors = ValidationService.validatePasswordReset(body);
         if (!errors.isEmpty()) {
             return Responses.validation(errors);
         }
-        if (userId == null) {
-            return Responses.error(Response.Status.BAD_REQUEST, "BAD_REQUEST",
-                    "User id must be a valid UUID");
-        }
         try {
-            authService.resetPassword(userId, code, body.getNewPassword());
+            authService.resetPassword(code, body.getNewPassword());
             return new ResponseContext().status(Response.Status.NO_CONTENT);
         } catch (AccountException exception) {
             return accountError(exception);

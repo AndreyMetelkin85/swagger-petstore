@@ -67,7 +67,7 @@ public class PetstoreExceptionMapper implements ExceptionMapper<Exception> {
                 if (requestPath.contains("/auth/confirm/")) {
                     return new ErrorIdentity("INVALID_CONFIRMATION_LINK", "The one-time link is invalid");
                 }
-                if (requestPath.contains("/auth/password/reset/")) {
+                if (requestPath.contains("/auth/password/reset")) {
                     return new ErrorIdentity("INVALID_RESET_LINK", "The one-time link is invalid");
                 }
             }
@@ -86,8 +86,7 @@ public class PetstoreExceptionMapper implements ExceptionMapper<Exception> {
                     return new ErrorIdentity("BAD_REQUEST", "Order id must be a valid UUID");
                 }
                 if (requestPath.contains("/admin/users/")
-                        || requestPath.contains("/auth/confirm/")
-                        || requestPath.contains("/auth/password/reset/")) {
+                        || requestPath.contains("/auth/confirm/")) {
                     return new ErrorIdentity("BAD_REQUEST", "User id must be a valid UUID");
                 }
                 if (requestPath.contains("/pet/")) {
