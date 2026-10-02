@@ -66,6 +66,7 @@ public class RegistrationController {
     }
 
     private ResponseContext accountError(AccountException exception) {
-        return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage());
+        return Responses.error(exception.getStatus(), exception.getCode(), exception.getMessage(),
+                exception.getDetails());
     }
 }

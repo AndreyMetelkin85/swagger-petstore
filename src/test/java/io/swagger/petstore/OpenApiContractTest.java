@@ -35,6 +35,49 @@ public class OpenApiContractTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @Test
+    public void removedErrorExamplesCannotReturnToAnyOperation() throws Exception {
+        final ParsedContract contract = parseContract();
+        assertFalse(contract.source.contains("malformedJson"));
+        assertFalse(contract.source.contains("malformed or incompatible JSON"));
+        assertFalse(contract.source.contains("CONFIRMATION_STATE_CHANGED"));
+        for (PathItem path : contract.openAPI.getPaths().values()) {
+            for (Operation operation : path.readOperations()) {
+                if (operation.getResponses().containsKey("400")) {
+                    assertFalse(operation.getResponses().get("400").getDescription().contains("JSON"));
+                }
+            }
+        }
+        final Operation register = contract.openAPI.getPaths().get("/auth/register").getPost();
+        assertNotNull(register.getResponses().get("400").getContent().get("application/json")
+                .getExamples().get("missingBody"));
+        for (String path : Arrays.asList("/auth/confirm/{userId}", "/auth/confirmation/resend")) {
+            final Operation operation = contract.openAPI.getPaths().get(path).readOperations().get(0);
+            assertErrorCodes(operation, "409", "ACCOUNT_ALREADY_CONFIRMED");
+        }
+    }
+
+    @Test
+    public void registrationConflictExamplesIdentifyOneOrBothFields() throws Exception {
+        final OpenAPI api = parseContract().openAPI;
+        final Map<String, Example> examples = api.getPaths().get("/auth/register").getPost()
+                .getResponses().get("409").getContent().get("application/json").getExamples();
+        final Map<String, Set<String>> expected = Map.of(
+                "userAlreadyExists", Set.of("username", "email"),
+                "usernameAlreadyExists", Set.of("username"),
+                "emailAlreadyExists", Set.of("email"));
+        for (Map.Entry<String, Set<String>> item : expected.entrySet()) {
+            final com.fasterxml.jackson.databind.JsonNode value = JSON.valueToTree(examples.get(item.getKey()).getValue());
+            final Set<String> fields = new HashSet<>();
+            for (com.fasterxml.jackson.databind.JsonNode detail : value.get("details")) {
+                fields.add(detail.get("field").asText());
+                assertEquals(2, detail.size());
+                assertFalse(detail.get("message").asText().isEmpty());
+            }
+            assertEquals(item.getValue(), fields);
+        }
+    }
+
+    @Test
     public void openApiDocumentIsValidAndHasExpectedPublicShape() throws Exception {
         final ParsedContract contract = parseContract();
         final OpenAPI openAPI = contract.openAPI;

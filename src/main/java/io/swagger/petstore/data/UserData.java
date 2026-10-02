@@ -3,6 +3,7 @@ package io.swagger.petstore.data;
 import io.swagger.petstore.model.AdminUserUpdateRequest;
 import io.swagger.petstore.model.AccountStatus;
 import io.swagger.petstore.model.Address;
+import io.swagger.petstore.model.ErrorDetail;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
 import io.swagger.petstore.model.UserUpdateRequest;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /** PostgreSQL-backed user repository for local API testing. */
 public class UserData {
@@ -88,6 +90,30 @@ public class UserData {
         user.setUserStatus(AccountStatus.PENDING);
         user.setConfirmedAt(null);
         return insertUser(user, confirmationHash, confirmationExpiresAt);
+    }
+
+    /** Reads both conflicting fields in one snapshot, including after a concurrent insert. */
+    public List<ErrorDetail> registrationConflicts(final String username, final String email) {
+        final String sql = "SELECT EXISTS (SELECT 1 FROM users WHERE username = ?) AS username_conflict, "
+                + "EXISTS (SELECT 1 FROM users WHERE LOWER(email) = LOWER(?)) AS email_conflict";
+        try (Connection connection = Database.connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, username);
+            statement.setString(2, email);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                final List<ErrorDetail> details = new ArrayList<>();
+                if (result.getBoolean("username_conflict")) {
+                    details.add(new ErrorDetail("username", "A user with this username already exists"));
+                }
+                if (result.getBoolean("email_conflict")) {
+                    details.add(new ErrorDetail("email", "A user with this email already exists"));
+                }
+                return details;
+            }
+        } catch (SQLException exception) {
+            throw Database.failure("find registration conflicts", exception);
+        }
     }
 
     private boolean insertUser(final User user, final String confirmationHash,
@@ -260,29 +286,61 @@ public class UserData {
         }
     }
 
-    public User setConfirmationLink(final UUID userId, final String hash, final Date expiresAt) {
+    public User setConfirmationLink(final UUID userId, final String hash, final Date expiresAt,
+                                    final Consumer<User> validate) {
         final String sql = "UPDATE users SET confirmation_code_hash = ?, confirmation_expires_at = ? "
-                + "WHERE id = ? AND confirmed_at IS NULL RETURNING " + COLUMNS;
-        return updateLink(sql, userId, hash, expiresAt, "set confirmation link");
+                + "WHERE id = ? RETURNING " + COLUMNS;
+        return updateConfirmation(userId, validate, sql, statement -> {
+            statement.setString(1, hash);
+            statement.setTimestamp(2, new Timestamp(expiresAt.getTime()));
+            statement.setObject(3, userId);
+        });
     }
 
-    public User confirmUser(final UUID userId, final String expectedHash) {
-        final String sql = "UPDATE users SET confirmed_at = CURRENT_TIMESTAMP, "
+    public User confirmUser(final UUID userId, final Consumer<User> validate) {
+        final String sql = "UPDATE users SET confirmed_at = clock_timestamp(), "
                 + "confirmation_expires_at = NULL, "
                 + "user_status = CASE WHEN user_status = 'BLOCKED' THEN 'BLOCKED'::account_status "
                 + "ELSE 'ACTIVE'::account_status END "
-                + "WHERE id = ? AND confirmed_at IS NULL AND confirmation_code_hash = ? "
-                + "AND confirmation_expires_at > CURRENT_TIMESTAMP RETURNING " + COLUMNS;
-        try (Connection connection = Database.connect();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, userId);
-            statement.setString(2, expectedHash);
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? map(result) : null;
+                + "WHERE id = ? RETURNING " + COLUMNS;
+        return updateConfirmation(userId, validate, sql, statement -> statement.setObject(1, userId));
+    }
+
+    /** Serializes confirmation, resend and deletion; validation and mutation share the row lock. */
+    private User updateConfirmation(final UUID userId, final Consumer<User> validate,
+                                    final String sql, final ConfirmationParameters parameters) {
+        try (Connection connection = Database.connect()) {
+            connection.setAutoCommit(false);
+            try {
+                validate.accept(findUserById(connection, userId));
+                final User updated;
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    parameters.bind(statement);
+                    try (ResultSet result = statement.executeQuery()) {
+                        if (!result.next()) {
+                            throw new SQLException("Locked confirmation row disappeared");
+                        }
+                        updated = map(result);
+                    }
+                }
+                connection.commit();
+                return updated;
+            } catch (SQLException | RuntimeException exception) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackFailure) {
+                    exception.addSuppressed(rollbackFailure);
+                }
+                throw exception;
             }
         } catch (SQLException exception) {
-            throw Database.failure("confirm user", exception);
+            throw Database.failure("update confirmation", exception);
         }
+    }
+
+    @FunctionalInterface
+    private interface ConfirmationParameters {
+        void bind(PreparedStatement statement) throws SQLException;
     }
 
     public User setResetLink(final UUID userId, final String hash, final Date expiresAt) {
