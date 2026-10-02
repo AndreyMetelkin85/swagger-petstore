@@ -268,7 +268,7 @@
         <maven-plugin-version>1.0.0</maven-plugin-version>
         <swagger-parser-version>2.1.46</swagger-parser-version>
         <swagger-core-version>2.2.53</swagger-core-version>
-        <jackson-version>2.22.2</jackson-version>
+        <jackson-version>2.22.3</jackson-version>
         <jackson-annotations-version>2.22</jackson-annotations-version>
         <swagger-inflector-version>2.0.17</swagger-inflector-version>
         <swagger-ui-version>5.32.11</swagger-ui-version>
