@@ -576,6 +576,14 @@ def test_publication_validation_and_gallery_replacement_are_atomic(commerce):
         ).status_code
         == 409
     )
+    assert (
+        commerce.client.post(
+            "/products/" + product["id"] + "/unpublish",
+            headers=commerce.admin,
+            json={"version": archived.json()["version"]},
+        ).status_code
+        == 409
+    )
 
 
 def test_media_metadata_delete_format_source_and_invalid_filters(commerce):

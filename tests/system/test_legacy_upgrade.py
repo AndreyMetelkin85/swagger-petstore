@@ -90,6 +90,10 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
                     "username": "upgrade-" + owner[:20],
                     "email": owner + "@example.com",
                     "password": "UpgradePass123",
+                    "firstName": "Upgrade",
+                    "lastName": "Buyer",
+                    "phone": "+79991234567",
+                    "address": {"city": "Test", "street": "Test", "house": "1", "postalCode": "123456"},
                 },
             )
             assert registration.status_code == 201
@@ -116,6 +120,32 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
             )
             assert order_response.status_code == 201, order_response.text
             order = order_response.json()
+            response = client.post(
+                "/pet", headers=admin, json={"name": "Paid upgrade pet", "price": 12.75, "photoUrls": []}
+            )
+            assert response.status_code == 201
+            paid_pet = response.json()
+            response = client.post(
+                "/store/order", headers=user_auth, json={"petId": paid_pet["id"], "quantity": 1}
+            )
+            assert response.status_code == 201
+            paid_order = response.json()
+            response = client.post("/store/order/" + paid_order["id"] + "/place", headers=user_auth)
+            assert response.status_code == 200, response.text
+            response = client.post(
+                "/store/order/" + paid_order["id"] + "/payments",
+                headers=user_auth | {"Idempotency-Key": str(uuid4())},
+                json={
+                    "cardNumber": "4242424242424242",
+                    "expiryMonth": 12,
+                    "expiryYear": 2099,
+                    "cvv": "123",
+                    "cardholderName": "Test Buyer",
+                },
+            )
+            assert response.status_code == 201, response.text
+            payment = response.json()
+            paid_order = client.get("/store/order/" + paid_order["id"], headers=user_auth).json()
         history_query = "SELECT string_agg(version || ':' || checksum::text, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success AND type = 'SQL'"
         history = docker("exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query)
         docker("stop", "--time", "30", container)
@@ -140,6 +170,22 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
                 "/auth/login", json={"email": user["email"], "password": "UpgradePass123"}
             )
             assert login_after.status_code == 200
+            paid_after = client.get("/store/order/" + paid_order["id"], headers=admin).json()
+            for field in ("createdAt", "paymentExpiresAt"):
+                assert datetime.fromisoformat(paid_after.pop(field)) == datetime.fromisoformat(
+                    paid_order.pop(field)
+                )
+            assert paid_after == paid_order
+            payment_after = client.get(
+                "/store/order/" + paid_order["id"] + "/payments/" + payment["id"], headers=admin
+            )
+            assert payment_after.status_code == 200
+            restored = payment_after.json()
+            for field in ("createdAt", "updatedAt"):
+                assert datetime.fromisoformat(restored.pop(field)) == datetime.fromisoformat(
+                    payment.pop(field)
+                )
+            assert restored == payment
         migrated = docker(
             "exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query
         )
@@ -151,7 +197,7 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
         if existing:
             labels = json.loads(docker("inspect", "--format", "{{json .Config.Labels}}", container))
             assert labels["petstore.upgrade-test"] == owner
-            docker("rm", "--force", container)
+            docker("rm", "--force", "--volumes", container)
         labels = json.loads(docker("volume", "inspect", "--format", "{{json .Labels}}", volume))
         assert labels["petstore.upgrade-test"] == owner
         docker("volume", "rm", volume)

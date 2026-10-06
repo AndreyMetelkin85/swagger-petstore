@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 import os
 import subprocess
 import time
@@ -33,6 +34,50 @@ def wait_ready(client):
     pytest.fail("The commerce candidate did not become ready")
 
 
+def verify_recreation(client, container, media, order, email, password, digest):
+    """Replace only an isolated CI container while retaining its exact DB and media volumes."""
+    original = json.loads(docker("inspect", container))[0]
+    mounts = {mount["Destination"]: mount for mount in original["Mounts"]}
+    destinations = ["/var/lib/postgresql/data", "/var/lib/petstore/media"]
+    assert all(mounts[path]["Type"] == "volume" for path in destinations)
+    replacement = "petstore-commerce-recreation-" + uuid4().hex[:12]
+    owner = uuid4().hex
+    args = [
+        "run",
+        "--detach",
+        "--name",
+        replacement,
+        "--label",
+        "petstore.commerce-test=" + owner,
+        "--publish",
+        "127.0.0.1::8080",
+    ]
+    for destination in destinations:
+        args.extend(["--volume", mounts[destination]["Name"] + ":" + destination])
+    args.append(original["Image"])
+    docker("stop", "--time", "30", container)
+    try:
+        docker(*args)
+        port = docker("port", replacement, "8080/tcp").rsplit(":", 1)[1]
+        with httpx.Client(base_url="http://127.0.0.1:" + port + "/api/v3", timeout=20) as candidate:
+            wait_ready(candidate)
+            actual = candidate.get("/media/" + media["id"] + "/image")
+            assert actual.status_code == 200 and hashlib.sha256(actual.content).digest() == digest
+            buyer = login(candidate, email, password)
+            restored = candidate.get("/store/orders/" + order["id"], headers=buyer)
+            assert restored.status_code == 200 and restored.json()["paymentStatus"] == "PAID"
+            payments = candidate.get("/store/orders/" + order["id"] + "/payments", headers=buyer).json()
+            assert len(payments) == 1 and payments[0]["status"] == "SUCCEEDED"
+    finally:
+        if docker("ps", "-aq", "--filter", "name=^/" + replacement + "$"):
+            labels = json.loads(docker("inspect", "--format", "{{json .Config.Labels}}", replacement))
+            assert labels["petstore.commerce-test"] == owner
+            # Never remove volumes: both belong to the original isolated candidate.
+            docker("rm", "--force", replacement)
+        docker("start", container)
+        wait_ready(client)
+
+
 def login(client, email, password):
     """Authenticate a seeded admin or this fixture's own buyer."""
     response = client.post("/auth/login", json={"email": email, "password": password})
@@ -48,6 +93,10 @@ def shop():
         pytest.skip("Set PETSTORE_COMMERCE_CONTAINER and BASE_URL for isolated shop acceptance")
     if container not in {"petstore-python-preview", "petstore-ci", "petstore-published-ci"}:
         pytest.fail("Commerce system tests may clean only their explicitly named CI containers")
+    selected = urlsplit(base)
+    port = int(docker("port", container, "8080/tcp").rsplit(":", 1)[1])
+    if selected.hostname not in {"localhost", "127.0.0.1"} or selected.port != port:
+        pytest.fail("BASE_URL must point to the explicitly selected local CI container")
     owned = {"users": [], "orders": [], "products": [], "pets": [], "categories": [], "media": []}
     with httpx.Client(base_url=base, timeout=20) as client:
         admin = login(client, "admin@example.com", "admin123")
@@ -236,7 +285,7 @@ def shop():
                 assert client.delete("/users/" + identifier, headers=admin).status_code == 204
 
 
-def test_full_shop_acceptance_and_sanitized_photo_survive_restart(shop):
+def test_full_shop_acceptance_and_sanitized_photo_survive_recreation(shop):
     client, container, product, media, order, email, password = shop
     image = client.get("/media/" + media["id"] + "/image")
     assert image.status_code == 200 and b"Sensitive camera owner" not in image.content
@@ -246,8 +295,7 @@ def test_full_shop_acceptance_and_sanitized_photo_survive_restart(shop):
     with Image.open(io.BytesIO(thumb.content)) as result:
         assert max(result.size) <= 480
     digest = hashlib.sha256(image.content).digest()
-    docker("restart", container)
-    wait_ready(client)
+    verify_recreation(client, container, media, order, email, password, digest)
     assert hashlib.sha256(client.get("/media/" + media["id"] + "/image").content).digest() == digest
     buyer = login(client, email, password)
     current = client.get("/store/orders/" + order["id"], headers=buyer)

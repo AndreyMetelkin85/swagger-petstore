@@ -109,3 +109,31 @@ def test_new_checkout_requires_valid_idempotency_key(client):
         "/api/v3/store/orders", json={"cartVersion": 1}, headers={"Idempotency-Key": "bad"}
     )
     assert response.status_code == 400 and response.json()["error"] == "INVALID_IDEMPOTENCY_KEY"
+
+
+def test_swagger_errors_and_required_versions_match_their_domain(client):
+    spec = client.get("/api/v3/openapi.json").json()
+    for path, item in spec["paths"].items():
+        for operation in item.values():
+            if not isinstance(operation, dict) or "operationId" not in operation:
+                continue
+            codes = {
+                code
+                for response in operation["responses"].values()
+                for code in response.get("content", {}).get("application/json", {}).get("examples", {})
+            }
+            if path.startswith("/admin/pets"):
+                assert not codes & {
+                    "SKU_ALREADY_EXISTS",
+                    "PRODUCT_VERSION_CONFLICT",
+                    "STOCK_ADJUSTMENT_REQUIRED",
+                }
+            if path.startswith(
+                ("/media", "/store/orders", "/catalog/categories", "/admin/catalog/categories", "/telemetry")
+            ):
+                assert "PRODUCT_VERSION_CONFLICT" not in codes
+    for path in ("/products/{id}", "/admin/pets/{id}", "/admin/catalog/categories/{id}"):
+        schema = spec["paths"][path]["put"]["requestBody"]["content"]["application/json"]["schema"]
+        assert "version" in schema["allOf"][1]["required"]
+    assert "200" not in spec["paths"]["/media"]["post"]["responses"]
+    assert "200" in spec["paths"]["/store/orders"]["post"]["responses"]

@@ -217,6 +217,14 @@ class CommerceController:
                     raise ApiException(429, "TELEMETRY_RATE_LIMITED", "Too many telemetry batches")
                 self.telemetry_count += 1
             logger.info("client_events count=%s", len(command.events))
+            for event in command.events:
+                logger.info(
+                    "client_event event=%s method=%s httpStatus=%s durationMs=%s",
+                    event.event,
+                    event.method,
+                    event.http_status,
+                    event.duration_ms,
+                )
             return Response(status_code=204)
         actor = context.authorize("USER", "ADMIN")
         if domain == "cart":

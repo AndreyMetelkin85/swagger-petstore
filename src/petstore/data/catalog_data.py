@@ -332,7 +332,7 @@ class CatalogData:
             self.version(
                 row, version, "PRODUCT_VERSION_CONFLICT" if kind == "product" else "PET_VERSION_CONFLICT"
             )
-            if row["publication_status"] == "ARCHIVED" and target == "PUBLISHED":
+            if row["publication_status"] == "ARCHIVED" and target != "ARCHIVED":
                 raise ApiException(
                     409, "INVALID_PUBLICATION_TRANSITION", "Archived cards cannot be published"
                 )
