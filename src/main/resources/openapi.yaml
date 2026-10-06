@@ -137,7 +137,7 @@ paths:
                 confirmationUrl: http://localhost:8080/api/v3/auth/confirm/b9ec3485-6954-4faf-813b-1c9d25ea750c?code=example
                 expiresAt: '2026-09-06T12:00:00Z'
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema:
@@ -145,17 +145,19 @@ paths:
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '409':
-          description: Имя пользователя или email уже зарегистрированы.
+          description: Имя пользователя или email уже зарегистрированы; details указывает конфликтующие поля без их значений.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
                 userAlreadyExists:
-                  value: {status: 409, error: USER_ALREADY_EXISTS, message: A user with this username or email already exists, details: []}
+                  value: {status: 409, error: USER_ALREADY_EXISTS, message: A user with this username or email already exists, details: [{field: username, message: A user with this username already exists}, {field: email, message: A user with this email already exists}]}
+                usernameAlreadyExists:
+                  value: {status: 409, error: USER_ALREADY_EXISTS, message: A user with this username or email already exists, details: [{field: username, message: A user with this username already exists}]}
+                emailAlreadyExists:
+                  value: {status: 409, error: USER_ALREADY_EXISTS, message: A user with this username or email already exists, details: [{field: email, message: A user with this email already exists}]}
         '422':
           description: Поля регистрации не прошли валидацию.
           content:
@@ -220,7 +222,7 @@ paths:
                 userNotFound:
                   value: {status: 404, error: USER_NOT_FOUND, message: User was not found, details: []}
         '409':
-          description: Регистрация уже подтверждена или состояние ссылки изменилось.
+          description: Регистрация уже подтверждена.
           content:
             application/json:
               schema:
@@ -228,8 +230,6 @@ paths:
               examples:
                 alreadyConfirmed:
                   value: {status: 409, error: ACCOUNT_ALREADY_CONFIRMED, message: The account has already been confirmed, details: []}
-                stateChanged:
-                  value: {status: 409, error: CONFIRMATION_STATE_CHANGED, message: The confirmation state changed; request a new link, details: []}
         '410':
           description: Срок действия ссылки подтверждения истёк.
           content:
@@ -271,15 +271,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConfirmationLinkResponse'
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Email или пароль указаны неверно.
           content:
@@ -298,7 +296,7 @@ paths:
                 rateLimited:
                   value: {status: 429, error: LOGIN_RATE_LIMITED, message: Too many failed login attempts. Try again in 5 minute(s), details: []}
         '409':
-          description: Учётная запись уже подтверждена или её состояние изменилось параллельно.
+          description: Учётная запись уже подтверждена.
           content:
             application/json:
               schema:
@@ -306,8 +304,6 @@ paths:
               examples:
                 alreadyConfirmed:
                   value: {status: 409, error: ACCOUNT_ALREADY_CONFIRMED, message: The account has already been confirmed, details: []}
-                stateChanged:
-                  value: {status: 409, error: CONFIRMATION_STATE_CHANGED, message: The confirmation state changed; retry the request, details: []}
         '422':
           description: Email или пароль не переданы.
           content:
@@ -354,15 +350,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PasswordResetLinkResponse'
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '404':
           description: Пользователь с указанным email не найден.
           content:
@@ -416,7 +410,7 @@ paths:
         '204':
           description: Пароль изменён, ранее выданные JWT отозваны.
         '400':
-          description: Одноразовый код или тело запроса имеют неверный формат.
+          description: Одноразовый код недействителен или тело запроса отсутствует.
           content:
             application/json:
               schema:
@@ -424,8 +418,6 @@ paths:
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
                 invalidResetLink:
                   value: {status: 400, error: INVALID_RESET_LINK, message: The one-time link is invalid, details: []}
         '409':
@@ -519,15 +511,13 @@ paths:
                   userStatus: ACTIVE
                   role: USER
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Email или пароль указаны неверно.
           content:
@@ -619,15 +609,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Pet'
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Bearer token отсутствует или недействителен.
           content:
@@ -821,15 +809,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Pet'
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
                 invalidPetId:
                   value: {status: 400, error: BAD_REQUEST, message: Pet id must be a valid UUID, details: []}
         '401':
@@ -1132,15 +1118,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Order'
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Bearer token отсутствует или недействителен.
           content:
@@ -1292,7 +1276,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Order'}
         '400':
-          description: Идентификатор или тело запроса имеют неверный формат.
+          description: Идентификатор имеет неверный формат или тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -1301,8 +1285,6 @@ paths:
                   value: {status: 400, error: BAD_REQUEST, message: Order id must be a valid UUID, details: []}
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Bearer token отсутствует или недействителен.
           content:
@@ -1841,7 +1823,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Payment'}
         '400':
-          description: Идентификатор, заголовок или тело запроса имеют неверный формат.
+          description: Идентификатор или заголовок имеют неверный формат либо тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -1854,8 +1836,6 @@ paths:
                   value: {status: 400, error: INVALID_IDEMPOTENCY_KEY, message: Idempotency-Key must be a valid UUID, details: []}
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Bearer token отсутствует или недействителен.
           content:
@@ -2214,15 +2194,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '400':
-          description: Тело запроса отсутствует или содержит некорректные данные.
+          description: Тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
               examples:
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Bearer token отсутствует или недействителен.
           content:
@@ -2415,7 +2393,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '400':
-          description: userId, тело запроса или JSON имеют неверный формат.
+          description: userId имеет неверный формат или тело запроса отсутствует.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -2424,8 +2402,6 @@ paths:
                   value: {status: 400, error: BAD_REQUEST, message: User id must be a valid UUID, details: []}
                 missingBody:
                   value: {status: 400, error: BAD_REQUEST, message: Request body is required, details: []}
-                malformedJson:
-                  value: {status: 400, error: BAD_REQUEST, message: Request body contains malformed or incompatible JSON, details: []}
         '401':
           description: Bearer token отсутствует или недействителен.
           content:

@@ -2,7 +2,7 @@ name: Docker build and security scan
 
 on:
   push:
-    branches: ["master"]
+    branches: ["dev", "master"]
   pull_request:
     branches: ["dev", "master"]
 
@@ -10,14 +10,43 @@ permissions:
   contents: read
 
 jobs:
+  python-verification:
+    uses: ./.github/workflows/python.yml
+
   scan:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Build application image
-        run: docker build --pull --tag swagger-petstore:ci .
-      - name: Scan application image
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+      - name: Build Python application for the target architecture
+        run: docker build --pull --platform linux/${{ matrix.arch }} --file Dockerfile.python --tag swagger-petstore:ci .
+      - name: Set up Python for API smoke tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install smoke test dependencies
+        run: python -m pip install -r tests/smoke/requirements.txt
+      - name: Test isolated application before publication
+        run: |
+          docker run --detach --platform linux/${{ matrix.arch }} --name petstore-ci --publish 127.0.0.1:8080:8080 swagger-petstore:ci
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://localhost:8080/api/v3/health; then break; fi
+            sleep 2
+          done
+          curl --fail http://localhost:8080/api/v3/health
+          python -m pytest -q tests/smoke
+      - name: Remove isolated test application
+        if: always()
+        run: |
+          docker logs petstore-ci || true
+          docker rm --force --volumes petstore-ci || true
+      - name: Scan Python application image
         run: >-
           docker run --rm
           -v /var/run/docker.sock:/var/run/docker.sock
@@ -31,7 +60,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: scan
+    needs: [scan, python-verification]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -45,17 +74,23 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and publish multi-platform image
+      - name: Build and publish multi-platform Python image
+        id: image
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: Dockerfile.python
           pull: true
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore:latest
+          tags: |
+            ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore:latest
+            ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore:sha-${{ github.sha }}
           sbom: true
           provenance: mode=max
           labels: |
-            org.opencontainers.image.title=Swagger Petstore API
+            org.opencontainers.image.title=Swagger Petstore Python API
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+      - name: Record published digest
+        run: echo 'Published Python image digest ${{ steps.image.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"

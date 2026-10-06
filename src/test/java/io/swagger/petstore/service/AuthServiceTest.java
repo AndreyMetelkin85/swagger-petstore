@@ -2,6 +2,8 @@ package io.swagger.petstore.service;
 
 import io.swagger.petstore.data.UserData;
 import io.swagger.petstore.model.AccountStatus;
+import io.swagger.petstore.model.ErrorDetail;
+import io.swagger.petstore.model.RegisterRequest;
 import io.swagger.petstore.model.PasswordResetLinkResponse;
 import io.swagger.petstore.model.Role;
 import io.swagger.petstore.model.User;
@@ -12,7 +14,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -24,6 +28,80 @@ public class AuthServiceTest {
     private static final UUID USER_ID = UUID.fromString("b9ec3485-6954-4faf-813b-1c9d25ea750c");
     private static final Instant NOW = Instant.parse("2026-09-05T12:00:00Z");
     private final CredentialService credentials = new CredentialService();
+
+    @Test
+    public void registrationConflictIncludesOnlyConflictingFields() {
+        for (List<ErrorDetail> details : List.of(
+                List.of(new ErrorDetail("username", "A user with this username already exists")),
+                List.of(new ErrorDetail("email", "A user with this email already exists")),
+                List.of(new ErrorDetail("username", "A user with this username already exists"),
+                        new ErrorDetail("email", "A user with this email already exists")))) {
+            final UserData repository = new UserData() {
+                @Override
+                public boolean addPendingUserIfAbsent(User user, String hash, Date expiresAt) {
+                    return false;
+                }
+
+                @Override
+                public List<ErrorDetail> registrationConflicts(String username, String email) {
+                    return details;
+                }
+            };
+            final AuthService service = new AuthService(repository, new TokenService(), credentials,
+                    Clock.fixed(NOW, ZoneOffset.UTC), "http://localhost/api/v3");
+            final RegisterRequest request = new RegisterRequest();
+            request.setUsername("conflicting-user");
+            request.setEmail("conflicting@example.test");
+            request.setPassword("password123");
+            try {
+                service.register(request);
+                fail("Duplicate registration must be rejected");
+            } catch (AccountException expected) {
+                assertEquals(Response.Status.CONFLICT, expected.getStatus());
+                assertEquals("USER_ALREADY_EXISTS", expected.getCode());
+                assertEquals(details, expected.getDetails());
+            }
+        }
+    }
+
+    @Test
+    public void confirmationAndResendKeepSingleUseLinkSemantics() {
+        final User user = user();
+        user.setConfirmationCodeHash(credentials.hashOneTimeCode("original-code"));
+        user.setConfirmationExpiresAt(Date.from(NOW.plusSeconds(60)));
+        final AuthService service = service(user);
+        final String link = service.resendConfirmation(user.getEmail(), "password123").getConfirmationUrl();
+        final String code = link.substring(link.indexOf("?code=") + 6);
+        assertAccountError(() -> service.confirm(USER_ID, "original-code"),
+                Response.Status.BAD_REQUEST, "INVALID_CONFIRMATION_LINK");
+        assertEquals(AccountStatus.ACTIVE, service.confirm(USER_ID, code).getUserStatus());
+        assertAccountError(() -> service.confirm(USER_ID, code),
+                Response.Status.CONFLICT, "ACCOUNT_ALREADY_CONFIRMED");
+        assertAccountError(() -> service.resendConfirmation(user.getEmail(), "password123"),
+                Response.Status.CONFLICT, "ACCOUNT_ALREADY_CONFIRMED");
+    }
+
+    @Test
+    public void confirmationRejectsMissingUserAndPreservesBlockedStatus() {
+        final User user = user();
+        user.setUserStatus(AccountStatus.BLOCKED);
+        user.setConfirmationCodeHash(credentials.hashOneTimeCode("valid-code"));
+        user.setConfirmationExpiresAt(Date.from(NOW.plusSeconds(60)));
+        final AuthService service = service(user);
+        assertAccountError(() -> service.confirm(UUID.randomUUID(), "valid-code"),
+                Response.Status.NOT_FOUND, "USER_NOT_FOUND");
+        assertEquals(AccountStatus.BLOCKED, service.confirm(USER_ID, "valid-code").getUserStatus());
+    }
+
+    private void assertAccountError(Runnable action, Response.Status status, String code) {
+        try {
+            action.run();
+            fail("Expected account error " + code);
+        } catch (AccountException expected) {
+            assertEquals(status, expected.getStatus());
+            assertEquals(code, expected.getCode());
+        }
+    }
 
     @Test
     public void expiredConfirmationLinkReturnsGone() {
@@ -194,6 +272,27 @@ public class AuthServiceTest {
 
     private AuthService service(final User user, final boolean exposeTestLinks) {
         final UserData repository = new UserData() {
+            @Override
+            public User confirmUser(UUID id, Consumer<User> validate) {
+                final User current = findUserById(id);
+                validate.accept(current);
+                current.setConfirmedAt(Date.from(NOW));
+                current.setConfirmationExpiresAt(null);
+                if (current.getUserStatus() != AccountStatus.BLOCKED) {
+                    current.setUserStatus(AccountStatus.ACTIVE);
+                }
+                return current;
+            }
+
+            @Override
+            public User setConfirmationLink(UUID id, String hash, Date expiresAt, Consumer<User> validate) {
+                final User current = findUserById(id);
+                validate.accept(current);
+                current.setConfirmationCodeHash(hash);
+                current.setConfirmationExpiresAt(expiresAt);
+                return current;
+            }
+
             @Override
             public User findUserById(UUID id) {
                 return USER_ID.equals(id) ? user : null;

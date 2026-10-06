@@ -80,7 +80,8 @@ public class AuthService {
         if (!userData.addPendingUserIfAbsent(user, credentialService.hashOneTimeCode(code),
                 Date.from(expiresAt))) {
             throw new AccountException(Response.Status.CONFLICT, "USER_ALREADY_EXISTS",
-                    "A user with this username or email already exists");
+                    "A user with this username or email already exists",
+                    userData.registrationConflicts(user.getUsername(), user.getEmail()));
         }
         return new RegistrationResponse(user, confirmationUrl(user.getId(), code), expiresAt.toString());
     }
@@ -97,41 +98,28 @@ public class AuthService {
         }
         final String code = credentialService.newOneTimeCode();
         final Instant expiresAt = clock.instant().plus(CONFIRMATION_TTL_HOURS, ChronoUnit.HOURS);
-        final User updated = userData.setConfirmationLink(user.getId(),
-                credentialService.hashOneTimeCode(code), Date.from(expiresAt));
-        if (updated == null) {
-            final User current = requiredUser(user.getId());
-            if (current.getConfirmedAt() != null) {
-                throw new AccountException(Response.Status.CONFLICT, "ACCOUNT_ALREADY_CONFIRMED",
-                        "The account has already been confirmed");
-            }
-            throw new AccountException(Response.Status.CONFLICT, "CONFIRMATION_STATE_CHANGED",
-                    "The confirmation state changed; retry the request");
-        }
+        userData.setConfirmationLink(user.getId(),
+                credentialService.hashOneTimeCode(code), Date.from(expiresAt), this::requireUnconfirmedUser);
         return new ConfirmationLinkResponse(confirmationUrl(user.getId(), code), expiresAt.toString());
     }
 
     public User confirm(final UUID userId, final String code) {
-        final User user = requiredUser(userId);
+        return userData.confirmUser(userId, current -> {
+            requireUnconfirmedUser(current);
+            validateCode(code, current.getConfirmationCodeHash(), current.getConfirmationExpiresAt(),
+                    "INVALID_CONFIRMATION_LINK", "CONFIRMATION_LINK_EXPIRED");
+        });
+    }
+
+    /** Checks the current row while the repository holds its transaction lock. */
+    private void requireUnconfirmedUser(final User user) {
+        if (user == null) {
+            throw new AccountException(Response.Status.NOT_FOUND, "USER_NOT_FOUND", "User was not found");
+        }
         if (user.getConfirmedAt() != null) {
             throw new AccountException(Response.Status.CONFLICT, "ACCOUNT_ALREADY_CONFIRMED",
                     "The account has already been confirmed");
         }
-        validateCode(code, user.getConfirmationCodeHash(), user.getConfirmationExpiresAt(),
-                "INVALID_CONFIRMATION_LINK", "CONFIRMATION_LINK_EXPIRED");
-        final User confirmed = userData.confirmUser(userId, user.getConfirmationCodeHash());
-        if (confirmed == null) {
-            final User current = requiredUser(userId);
-            if (current.getConfirmedAt() != null) {
-                throw new AccountException(Response.Status.CONFLICT, "ACCOUNT_ALREADY_CONFIRMED",
-                        "The account has already been confirmed");
-            }
-            validateCode(code, current.getConfirmationCodeHash(), current.getConfirmationExpiresAt(),
-                    "INVALID_CONFIRMATION_LINK", "CONFIRMATION_LINK_EXPIRED");
-            throw new AccountException(Response.Status.CONFLICT, "CONFIRMATION_STATE_CHANGED",
-                    "The confirmation state changed; request a new link");
-        }
-        return confirmed;
     }
 
     public PasswordResetLinkResponse forgotPassword(final String email) {

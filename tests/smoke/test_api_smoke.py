@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import time
+from threading import Barrier
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID, uuid4
 from urllib.parse import urlsplit
@@ -1132,6 +1133,121 @@ def test_registration_confirmation_resend_and_unique_email(client: httpx.Client)
         },
     )
     assert_error(duplicate_email, 409, "USER_ALREADY_EXISTS")
+    assert duplicate_email.json()["details"] == [
+        {"field": "email", "message": "A user with this email already exists"}
+    ]
+
+
+@pytest.mark.parametrize("fields", [("username",), ("email",), ("username", "email")])
+def test_registration_conflict_details(client: httpx.Client, fields: tuple[str, ...]) -> None:
+    registration, username, email, password = register_user(client, "conflict")
+    body = {
+        "username": username if "username" in fields else f"other_{uuid4().hex[:12]}",
+        "email": email.upper() if "email" in fields else f"other-{uuid4().hex}@example.test",
+        "password": password,
+    }
+    response = client.post("/auth/register", json=body)
+    assert_error(response, 409, "USER_ALREADY_EXISTS")
+    assert response.json()["details"] == [
+        {"field": field, "message": f"A user with this {field} already exists"}
+        for field in fields
+    ]
+    assert body["email"] not in response.text
+    assert body["username"] not in response.text
+
+
+@pytest.mark.parametrize("fields", [("username",), ("email",), ("username", "email")])
+def test_parallel_registration_conflict_details(client: httpx.Client, fields: tuple[str, ...]) -> None:
+    shared_username = f"race_{uuid4().hex[:12]}"
+    shared_email = f"race-{uuid4().hex}@example.test"
+    barrier = Barrier(2)
+
+    def register(index: int) -> httpx.Response:
+        body = {
+            "username": shared_username if "username" in fields else f"race_{uuid4().hex[:12]}",
+            "email": shared_email if "email" in fields else f"race-{uuid4().hex}@example.test",
+            "password": "RacePassword123",
+        }
+        barrier.wait(timeout=10)
+        return client.post("/auth/register", json=body)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(register, range(2)))
+    for response in responses:
+        if response.status_code == 201:
+            CREATED_USER_IDS.add(response.json()["user"]["id"])
+    assert sorted(response.status_code for response in responses) == [201, 409]
+    rejected = next(response for response in responses if response.status_code == 409)
+    assert_error(rejected, 409, "USER_ALREADY_EXISTS")
+    assert {detail["field"] for detail in rejected.json()["details"]} == set(fields)
+
+
+def test_parallel_confirmation_is_single_use(client: httpx.Client) -> None:
+    registration, _, _, _ = register_user(client, "confirmrace")
+    path = api_path(registration["confirmationUrl"])
+    barrier = Barrier(2)
+
+    def confirm(index: int) -> httpx.Response:
+        barrier.wait(timeout=10)
+        return client.get(path)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(confirm, range(2)))
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    rejected = next(response for response in responses if response.status_code == 409)
+    assert_error(rejected, 409, "ACCOUNT_ALREADY_CONFIRMED")
+
+
+@pytest.mark.parametrize("iteration", range(5))
+def test_confirmation_racing_with_resend(client: httpx.Client, iteration: int) -> None:
+    registration, _, email, password = register_user(client, "resendrace")
+    original_path = api_path(registration["confirmationUrl"])
+    barrier = Barrier(2)
+
+    def request(resend: bool) -> httpx.Response:
+        barrier.wait(timeout=10)
+        if resend:
+            return client.post("/auth/confirmation/resend", json={"email": email, "password": password})
+        return client.get(original_path)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        confirmation, resend = list(executor.map(request, (False, True)))
+    if confirmation.status_code == 200:
+        assert_error(resend, 409, "ACCOUNT_ALREADY_CONFIRMED")
+        assert_error(client.get(original_path), 409, "ACCOUNT_ALREADY_CONFIRMED")
+    else:
+        assert_error(confirmation, 400, "INVALID_CONFIRMATION_LINK")
+        assert resend.status_code == 200, resend.text
+        new_path = api_path(resend.json()["confirmationUrl"])
+        assert_error(client.get(original_path), 400, "INVALID_CONFIRMATION_LINK")
+        assert client.get(new_path).status_code == 200
+        assert_error(client.get(new_path), 409, "ACCOUNT_ALREADY_CONFIRMED")
+
+
+def test_parallel_resends_leave_only_latest_link_valid(client: httpx.Client) -> None:
+    registration, _, email, password = register_user(client, "tworaces")
+    barrier = Barrier(2)
+
+    def resend(index: int) -> httpx.Response:
+        barrier.wait(timeout=10)
+        return client.post("/auth/confirmation/resend", json={"email": email, "password": password})
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(resend, range(2)))
+    assert all(response.status_code == 200 for response in responses)
+    assert_error(client.get(api_path(registration["confirmationUrl"])), 400, "INVALID_CONFIRMATION_LINK")
+    # Either returned link may be the latest; only that link can activate the account.
+    user_id = registration["user"]["id"]
+    first_confirmation = client.get(api_path(responses[0].json()["confirmationUrl"]))
+    if first_confirmation.status_code == 400:
+        assert_error(first_confirmation, 400, "INVALID_CONFIRMATION_LINK")
+        confirmed = client.get(api_path(responses[1].json()["confirmationUrl"]))
+        assert confirmed.status_code == 200, confirmed.text
+    else:
+        assert first_confirmation.status_code == 200, first_confirmation.text
+        assert_error(client.get(api_path(responses[1].json()["confirmationUrl"])),
+                     409, "ACCOUNT_ALREADY_CONFIRMED")
+    assert client.get(f"/auth/confirm/{user_id}", params={"code": "unused"}).status_code == 409
 
 
 def test_password_recovery_revokes_tokens(client: httpx.Client) -> None:

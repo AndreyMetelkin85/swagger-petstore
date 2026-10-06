@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swagger-petstore"
+version = "1.0.29"
+description = "Contract-compatible Python implementation of Swagger Petstore"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.142.2", "pydantic==2.13.5", "psycopg[binary,pool]==3.3.6",
+    "psycopg-pool==3.3.3", "uvicorn==0.54.0", "PyJWT==2.15.1",
+    "bcrypt==5.0.0", "PyYAML==6.0.3", "simplejson==4.2.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1", "pytest-cov==7.1.0", "httpx==0.28.1", "playwright==1.63.0"]
+quality = ["pyright==1.1.414", "ruff==0.16.10"]
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+pythonpath = ["python"]
+addopts = "-ra --strict-markers"
+markers = ["integration: isolated PostgreSQL required", "system: isolated running server required", "ui: browser required"]
+
+[tool.pyright]
+include = ["python"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+src = ["python"]
+include = ["python/**/*.py", "tests/python/**/*.py", "pyproject.toml"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["petstore"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
