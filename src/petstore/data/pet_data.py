@@ -44,7 +44,9 @@ class PetData:
         :param pet_id: Catalog UUID.
         """
         with self.database.connect() as connection:
-            row = connection.execute("SELECT * FROM pets WHERE id = %s", (pet_id,)).fetchone()
+            row = connection.execute(
+                "SELECT * FROM pets WHERE id = %s AND publication_status='PUBLISHED'", (pet_id,)
+            ).fetchone()
             if row is None:
                 raise PetException(404, "PET_NOT_FOUND", "Pet was not found")
             return self.public(row)
@@ -56,7 +58,8 @@ class PetData:
         """
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM pets WHERE status::text = ANY(%s) ORDER BY id", (statuses.split(","),)
+                "SELECT * FROM pets WHERE publication_status='PUBLISHED' AND status::text = ANY(%s) ORDER BY id",
+                (statuses.split(","),),
             ).fetchall()
             return [self.public(row) for row in rows]
 
@@ -66,7 +69,9 @@ class PetData:
         :param tags: Requested tag names.
         """
         with self.database.connect() as connection:
-            rows = connection.execute("SELECT * FROM pets ORDER BY id").fetchall()
+            rows = connection.execute(
+                "SELECT * FROM pets WHERE publication_status='PUBLISHED' ORDER BY id"
+            ).fetchall()
             result: list[Row] = []
             for row in rows:
                 pet = self.public(row)

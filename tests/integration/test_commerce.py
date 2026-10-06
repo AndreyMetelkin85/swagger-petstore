@@ -617,3 +617,49 @@ def test_media_metadata_delete_format_source_and_invalid_filters(commerce):
     ):
         response = commerce.client.get("/products", params=parameters)
         assert response.status_code == expected
+
+
+def test_unpublished_pet_cannot_leak_or_be_ordered_through_legacy_routes(commerce):
+    _, _, user = commerce.scenario.user()
+    image = commerce.image()
+    response = commerce.client.post(
+        "/admin/pets",
+        headers=commerce.admin,
+        json={
+            "name": "Private draft pet",
+            "price": 100,
+            "images": [{"mediaId": image["id"]}],
+        },
+    )
+    assert response.status_code == 201
+    pet = response.json()
+    commerce.pets.append(pet["id"])
+    assert commerce.client.get("/pet/" + pet["id"]).status_code == 404
+    assert commerce.client.get("/catalog/pets/" + pet["id"]).status_code == 404
+    public = commerce.client.get("/pet/findByStatus", params={"status": "available"}).json()
+    assert pet["id"] not in {row["id"] for row in public}
+    assert (
+        commerce.client.post(
+            "/store/order", headers=user, json={"petId": pet["id"], "quantity": 1}
+        ).status_code
+        == 404
+    )
+    published = commerce.client.post(
+        "/admin/pets/" + pet["id"] + "/publish", headers=commerce.admin, json={"version": pet["version"]}
+    )
+    assert published.status_code == 200
+    old = commerce.client.post("/store/order", headers=user, json={"petId": pet["id"], "quantity": 1})
+    assert old.status_code == 201
+    commerce.orders.append(old.json()["id"])
+    hidden = commerce.client.post(
+        "/admin/pets/" + pet["id"] + "/unpublish",
+        headers=commerce.admin,
+        json={"version": published.json()["version"]},
+    )
+    assert hidden.status_code == 200
+    denied = commerce.client.post("/store/order/" + old.json()["id"] + "/place", headers=user)
+    assert denied.status_code == 409 and denied.json()["error"] == "PET_NOT_AVAILABLE"
+    assert (
+        commerce.client.get("/admin/pets/" + pet["id"], headers=commerce.admin).json()["status"]
+        == "available"
+    )

@@ -174,7 +174,8 @@ class OrderData:
             UserData.locked_user(connection, owner["id"])
             if (
                 connection.execute(
-                    "SELECT id FROM pets WHERE id = %s FOR UPDATE", (request.pet_id,)
+                    "SELECT id FROM pets WHERE id = %s AND publication_status='PUBLISHED' FOR UPDATE",
+                    (request.pet_id,),
                 ).fetchone()
                 is None
             ):
@@ -204,7 +205,8 @@ class OrderData:
                 raise OrderException(409, "INVALID_STATUS_TRANSITION", "Only a draft order can be updated")
             if (
                 connection.execute(
-                    "SELECT id FROM pets WHERE id = %s FOR UPDATE", (request.pet_id,)
+                    "SELECT id FROM pets WHERE id = %s AND publication_status='PUBLISHED' FOR UPDATE",
+                    (request.pet_id,),
                 ).fetchone()
                 is None
             ):
@@ -251,7 +253,11 @@ class OrderData:
             ).fetchone()
             if pet is None:
                 raise OrderException(404, "PET_NOT_FOUND", "Pet was not found")
-            if pet["status"] != "available" or self.has_active_order(connection, order["pet_id"]):
+            if (
+                pet["publication_status"] != "PUBLISHED"
+                or pet["status"] != "available"
+                or self.has_active_order(connection, order["pet_id"])
+            ):
                 raise OrderException(409, "PET_NOT_AVAILABLE", "Pet is not available for ordering")
             profile = public_user(owner)
             delivery = {field: profile[field] for field in ("firstName", "lastName", "phone", "address")}
