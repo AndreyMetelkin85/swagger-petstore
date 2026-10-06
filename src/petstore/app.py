@@ -80,6 +80,8 @@ REQUEST_MODELS["createCommercePayment"] = PaymentRequest
 
 async def upload_body(request: Request) -> tuple[bytes, str, str]:
     """Bound the complete multipart stream before decoding a single image."""
+    if request.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "multipart/form-data":
+        raise ApiException(415, "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be multipart/form-data")
     raw = bytearray()
     async for chunk in request.stream():
         if len(raw) + len(chunk) > MAX_BYTES + 65536:
@@ -95,6 +97,8 @@ async def upload_body(request: Request) -> tuple[bytes, str, str]:
         async with bounded.form(max_files=1, max_fields=2, max_part_size=2048) as form:
             if set(form.keys()) - {"file", "sourceType", "sourceNote"}:
                 raise ApiException(422, "VALIDATION_ERROR", "Unknown upload fields")
+            if len(form.multi_items()) != len(form):
+                raise ApiException(422, "VALIDATION_ERROR", "Upload fields must not be repeated")
             file = form.get("file")
             if not isinstance(file, UploadFile):
                 raise ApiException(422, "INVALID_IMAGE", "A single file is required")

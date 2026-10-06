@@ -25,7 +25,7 @@ include = ["petstore*"]
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/integration", "tests/system"]
 pythonpath = ["src"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --import-mode=importlib"
 markers = ["integration: isolated PostgreSQL required", "system: isolated running server required", "ui: browser required"]
 
 [tool.pyright]

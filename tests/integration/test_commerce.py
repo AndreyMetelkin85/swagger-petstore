@@ -7,6 +7,7 @@ import pytest
 from PIL import Image
 
 from petstore.config import Settings
+from petstore.data.commerce_order_data import CommerceOrderData
 from petstore.service.media_service import MediaService
 
 pytestmark = pytest.mark.integration
@@ -379,3 +380,232 @@ def test_unavailable_cart_lines_and_role_guards(commerce):
         ).status_code
         == 422
     )
+
+
+def test_paid_delivery_consumes_inventory_once_and_retains_cover(commerce):
+    _, _, user = commerce.scenario.user()
+    product, request = commerce.product(stock=4)
+    pet = commerce.pet()
+    order = commerce.draft(
+        user,
+        commerce.cart(
+            user,
+            [
+                {"kind": "product", "id": product["id"], "quantity": 2},
+                {"kind": "pet", "id": pet["id"], "quantity": 1},
+            ],
+        ),
+    )
+    placed = commerce.place(user, order)
+    assert placed.status_code == 200
+    assert commerce.pay(user, order).status_code == 201
+    current = commerce.client.get("/store/orders/" + order["id"], headers=user).json()
+    forbidden = commerce.client.post(
+        "/store/orders/" + order["id"] + "/ship", headers=user, json={"version": current["version"]}
+    )
+    assert forbidden.status_code == 403
+    for action in ("approve", "ship", "deliver"):
+        response = commerce.client.post(
+            "/store/orders/" + order["id"] + "/" + action,
+            headers=commerce.admin,
+            json={"version": current["version"]},
+        )
+        assert response.status_code == 200, response.text
+        current = response.json()
+    assert current["complete"] and current["shipDate"]
+    assert all(line["allocation"] == "CONSUMED" for line in current["lines"])
+    assert commerce.client.get("/products/" + product["id"]).json()["availableQuantity"] == 2
+    assert commerce.client.get("/catalog/pets/" + pet["id"]).json()["status"] == "sold"
+    repeated = commerce.client.post(
+        "/store/orders/" + order["id"] + "/deliver",
+        headers=commerce.admin,
+        json={"version": current["version"]},
+    )
+    assert repeated.status_code == 409
+    assert commerce.client.get("/products/" + product["id"]).json()["stock"] == 2
+    # Historic cover/name/price remains after unpublishing and replacing a live gallery.
+    unpublish = commerce.client.post(
+        "/products/" + product["id"] + "/unpublish",
+        headers=commerce.admin,
+        json={
+            "version": commerce.client.get("/admin/products/" + product["id"], headers=commerce.admin).json()[
+                "version"
+            ]
+        },
+    )
+    update = commerce.client.put(
+        "/products/" + product["id"],
+        headers=commerce.admin,
+        json=request
+        | {"stock": 2, "name": "Changed", "price": 999, "images": [], "version": unpublish.json()["version"]},
+    )
+    assert update.status_code == 200, update.text
+    cover = next(line for line in current["lines"] if line["kind"] == "product")["images"][0]["mediaId"]
+    assert commerce.client.get("/media/" + cover).status_code == 404
+    assert commerce.client.get("/media/" + cover + "/image", headers=user).status_code == 200
+    assert commerce.client.delete("/media/" + cover, headers=commerce.admin).status_code == 409
+    history = commerce.client.get("/store/orders/" + order["id"], headers=user).json()
+    assert history["lines"] == current["lines"]
+    assert commerce.client.delete("/store/orders/" + order["id"], headers=user).status_code == 403
+    assert commerce.client.delete("/store/orders/" + order["id"], headers=commerce.admin).status_code == 204
+
+
+def test_draft_place_replay_delete_roles_and_profile_requirement(commerce):
+    _, _, user = commerce.scenario.user(profile=False)
+    _, _, stranger = commerce.scenario.user()
+    product, _ = commerce.product()
+    cart = commerce.cart(user, [{"kind": "product", "id": product["id"], "quantity": 1}])
+    key = str(uuid4())
+    headers = user | {"Idempotency-Key": key}
+    first = commerce.client.post("/store/orders", headers=headers, json={"cartVersion": cart["version"]})
+    assert first.status_code == 201
+    commerce.orders.append(first.json()["id"])
+    repeat = commerce.client.post("/store/orders", headers=headers, json={"cartVersion": cart["version"]})
+    assert repeat.status_code == 200 and repeat.json() == first.json()
+    assert commerce.place(user, first.json()).json()["error"] == "PROFILE_INCOMPLETE"
+    assert commerce.client.get("/store/orders/" + first.json()["id"], headers=stranger).status_code == 403
+    assert commerce.client.delete("/store/orders/" + first.json()["id"], headers=stranger).status_code == 403
+    assert commerce.client.delete("/store/orders/" + first.json()["id"], headers=user).status_code == 204
+    assert commerce.client.get("/store/orders/" + first.json()["id"], headers=user).status_code == 404
+    _, _, user = commerce.scenario.user()
+    order = commerce.draft(
+        user, commerce.cart(user, [{"kind": "product", "id": product["id"], "quantity": 1}])
+    )
+    key = uuid4()
+    placed = commerce.place(user, order, key)
+    replay = commerce.place(user, order, key)
+    assert placed.status_code == replay.status_code == 200 and placed.json() == replay.json()
+    assert commerce.client.get("/products/" + product["id"]).json()["reserved"] == 1
+    assert commerce.client.delete("/store/orders/" + order["id"], headers=commerce.admin).status_code == 409
+    approve = commerce.client.post(
+        "/store/orders/" + order["id"] + "/approve",
+        headers=commerce.admin,
+        json={"version": placed.json()["version"]},
+    )
+    assert approve.status_code == 409 and approve.json()["error"] == "ORDER_NOT_PAID"
+
+
+def test_cancel_payment_and_expiry_payment_races_do_not_leak_reserves(commerce):
+    _, _, user = commerce.scenario.user()
+    product, _ = commerce.product(stock=2)
+    order = commerce.draft(
+        user, commerce.cart(user, [{"kind": "product", "id": product["id"], "quantity": 1}])
+    )
+    placed = commerce.place(user, order).json()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        payment, cancelled = list(
+            pool.map(
+                lambda fn: fn(),
+                [
+                    lambda: commerce.pay(user, order),
+                    lambda: commerce.client.post(
+                        "/store/orders/" + order["id"] + "/cancel",
+                        headers=user,
+                        json={"version": placed["version"]},
+                    ),
+                ],
+            )
+        )
+    assert payment.status_code in {201, 409} and cancelled.status_code in {200, 409}
+    current = commerce.client.get("/store/orders/" + order["id"], headers=user).json()
+    if current["status"] != "cancelled":
+        response = commerce.client.post(
+            "/store/orders/" + order["id"] + "/cancel", headers=user, json={"version": current["version"]}
+        )
+        assert response.status_code == 200
+    assert commerce.client.get("/products/" + product["id"]).json()["reserved"] == 0
+    order = commerce.draft(
+        user, commerce.cart(user, [{"kind": "product", "id": product["id"], "quantity": 1}])
+    )
+    assert commerce.place(user, order).status_code == 200
+    with commerce.scenario.database.connect() as connection:
+        connection.execute(
+            "UPDATE store_orders SET payment_expires_at=CURRENT_TIMESTAMP-INTERVAL '1 minute' WHERE id=%s",
+            (order["id"],),
+        )
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        paid, expired = list(
+            pool.map(
+                lambda fn: fn(),
+                [
+                    lambda: commerce.pay(user, order),
+                    lambda: CommerceOrderData(commerce.scenario.database).expire(),
+                ],
+            )
+        )
+    assert paid.status_code == 410
+    assert commerce.client.get("/products/" + product["id"]).json()["reserved"] == 0
+    assert CommerceOrderData(commerce.scenario.database).expire() == 0
+
+
+def test_publication_validation_and_gallery_replacement_are_atomic(commerce):
+    product, request = commerce.product()
+    assert (
+        commerce.client.put(
+            "/products/" + product["id"],
+            headers=commerce.admin,
+            json=request | {"images": [], "version": product["version"]},
+        ).json()["error"]
+        == "IMAGE_REQUIRED"
+    )
+    response = commerce.client.post(
+        "/products/" + product["id"] + "/unpublish",
+        headers=commerce.admin,
+        json={"version": product["version"]},
+    )
+    assert response.status_code == 200
+    version = response.json()["version"]
+    assert commerce.client.get("/products/" + product["id"]).status_code == 404
+    missing = commerce.client.put(
+        "/products/" + product["id"],
+        headers=commerce.admin,
+        json=request | {"images": [{"mediaId": str(uuid4())}], "version": version},
+    )
+    assert missing.status_code == 404
+    current = commerce.client.get("/admin/products/" + product["id"], headers=commerce.admin).json()
+    assert current["version"] == version and len(current["images"]) == 1
+    archived = commerce.client.post(
+        "/products/" + product["id"] + "/archive", headers=commerce.admin, json={"version": version}
+    )
+    assert archived.status_code == 200
+    assert (
+        commerce.client.post(
+            "/products/" + product["id"] + "/publish",
+            headers=commerce.admin,
+            json={"version": archived.json()["version"]},
+        ).status_code
+        == 409
+    )
+
+
+def test_media_metadata_delete_format_source_and_invalid_filters(commerce):
+    image = commerce.image()
+    assert commerce.client.get("/media/" + image["id"]).status_code == 404
+    metadata = commerce.client.get("/media/" + image["id"], headers=commerce.admin).json()
+    assert metadata["sourceType"] == "OWN" and metadata["width"] == 16
+    assert not {"filename", "path", "createdBy", "created_by", "exif"} & metadata.keys()
+    assert commerce.client.get("/media/" + image["id"] + "/thumb", headers=commerce.admin).status_code == 200
+    assert (
+        commerce.client.post(
+            "/media", headers=commerce.admin, files={"file": ("fake.jpg", b"bad")}
+        ).status_code
+        == 422
+    )
+    assert commerce.client.post("/media", headers=commerce.admin, json={}).status_code == 415
+    assert (
+        commerce.client.post(
+            "/media", headers=commerce.admin, files={"file": ("x.jpg", jpeg())}, data={"sourceType": "BAD"}
+        ).status_code
+        == 422
+    )
+    assert commerce.client.delete("/media/" + image["id"], headers=commerce.admin).status_code == 204
+    assert commerce.client.delete("/media/" + image["id"], headers=commerce.admin).status_code == 404
+    for parameters in (
+        {"page": 0},
+        {"pageSize": 101},
+        {"minPrice": "NaN"},
+        {"categoryId": "bad"},
+        {"sort": "DROP TABLE"},
+    ):
+        response = commerce.client.get("/products", params=parameters)
+        assert response.status_code == 422

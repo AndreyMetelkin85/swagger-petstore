@@ -55,6 +55,7 @@ jobs:
           PETSTORE_MAIL_UI_URL: http://127.0.0.1:8025
           PETSTORE_MAIL_RESTART_CONTAINER: petstore-mail
           PETSTORE_TEST_UPGRADE_IMAGE: swagger-petstore-python:preview
+          PETSTORE_COMMERCE_CONTAINER: petstore-python-preview
           BASE_URL: http://127.0.0.1:8081/api/v3
         run: python -m pytest tests/system -q
       - name: Upload coverage
