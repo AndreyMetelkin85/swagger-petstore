@@ -1,0 +1,71 @@
+name: Python checks
+
+on:
+  push:
+    branches: ["feature/python-fastapi-migration", "dev"]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-runtime.txt
+      - name: Install Python and test dependencies
+        run: python -m pip install --constraint requirements-runtime.txt -e '.[test,quality]'
+      - name: Ruff
+        run: |
+          ruff check python tests/python
+          ruff format --check python tests/python
+      - name: Pyright strict
+        run: pyright
+      - name: Unit tests
+        run: python -m pytest tests/python/unit -q
+      - name: Build isolated candidate image
+        run: docker compose -f docker-compose.python.yml build
+      - name: Start isolated candidate
+        run: docker compose -f docker-compose.python.yml up -d --wait --wait-timeout 180
+      - name: Create a dedicated integration database and run original Flyway migrations
+        run: |
+          docker exec petstore-python-preview psql -U petstore -d petstore -c 'CREATE DATABASE petstore_python_test'
+          docker exec -e FLYWAY_URL=jdbc:postgresql://127.0.0.1:5432/petstore_python_test -e FLYWAY_USER=petstore -e FLYWAY_PASSWORD=petstore petstore-python-preview /opt/flyway/flyway -locations=filesystem:/app/src/main/resources/db/migration migrate
+      - name: Unit and PostgreSQL integration tests with coverage gate
+        env:
+          PETSTORE_TEST_DB_URL: postgresql://127.0.0.1:5433/petstore_python_test
+        run: python -m pytest tests/python/unit tests/python/integration -q --cov=petstore --cov-report=xml --cov-report=term-missing --cov-fail-under=90
+      - name: Existing system contract tests without changing expectations
+        env:
+          BASE_URL: http://127.0.0.1:8081/api/v3
+        run: python -m pytest tests/smoke -q -o addopts=''
+      - name: Install browser
+        run: python -m playwright install --with-deps chromium
+      - name: Swagger, email and restart system tests
+        env:
+          PETSTORE_UI_URL: http://127.0.0.1:8081
+          PETSTORE_RESTART_CONTAINER: petstore-python-preview
+          PETSTORE_MAIL_UI_URL: http://127.0.0.1:8025
+          PETSTORE_MAIL_RESTART_CONTAINER: petstore-mail
+          PETSTORE_TEST_UPGRADE_IMAGE: swagger-petstore-python:preview
+          BASE_URL: http://127.0.0.1:8081/api/v3
+        run: python -m pytest tests/python/system -q
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage
+          path: coverage.xml
+      - name: Candidate diagnostics
+        if: failure()
+        run: docker compose -f docker-compose.python.yml logs --tail=100
+      - name: Remove only the isolated CI candidate
+        if: always()
+        run: docker compose -f docker-compose.python.yml down --volumes

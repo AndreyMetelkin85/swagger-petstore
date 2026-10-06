@@ -10,6 +10,11 @@ services:
       PETSTORE_TOKEN_SECRET: ${PETSTORE_TOKEN_SECRET:-}
       PETSTORE_PUBLIC_BASE_URL: ${PETSTORE_PUBLIC_BASE_URL:-http://localhost:8080/api/v3}
       PETSTORE_EXPOSE_TEST_LINKS: ${PETSTORE_EXPOSE_TEST_LINKS:-true}
+      PETSTORE_SMTP_HOST: ${PETSTORE_SMTP_HOST:-}
+      PETSTORE_SMTP_PORT: ${PETSTORE_SMTP_PORT:-25}
+      PETSTORE_SMTP_FROM: ${PETSTORE_SMTP_FROM:-noreply@petstore.test}
+      PETSTORE_SMTP_TIMEOUT: ${PETSTORE_SMTP_TIMEOUT:-5}
+      PETSTORE_MAIL_FRONTEND_URL: ${PETSTORE_MAIL_FRONTEND_URL:-}
     volumes:
       - petstore-data:/var/lib/postgresql/data
     ports:
@@ -17,11 +22,11 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8080/api/v3/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v3/health', timeout=3)"]
       interval: 10s
-      timeout: 3s
-      start_period: 40s
-      retries: 8
+      timeout: 5s
+      start_period: 120s
+      retries: 12
 
 volumes:
   petstore-data:

@@ -14,3 +14,16 @@ dependency-reduced-pom.xml
 *.pyc
 .pytest_cache/
 __pycache__/
+.venv-python/
+.env
+.env.*
+!.env.example
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+test-results/
+*.egg-info/
+.pytest_cache_python/
+.pytest_cache_python_*/
+.pytest_cache_java_master_reference/
