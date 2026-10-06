@@ -137,3 +137,9 @@ def test_swagger_errors_and_required_versions_match_their_domain(client):
         assert "version" in schema["allOf"][1]["required"]
     assert "200" not in spec["paths"]["/media"]["post"]["responses"]
     assert "200" in spec["paths"]["/store/orders"]["post"]["responses"]
+
+
+def test_unknown_field_names_still_fit_the_public_error_contract(client):
+    response = client.post("/api/v3/products", json={"sku": "TEST", "name": "Test", "price": 1, "q" * 200: 1})
+    assert response.status_code == 422
+    assert all(1 <= len(error["field"]) <= 100 for error in response.json()["details"])

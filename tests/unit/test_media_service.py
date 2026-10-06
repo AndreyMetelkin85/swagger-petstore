@@ -157,3 +157,13 @@ def test_catalog_table_and_optimistic_version_guards():
     with pytest.raises(ApiException) as failure:
         CatalogData.version({"version": 1}, 0, "ORDER_VERSION_CONFLICT")
     assert failure.value.code == "ORDER_VERSION_CONFLICT"
+
+
+def test_extreme_image_dimensions_keep_the_oversize_error(monkeypatch):
+    monkeypatch.setattr(
+        "petstore.service.media_service.Image.open",
+        Mock(side_effect=Image.DecompressionBombError("Private metadata")),
+    )
+    with pytest.raises(ApiException) as failure:
+        normalize_image(b"bounded input")
+    assert failure.value.status == 413 and failure.value.code == "IMAGE_TOO_LARGE"

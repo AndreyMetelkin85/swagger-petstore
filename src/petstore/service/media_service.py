@@ -53,7 +53,9 @@ def normalize_image(payload: bytes) -> tuple[bytes, bytes, str, int, int]:
             if output.tell() > 50 * 1024 * 1024:
                 raise ApiException(413, "IMAGE_TOO_LARGE", "Normalized image exceeds the storage limit")
             return output.getvalue(), thumbnail.getvalue(), FORMATS[format_name][0], image.width, image.height
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+    except Image.DecompressionBombError as exc:
+        raise ApiException(413, "IMAGE_TOO_LARGE", "Image exceeds 40 megapixels") from exc
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise ApiException(422, "INVALID_IMAGE", "Image content is invalid or cannot be decoded") from exc
     finally:
         IMAGE_WORKERS.release()

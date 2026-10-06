@@ -94,7 +94,7 @@ async def upload_body(request: Request) -> tuple[bytes, str, str]:
 
     bounded = Request(request.scope, receive=receive)
     try:
-        async with bounded.form(max_files=1, max_fields=2, max_part_size=2048) as form:
+        async with bounded.form(max_files=1, max_fields=2, max_part_size=4096) as form:
             if set(form.keys()) - {"file", "sourceType", "sourceNote"}:
                 raise ApiException(422, "VALIDATION_ERROR", "Unknown upload fields")
             if len(form.multi_items()) != len(form):
@@ -213,7 +213,7 @@ async def parse_body(request: Request, model: type[RequestModel] | None) -> Requ
         if issubclass(model, CommerceRequest):
             details = [
                 {
-                    "field": ".".join(str(part) for part in error["loc"]) or "body",
+                    "field": (".".join(str(part) for part in error["loc"]) or "body")[:100],
                     "message": "Invalid field value",
                 }
                 for error in exc.errors()[:100]

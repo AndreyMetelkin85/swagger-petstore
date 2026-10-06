@@ -619,6 +619,19 @@ def test_media_metadata_delete_format_source_and_invalid_filters(commerce):
         assert response.status_code == expected
 
 
+def test_image_source_note_supports_its_full_unicode_character_limit(commerce):
+    note = "🐾" * 1000
+    response = commerce.client.post(
+        "/media",
+        headers=commerce.admin,
+        files={"file": ("image.jpg", jpeg(), "image/jpeg")},
+        data={"sourceNote": note},
+    )
+    assert response.status_code == 201, response.text
+    commerce.media.append(response.json()["id"])
+    assert response.json()["sourceNote"] == note
+
+
 def test_unpublished_pet_cannot_leak_or_be_ordered_through_legacy_routes(commerce):
     _, _, user = commerce.scenario.user()
     image = commerce.image()
