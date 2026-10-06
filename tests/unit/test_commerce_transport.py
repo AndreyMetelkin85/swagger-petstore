@@ -137,6 +137,9 @@ def test_swagger_errors_and_required_versions_match_their_domain(client):
         assert "version" in schema["allOf"][1]["required"]
     assert "200" not in spec["paths"]["/media"]["post"]["responses"]
     assert "200" in spec["paths"]["/store/orders"]["post"]["responses"]
+    for path in ("/media/{id}", "/media/{id}/image", "/media/{id}/thumb"):
+        security = spec["paths"][path]["get"]["security"]
+        assert {} in security and {"bearerAuth": []} in security
 
 
 def test_unknown_field_names_still_fit_the_public_error_contract(client):

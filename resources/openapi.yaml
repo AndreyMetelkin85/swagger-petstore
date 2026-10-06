@@ -6171,6 +6171,9 @@ paths:
   "/media/{id}":
     "get":
       "operationId": "getMedia"
+      "security":
+        - {}
+        - "bearerAuth": []
       "tags":
         - "Media"
       "summary": "Метаданные или изображение"
@@ -6391,6 +6394,9 @@ paths:
   "/media/{id}/image":
     "get":
       "operationId": "getMediaImage"
+      "security":
+        - {}
+        - "bearerAuth": []
       "tags":
         - "Media"
       "summary": "Метаданные или изображение"
@@ -6511,6 +6517,9 @@ paths:
   "/media/{id}/thumb":
     "get":
       "operationId": "getMediaThumb"
+      "security":
+        - {}
+        - "bearerAuth": []
       "tags":
         - "Media"
       "summary": "Метаданные или изображение"
