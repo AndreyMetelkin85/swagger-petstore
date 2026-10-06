@@ -53,3 +53,15 @@
   andymentor/swagger-petstore@sha256:58733c8c19dac851fbc0b8033413e8e3966d74b921975bc73785bd455d0baae0.
 - Публикация: dev → master → GitHub Actions. Успешный workflow и digest нового
   образа проверяются отдельно; до этого latest не считается обновлённым.
+
+## 2026-10-06 — удалить Java-исходники и Maven
+
+- По отдельному указанию владельца удалены все Java-исходники, генераторы и тесты,
+  pom.xml, Swagger Inflector/Tomcat config, Java Dockerfile и Maven workflows.
+  История Git сохраняет предыдущую реализацию.
+- CodeQL проверяет только Python. Unit-контракт запрещает повторное появление
+  Java-исходников/Maven в текущем дереве.
+- По подтверждённому выбору владельца Flyway/JRE остаются только инструментом
+  миграций БД. Бизнес-логика и HTTP-сервер — Python; SQL V1–V9 не изменены.
+- Первый Python-выпуск опубликован из master 6c12d3a; финальная очистка проходит
+  отдельный цикл feature → dev → master → Docker Hub.
