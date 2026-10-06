@@ -4,9 +4,10 @@
 
 Перенос разрабатывается в `feature/python-fastapi-migration`, созданной от `origin/dev`
 (`fbed64b`). Эталон всей логики, OpenAPI и регрессионных тестов — актуальный `origin/master`
-(`380e37988b51c4329c3672ed55c62e958569c2be`). Java-файлы выровнены с этим master и
-сохранены как эталон. Основной `Dockerfile` и release-пайплайн теперь собирают Python;
-`Dockerfile.java` оставлен только для сравнения. Рабочая БД не пересоздаётся.
+(`380e37988b51c4329c3672ed55c62e958569c2be`). Основной `Dockerfile` и release-пайплайн
+собирают Python. Java-исходники, Maven и Tomcat удалены из текущего проекта;
+предыдущая реализация доступна в истории Git. Рабочая БД не пересоздаётся.
+JRE остаётся исключительно для Flyway, не для бизнес-логики или HTTP-сервера.
 
 - Python 3.12, FastAPI, Pydantic, psycopg 3, Uvicorn;
 - сохранены 36 операций, `operationId`, роли, ошибки и PostgreSQL-схема;
@@ -102,6 +103,94 @@ forgot password → письмо → браузерная форма → вхо�
 Для запуска нужны `BASE_URL` тестового API и `PETSTORE_MAIL_UI_URL`; CI задаёт их явно.
 Тесты удаляют только созданные ими сообщения по точному API ID и пользователей по UUID.
 
+## Подключение фронтенда
+
+### Адреса и режим
+
+После обновления: API `http://localhost:8080/api/v3`, Swagger `http://localhost:8080/`,
+контракт `/api/v3/openapi.json`. Отдельный Python preview — `:8081`.
+Фронт сейчас использует MSW; `VITE_DATA_MODE` — build-time настройка.
+
+Использовать same-origin proxy: браузер → `/api/v3` → Docker-сервис `backend:8080`.
+Nginx фронта уже проксирует `/api/` без изменения URI; подключить backend в ту же
+сеть с этим DNS-именем. Для Vite dev добавить `server.proxy['/api']` на адрес API.
+Прямой cross-origin CORS сейчас не настроен. В frontend `compose.integration.yaml`
+заменить curl-healthcheck на Python urllib из backend Compose и сохранить фактический
+volume существующей БД. `localhost` внутри Docker не является адресом другого контейнера.
+
+### Что исправить в текущем клиенте
+
+Все пути относительны `/api/v3`:
+
+| Сейчас в клиенте/моках | Реальный backend |
+|---|---|
+| `GET/PUT /me` | `GET/PUT /user/me` |
+| `POST /auth/forgot` → `demoLink` | `POST /auth/password/forgot` → `resetUrl,expiresAt` |
+| `POST /auth/reset`, body `{code,password}` | `POST /auth/password/reset?code=...`, body `{newPassword}`, ответ `204` |
+| `GET /store/orders` | `GET /store/order` |
+| `/store/orders/{id}` | `/store/order/{id}` |
+| `/catalog/pets` | `GET /pet/findByStatus?status=available`; деталь `GET /pet/{petId}` |
+| `POST /auth/logout` | Endpoint отсутствует: локально очистить token и cache |
+
+Register `POST /auth/register`, resend `POST /auth/confirmation/resend`,
+confirm `GET /auth/confirm/{userId}?code=...`, login `POST /auth/login`
+уже совпадают по путям. Login/resend: `{email,password}`.
+Register требует `username,email,password`; имя/телефон/адрес необязательны.
+
+В `src/api.ts` обрабатывать успешный `204` без `response.json()`.
+В `src/auth.tsx` исправить forgot/reset; в `src/store.tsx` — logout/cart/merge.
+Bearer передавать как `Authorization: Bearer <access_token>`; login возвращает
+`access_token,token_type,expires_in,user`. Не выдавать браузеру JWT signing secret
+или SMTP/IMAP credentials. Пароли и query-code не логировать.
+
+### DTO и заказы
+
+- User имеет `userStatus,firstName,lastName,phone,address`, не `status/profile`.
+  Address: `city,street,house,apartment,postalCode`; UI `building` = `house`.
+  Нужен адаптер DTO: необязательные поля могут отсутствовать, address может быть null.
+- Ошибка: `{status,error,message,details:[{field,message}]}`. Добавить `message`
+  в frontend ErrorDetail; `details[].code/itemId` здесь не обещаются.
+- Заказ — один питомец, body create/update `{petId,quantity:1}`.
+  Статусы lowercase: `draft,placed,approved,shipped,delivered,cancelled,expired`.
+  В draft `paymentStatus=NOT_STARTED`; цена/сумма/доставка/дедлайн null; резерва ещё нет.
+  Frontend-модель `lines/total/reserveUntil` не является этим API-контрактом.
+- Place: `POST /store/order/{id}/place`; срок оплаты 15 минут.
+  Pay: `POST /store/order/{id}/payments`, UUID в `Idempotency-Key`, body
+  `cardNumber,expiryMonth,expiryYear,cvv,cardholderName`. При сетевом повторе
+  той же оплаты использовать тот же ключ. Платёжный сервис — локальный симулятор.
+- USER работает со своим; ADMIN управляет пользователями/питомцами,
+  подтверждает оплаченный заказ, отправляет и доставляет.
+  Отмена placed/approved разрешена; оплаченная отмена делает refund.
+  После shipped отмена запрещена.
+
+### Почта и страницы
+
+Backend отправляет HTML + plain text: register/resend — ссылка на 24 часа,
+forgot password — 30 минут. Новая ссылка отменяет старую, код одноразовый.
+Локальная почта включается через `docker-compose.mail.yml`: UI `:8025`,
+Swagger `:8025/api/`, SMTP `:2525`, IMAP `:1143`.
+
+После подключения реального auth API задать в backend
+`PETSTORE_MAIL_FRONTEND_URL=http://localhost:8088` или реальный frontend URL.
+Письма будут вести на `/confirm/{userId}?code=...` и `/reset-password?code=...`.
+Без настройки работают backend-подтверждение и `/reset-password.html`.
+`PETSTORE_EXPOSE_TEST_LINKS=false` скрывает resetUrl в JSON, но не отключает письмо.
+Фронт не должен требовать ссылку в JSON для успешного forgot password.
+
+### Что пока отсутствует
+
+Это перенос существующего Petstore, **не** новое commerce-ТЗ.
+Backend пока не имеет products, mixed cart/`/store/cart`, самостоятельного CRUD
+категорий, media/upload/S3, stock history и `/telemetry/client-events`.
+Не переключать весь магазин одним `VITE_DATA_MODE=api` до разделения
+неподдерживаемых функций. Сначала подключить auth/profile/pets/single-pet orders;
+товары, смешанная корзина и медиа требуют отдельного backend-этапа.
+
+Проверить в браузере: register → письмо → confirm → login → profile;
+resend отменяет старый code; forgot → письмо → reset (204) → вход новым паролем;
+draft → place → pay; ошибки 401/403/409/410/422. Проверить, что MSW не перехватывает
+реальные запросы. Фронтенд в этой backend-задаче не редактировался.
+
 ## Учебный Petstore API
 
 Учебный API для практики ручного и автоматизированного API-тестирования. В нём
@@ -144,9 +233,9 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - статусы аккаунтов, питомцев и заказов представлены PostgreSQL ENUM;
 - Flyway применяет версионированные миграции без удаления существующих данных;
 - внешние ключи запрещают обход правил удаления, а уникальный индекс не допускает два активных заказа на одного питомца;
-- Dockerfile стал multi-stage и не требует заранее выполнять Maven на хосте;
+- Dockerfile стал multi-stage и не требует локальной установки Python или сборочных инструментов;
 - Compose публикует API и PostgreSQL только на loopback и хранит БД в отдельном named volume;
-- сохранены Java reference tests; добавлены Python unit/integration/system и Pytest/httpx smoke tests.
+- Python unit/integration/system и Pytest/httpx smoke tests; проверяется обновление старого Docker-образа.
 
 ## Стек и структура
 
@@ -161,7 +250,7 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - единый Docker image API + PostgreSQL: `Dockerfile`;
 - версия схемы и seed: `src/main/resources/db/migration`;
 - модели: `python/petstore/model`;
-- Python tests: `tests/python`; Java reference tests: `src/test/java`;
+- Python tests: `tests/python`;
 - AQA smoke tests: `tests/smoke`.
 
 ## Быстрый запуск через Docker Compose
@@ -298,17 +387,6 @@ docker compose up -d
 любой, кто знает email, сможет получить ссылку сброса. Для отключения установите
 `PETSTORE_EXPOSE_TEST_LINKS=false`. Без почтовой доставки восстановление пароля в
 этом режиме будет недоступно.
-
-## Java-эталон: сборка через Maven
-
-Для проверки без запуска контейнеров требуются JDK 17 и Maven 3.9+:
-
-```bash
-mvn clean package
-```
-
-Для запуска приложения используйте Docker Compose: runtime стандартизован на Tomcat 9
-и не требует локальной настройки application server.
 
 ## Предзагруженные демонстрационные пользователи
 
@@ -494,10 +572,11 @@ curl -i -X POST http://localhost:8080/api/v3/pet \
 
 ## Проверки
 
-Java unit/contract tests вместе со сборкой:
+Python unit/integration tests:
 
 ```bash
-mvn clean test
+python -m pip install --constraint requirements-runtime.txt -e '.[test,quality]'
+python -m pytest tests/python/unit tests/python/integration --cov=petstore --cov-fail-under=90
 ```
 
 Pytest/httpx smoke tests для уже запущенного приложения:
@@ -513,7 +592,7 @@ python -m pytest tests/smoke -v
 BASE_URL=http://localhost:8080/api/v3 python -m pytest tests/smoke -v
 ```
 
-44 smoke-сценария проверяют health, авторизацию, регистрацию и подтверждение,
+59 smoke-сценариев проверяют health, авторизацию, регистрацию и подтверждение,
 восстановление пароля, блокировку, отзыв старых tokens, роли, питомцев, заказы и
 платежи, а также единый формат ошибок для некорректных входных данных. Параллельные запросы отдельно
 проверяют атомарность подтверждения, сброса пароля, блокировки, разблокировки и
@@ -552,8 +631,8 @@ docker run -d --name swagger-petstore --restart unless-stopped \
 `docker-compose.dev.yml`.
 
 GitHub Actions собирает и сканирует image в pull request, но ничего не публикует.
-После успешной проверки push в `master` автоматически обновляет единственный тег
-`latest` для платформ `linux/amd64` и `linux/arm64`. Image содержит SBOM,
+После успешной проверки push в `master` обновляет `latest` и сохраняет
+`sha-<commit>` для платформ `linux/amd64` и `linux/arm64`. Image содержит SBOM,
 provenance и OCI-label с точным Git commit.
 
 Для публикации в настройках GitHub Actions должны быть заданы:
