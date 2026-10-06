@@ -16,4 +16,5 @@ frontend
 test-results
 htmlcov
 .coverage
+.media
 coverage.xml
