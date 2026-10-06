@@ -86,7 +86,7 @@ def public_delivery(snapshot: Row | None) -> Row | None:
         return None
     result = dict(snapshot)
     address = result.get("address")
-    if isinstance(address, dict) and address.get("apartment") is None:
+    if isinstance(address, dict) and cast(Row, address).get("apartment") is None:
         result["address"] = {name: value for name, value in cast(Row, address).items() if name != "apartment"}
     return result
 
