@@ -17,7 +17,7 @@ from petstore.model.commerce import CheckoutCommand
 from petstore.model.enums import OrderStatus
 from petstore.service.exceptions import ApiException
 from petstore.service.validation_service import ValidationService
-from petstore.utils.responses import Responses, public_user
+from petstore.utils.responses import Responses, public_delivery, public_user
 
 
 class CommerceOrderData:
@@ -78,7 +78,7 @@ class CommerceOrderData:
             "lines": items,
             "total": order["total_amount"],
             "currency": order["currency"],
-            "delivery": order["delivery_details"],
+            "delivery": public_delivery(order["delivery_details"]),
             "complete": order["complete"],
         }
 

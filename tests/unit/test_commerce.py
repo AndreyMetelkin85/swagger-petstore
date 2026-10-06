@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from petstore.model.commerce import CartCommand, PetCardCommand, ProductCommand
 from petstore.service.exceptions import ApiException
 from petstore.service.media_service import MAX_BYTES, normalize_image
+from petstore.utils.responses import public_delivery
 
 
 def encoded(format="PNG", metadata=False):
@@ -99,3 +100,24 @@ def test_cart_quantities_duplicates_and_totals_are_not_client_controlled():
         CartCommand(version=1, lines=[{"kind": "product", "id": identifier, "quantity": 1}] * 2)
     with pytest.raises(ValidationError):
         CartCommand(version=1, lines=[], total=Decimal("100"))
+
+
+def test_legacy_delivery_serialization_does_not_mutate_persisted_snapshot():
+    snapshot = {
+        "firstName": "Buyer",
+        "lastName": "Test",
+        "phone": "+79991234567",
+        "address": {
+            "city": "Test",
+            "street": "Test",
+            "house": "1",
+            "postalCode": "123456",
+            "apartment": None,
+        },
+    }
+    result = public_delivery(snapshot)
+    assert "apartment" not in result["address"]
+    assert snapshot["address"]["apartment"] is None
+    assert public_delivery(None) is None
+    snapshot["address"]["apartment"] = "12"
+    assert public_delivery(snapshot) == snapshot

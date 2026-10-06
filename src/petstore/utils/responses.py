@@ -1,7 +1,7 @@
 """Serialize exact Decimal numbers and prevent security fields from leaking."""
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import simplejson
@@ -77,6 +77,20 @@ def public_user(row: Row) -> Row:
     }
 
 
+def public_delivery(snapshot: Row | None) -> Row | None:
+    """Preserve the legacy wire format without rewriting immutable delivery snapshots.
+
+    :param snapshot: Stored delivery JSON; Jackson omitted a null optional apartment.
+    """
+    if snapshot is None:
+        return None
+    result = dict(snapshot)
+    address = result.get("address")
+    if isinstance(address, dict) and address.get("apartment") is None:
+        result["address"] = {name: value for name, value in cast(Row, address).items() if name != "apartment"}
+    return result
+
+
 def public_order(row: Row) -> Row:
     """Map SQL snapshot columns to the existing order contract.
 
@@ -99,7 +113,7 @@ def public_order(row: Row) -> Row:
         "complete": "complete",
     }
     return {
-        public: row[column]
+        public: public_delivery(row[column]) if public == "deliveryDetails" else row[column]
         for public, column in mapping.items()
         if public != "shipDate" or row[column] is not None
     }
