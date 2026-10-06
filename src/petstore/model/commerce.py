@@ -14,7 +14,7 @@ from petstore.model.requests import RequestModel
 class CommerceRequest(RequestModel):
     """Reject unsupported fields rather than accepting client-controlled stock or totals."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, str_strip_whitespace=True)
 
 
 class Publication(StrEnum):
@@ -66,7 +66,7 @@ class ProductCommand(CommerceRequest):
         default="OTHER", alias="productType", pattern="^(FEED|TREAT|TOY|ACCESSORY|HYGIENE|OTHER)$"
     )
     animal_types: list[Animal] = Field(default_factory=list[Animal], alias="animalTypes", max_length=7)
-    price: Decimal = Field(ge=0, le=Decimal("9999999999.99"), multiple_of=0.01)
+    price: Decimal = Field(ge=Decimal("0.01"), le=Decimal("9999999999.99"), multiple_of=0.01)
     feed_form: str = Field(default="", alias="feedForm", pattern="^(|DRY|WET)$")
     life_stages: list[str] = Field(default_factory=list, alias="lifeStages", max_length=20)
     net_weight_grams: int | None = Field(default=None, alias="netWeightGrams", ge=1, le=1000000)
@@ -98,7 +98,7 @@ class PetCardCommand(CommerceRequest):
     breed: str = Field(default="", max_length=100)
     sex: str = Field(default="UNKNOWN", pattern="^(MALE|FEMALE|UNKNOWN)$")
     birth_date: date | None = Field(default=None, alias="birthDate")
-    price: Decimal = Field(ge=0, le=Decimal("9999999999.99"), multiple_of=0.01)
+    price: Decimal = Field(ge=Decimal("0.01"), le=Decimal("9999999999.99"), multiple_of=0.01)
     images: list[ImageReference] = Field(default_factory=list[ImageReference], max_length=20)
     version: int | None = Field(default=None, ge=0)
 

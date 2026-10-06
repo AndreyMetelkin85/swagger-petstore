@@ -64,7 +64,7 @@ def test_static_only_webp():
     assert failure.value.code == "ANIMATED_IMAGE_NOT_ALLOWED"
 
 
-@pytest.mark.parametrize("price", ["-1", "1.001", "NaN", "Infinity", "10000000000"])
+@pytest.mark.parametrize("price", ["0", "-1", "1.001", "NaN", "Infinity", "10000000000"])
 def test_money_constraints(price):
     with pytest.raises(ValidationError):
         ProductCommand(sku="SKU", name="Product", price=price)

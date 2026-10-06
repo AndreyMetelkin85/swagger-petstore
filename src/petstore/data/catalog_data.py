@@ -372,7 +372,7 @@ class CatalogData:
         """Filter/search/sort with bound values and a bounded page size."""
         try:
             page, size = int(query.get("page", 1)), int(query.get("pageSize", 24))
-            if page < 1 or not 1 <= size <= 100:
+            if not 1 <= page <= 1000000 or not 1 <= size <= 100:
                 raise ValueError
             category = UUID(str(query["categoryId"])) if query.get("categoryId") else None
             minimum = str(query["minPrice"]) if query.get("minPrice") is not None else None

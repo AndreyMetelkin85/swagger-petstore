@@ -3125,7 +3125,10 @@ paths:
         "content":
           "application/json":
             "schema":
-              "$ref": "#/components/schemas/ProductCommand"
+              "allOf":
+                - "$ref": "#/components/schemas/ProductCommand"
+                - "type": "object"
+                  "required": ["version"]
   "/admin/products":
     "get":
       "operationId": "listAdminProducts"
@@ -4393,7 +4396,10 @@ paths:
         "content":
           "application/json":
             "schema":
-              "$ref": "#/components/schemas/PetCardCommand"
+              "allOf":
+                - "$ref": "#/components/schemas/PetCardCommand"
+                - "type": "object"
+                  "required": ["version"]
   "/admin/pets/{id}/publish":
     "post":
       "operationId": "publishPetCard"
@@ -5218,7 +5224,10 @@ paths:
         "content":
           "application/json":
             "schema":
-              "$ref": "#/components/schemas/CategoryCommand"
+              "allOf":
+                - "$ref": "#/components/schemas/CategoryCommand"
+                - "type": "object"
+                  "required": ["version"]
   "/media":
     "post":
       "operationId": "uploadMedia"
@@ -8453,7 +8462,7 @@ components:
           "anyOf":
             -
               "maximum": 9999999999.99
-              "minimum": 0
+              "minimum": 0.01
               "multipleOf": 0.01
               "type": "number"
             -
@@ -8584,7 +8593,7 @@ components:
           "anyOf":
             -
               "maximum": 9999999999.99
-              "minimum": 0
+              "minimum": 0.01
               "multipleOf": 0.01
               "type": "number"
             -
@@ -9147,6 +9156,14 @@ components:
             - "pet"
         "name":
           "type": "string"
+        "allocation":
+          "type": "string"
+          "description": "Состояние резерва новой строки; для старых заказов поле отсутствует."
+          "enum":
+            - "NONE"
+            - "RESERVED"
+            - "RELEASED"
+            - "CONSUMED"
         "sku":
           "type": "string"
         "quantity":
@@ -9228,7 +9245,9 @@ components:
           "enum":
             - "RUB"
         "delivery":
-          "$ref": "#/components/schemas/DeliveryDetails"
+          "allOf":
+            - "$ref": "#/components/schemas/DeliveryDetails"
+          "type": "object"
           "nullable": true
         "complete":
           "type": "boolean"

@@ -600,12 +600,12 @@ def test_media_metadata_delete_format_source_and_invalid_filters(commerce):
     )
     assert commerce.client.delete("/media/" + image["id"], headers=commerce.admin).status_code == 204
     assert commerce.client.delete("/media/" + image["id"], headers=commerce.admin).status_code == 404
-    for parameters in (
-        {"page": 0},
-        {"pageSize": 101},
-        {"minPrice": "NaN"},
-        {"categoryId": "bad"},
-        {"sort": "DROP TABLE"},
+    for parameters, expected in (
+        ({"page": 0}, 422),
+        ({"pageSize": 101}, 422),
+        ({"minPrice": "NaN"}, 422),
+        ({"categoryId": "bad"}, 400),
+        ({"sort": "DROP TABLE"}, 422),
     ):
         response = commerce.client.get("/products", params=parameters)
-        assert response.status_code == 422
+        assert response.status_code == expected

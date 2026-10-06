@@ -216,7 +216,7 @@ async def parse_body(request: Request, model: type[RequestModel] | None) -> Requ
                     "field": ".".join(str(part) for part in error["loc"]) or "body",
                     "message": "Invalid field value",
                 }
-                for error in exc.errors()
+                for error in exc.errors()[:100]
             ]
             raise ApiException(422, "VALIDATION_ERROR", "Request validation failed", details) from exc
         raise ApiException(
