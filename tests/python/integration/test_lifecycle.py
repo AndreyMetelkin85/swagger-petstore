@@ -140,8 +140,7 @@ def test_draft_has_no_reservation_or_checkout_data_and_can_be_replaced(scenario)
     assert draft["status"] == "draft"
     assert draft["paymentStatus"] == "NOT_STARTED"
     assert all(
-        draft[field] is None
-        for field in ("unitPrice", "totalAmount", "deliveryDetails", "paymentExpiresAt")
+        draft[field] is None for field in ("unitPrice", "totalAmount", "deliveryDetails", "paymentExpiresAt")
     )
     assert "shipDate" not in draft  # The Java API omitted this optional null field.
     assert scenario.client.get(f"/pet/{pet['id']}").json()["status"] == "available"
