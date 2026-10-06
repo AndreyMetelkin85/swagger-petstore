@@ -43,25 +43,25 @@ COPY --from=migration-runtime /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PETSTORE_RESOURCE_ROOT=/app/src/main/resources \
-    PETSTORE_STATIC_ROOT=/app/src/main/webapp
+    PETSTORE_RESOURCE_ROOT=/app/resources \
+    PETSTORE_STATIC_ROOT=/app/resources/web
 
 WORKDIR /app
 COPY pyproject.toml /app/
 COPY requirements-runtime.txt /app/
-COPY python /app/python
+COPY src /app/src
 RUN python -m pip install --no-cache-dir --constraint requirements-runtime.txt .
-COPY src/main/resources /app/src/main/resources
-COPY --from=swagger-ui /usr/share/nginx/html/ /app/src/main/webapp/
-COPY src/main/webapp/index.html /app/src/main/webapp/index.html
-COPY src/main/webapp/reset-password.html /app/src/main/webapp/reset-password.html
-COPY docker/python-entrypoint.sh /usr/local/bin/petstore-python-entrypoint
+COPY resources /app/resources
+COPY --from=swagger-ui /usr/share/nginx/html/ /app/resources/web/
+COPY resources/web/index.html /app/resources/web/index.html
+COPY resources/web/reset-password.html /app/resources/web/reset-password.html
+COPY docker/entrypoint.sh /usr/local/bin/petstore-entrypoint
 COPY LICENSE /licenses/LICENSE
-RUN chmod 0755 /usr/local/bin/petstore-python-entrypoint \
+RUN chmod 0755 /usr/local/bin/petstore-entrypoint \
     && chown -R petstore:petstore /app
 
 EXPOSE 8080 5432
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --retries=12 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v3/health', timeout=3)"
-ENTRYPOINT ["tini", "--", "/usr/local/bin/petstore-python-entrypoint"]
+ENTRYPOINT ["tini", "--", "/usr/local/bin/petstore-entrypoint"]

@@ -25,7 +25,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Build Python application for the target architecture
-        run: docker build --pull --platform linux/${{ matrix.arch }} --file Dockerfile.python --tag swagger-petstore:ci .
+        run: docker build --pull --platform linux/${{ matrix.arch }} --file Dockerfile --tag swagger-petstore:ci .
       - name: Set up Python for API smoke tests
         uses: actions/setup-python@v5
         with:
@@ -79,7 +79,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: Dockerfile.python
+          file: Dockerfile
           pull: true
           push: true
           platforms: linux/amd64,linux/arm64
@@ -117,7 +117,7 @@ jobs:
       - name: Every published operation retains Try it out and Execute
         env:
           PETSTORE_UI_URL: http://127.0.0.1:8080
-        run: python -m pytest -q tests/python/system/test_swagger_ui.py
+        run: python -m pytest -q tests/system/test_swagger_ui.py
       - name: Remove only the published-image CI container
         if: always()
         run: |

@@ -3,8 +3,8 @@ name: petstore-python-preview
 services:
   api:
     build:
-      context: .
-      dockerfile: Dockerfile.python
+      context: ..
+      dockerfile: Dockerfile
     image: swagger-petstore-python:preview
     container_name: petstore-python-preview
     environment:

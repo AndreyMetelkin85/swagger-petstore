@@ -53,7 +53,7 @@ export FLYWAY_URL="jdbc:${PETSTORE_DB_URL#jdbc:}"
 export FLYWAY_USER="${PETSTORE_DB_USER}"
 export FLYWAY_PASSWORD="${PETSTORE_DB_PASSWORD}"
 setpriv --reuid=petstore --regid=petstore --init-groups \
-  /opt/flyway/flyway -locations=filesystem:/app/src/main/resources/db/migration \
+  /opt/flyway/flyway -locations=filesystem:/app/resources/db/migration \
   -baselineOnMigrate=true -baselineVersion=1 migrate
 unset FLYWAY_PASSWORD
 

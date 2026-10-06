@@ -18,16 +18,17 @@ test = ["pytest==9.1.1", "pytest-cov==7.1.0", "httpx==0.28.1", "playwright==1.63
 quality = ["pyright==1.1.414", "ruff==0.16.10"]
 
 [tool.setuptools.packages.find]
-where = ["python"]
+where = ["src"]
+include = ["petstore*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/python"]
-pythonpath = ["python"]
+testpaths = ["tests/unit", "tests/integration", "tests/system"]
+pythonpath = ["src"]
 addopts = "-ra --strict-markers"
 markers = ["integration: isolated PostgreSQL required", "system: isolated running server required", "ui: browser required"]
 
 [tool.pyright]
-include = ["python"]
+include = ["src"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
@@ -35,8 +36,8 @@ reportMissingTypeStubs = false
 [tool.ruff]
 target-version = "py312"
 line-length = 110
-src = ["python"]
-include = ["python/**/*.py", "tests/python/**/*.py", "pyproject.toml"]
+src = ["src"]
+include = ["src/**/*.py", "tests/**/*.py", "pyproject.toml"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

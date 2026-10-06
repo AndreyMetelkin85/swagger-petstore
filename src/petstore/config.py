@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def environment(name: str, fallback: str) -> str:
-    """Use the original Java fallback rule for missing or whitespace-only variables.
+    """Use the fallback for missing or whitespace-only environment variables.
 
     :param name: Environment variable name.
     :param fallback: Default value from the existing application.
@@ -33,8 +33,8 @@ class Settings:
     smtp_timeout: float = 5.0
     smtp_from: str = "noreply@petstore.test"
     mail_frontend_url: str | None = None
-    resources: Path = ROOT / "src/main/resources"
-    static: Path = ROOT / "src/main/webapp"
+    resources: Path = ROOT / "resources"
+    static: Path = ROOT / "resources/web"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -56,6 +56,6 @@ class Settings:
             smtp_timeout=float(environment("PETSTORE_SMTP_TIMEOUT", "5")),
             smtp_from=environment("PETSTORE_SMTP_FROM", "noreply@petstore.test"),
             mail_frontend_url=(os.getenv("PETSTORE_MAIL_FRONTEND_URL") or "").rstrip("/") or None,
-            resources=Path(os.getenv("PETSTORE_RESOURCE_ROOT", str(ROOT / "src/main/resources"))),
-            static=Path(os.getenv("PETSTORE_STATIC_ROOT", str(ROOT / "src/main/webapp"))),
+            resources=Path(os.getenv("PETSTORE_RESOURCE_ROOT", str(ROOT / "resources"))),
+            static=Path(os.getenv("PETSTORE_STATIC_ROOT", str(ROOT / "resources/web"))),
         )

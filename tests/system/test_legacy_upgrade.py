@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 pytestmark = pytest.mark.system
-JAVA_IMAGE = (
+LEGACY_IMAGE = (
     "andymentor/swagger-petstore@sha256:58733c8c19dac851fbc0b8033413e8e3966d74b921975bc73785bd455d0baae0"
 )
 
@@ -70,7 +70,7 @@ def admin_headers(client: httpx.Client) -> dict[str, str]:
     return {"Authorization": "Bearer " + response.json()["access_token"]}
 
 
-def test_java_records_and_migration_checksums_survive_python_upgrade():
+def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
     candidate = os.getenv("PETSTORE_TEST_UPGRADE_IMAGE")
     if not candidate:
         pytest.skip("Set PETSTORE_TEST_UPGRADE_IMAGE for an isolated Java to Python upgrade")
@@ -79,10 +79,10 @@ def test_java_records_and_migration_checksums_survive_python_upgrade():
     owner = uuid4().hex
     container = "petstore-python-upgrade-test-" + owner[:12]
     volume = "petstore-python-upgrade-data-" + owner[:12]
-    docker("pull", JAVA_IMAGE)
+    docker("pull", LEGACY_IMAGE)
     docker("volume", "create", "--label", "petstore.upgrade-test=" + owner, volume)
     try:
-        base = start_image(JAVA_IMAGE, container, volume, owner)
+        base = start_image(LEGACY_IMAGE, container, volume, owner)
         with httpx.Client(base_url=base, timeout=10) as client:
             registration = client.post(
                 "/auth/register",
