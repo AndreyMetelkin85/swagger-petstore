@@ -140,10 +140,11 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
                 "/auth/login", json={"email": user["email"], "password": "UpgradePass123"}
             )
             assert login_after.status_code == 200
-        assert (
-            docker("exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query)
-            == history
+        migrated = docker(
+            "exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query
         )
+        assert migrated.startswith(history + ",")
+        assert len(migrated.split(",")) == 11
         assert len(history.split(",")) == 9
     finally:
         existing = docker("ps", "-aq", "--filter", "name=^/" + container + "$")

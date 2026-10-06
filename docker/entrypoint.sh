@@ -5,11 +5,15 @@ set -Eeuo pipefail
 : "${POSTGRES_USER:=petstore}"
 : "${POSTGRES_PASSWORD:=petstore}"
 : "${PGDATA:=/var/lib/postgresql/data}"
+: "${PETSTORE_MEDIA_ROOT:=/var/lib/petstore/media}"
 : "${PETSTORE_DB_URL:=jdbc:postgresql://127.0.0.1:5432/${POSTGRES_DB}}"
 : "${PETSTORE_DB_USER:=${POSTGRES_USER}}"
 : "${PETSTORE_DB_PASSWORD:=${POSTGRES_PASSWORD}}"
 export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD PGDATA
 export PETSTORE_DB_URL PETSTORE_DB_USER PETSTORE_DB_PASSWORD
+export PETSTORE_MEDIA_ROOT
+mkdir -p "${PETSTORE_MEDIA_ROOT}"
+chown petstore:petstore "${PETSTORE_MEDIA_ROOT}"
 
 postgres_pid=""
 api_pid=""

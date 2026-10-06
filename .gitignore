@@ -20,6 +20,7 @@ __pycache__/
 !.env.example
 .ruff_cache/
 .coverage
+.media/
 coverage.xml
 htmlcov/
 test-results/

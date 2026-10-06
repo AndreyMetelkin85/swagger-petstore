@@ -126,6 +126,9 @@ def scenario(integration_database):
                     connection.execute("DELETE FROM payments WHERE order_id = %s", (order_id,))
                     connection.execute("DELETE FROM store_orders WHERE id = %s", (order_id,))
                 for user_id in scenario.users:
+                    connection.execute("DELETE FROM api_idempotency WHERE user_id=%s", (user_id,))
+                    connection.execute("DELETE FROM cart_lines WHERE user_id=%s", (user_id,))
+                    connection.execute("DELETE FROM carts WHERE user_id=%s", (user_id,))
                     connection.execute("DELETE FROM users WHERE id = %s", (user_id,))
                 for pet_id in scenario.pets:
                     connection.execute("DELETE FROM pets WHERE id = %s", (pet_id,))

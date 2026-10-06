@@ -23,6 +23,7 @@ class RequestContext:
     auth: AuthService
     parameters: Row
     body: RequestModel | None
+    upload: tuple[bytes, str, str] | None = None
 
     def authorize(self, *roles: str) -> Row:
         """Authorize the incoming Bearer token with operation-specific roles.

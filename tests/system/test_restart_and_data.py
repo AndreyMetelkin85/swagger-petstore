@@ -73,4 +73,4 @@ def test_existing_user_and_flyway_history_survive_restart(restart_record):
     assert response.json() == before
     history_after = run_docker("exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", query)
     assert history_after == history_before
-    assert len(history_after.split(",")) == 9
+    assert len(history_after.split(",")) == 11

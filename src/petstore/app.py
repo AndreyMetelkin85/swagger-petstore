@@ -16,14 +16,17 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
+from starlette.types import Message
 
 from petstore.config import Settings
 from petstore.controller.admin_user_controller import AdminUserController
 from petstore.controller.authentication_controller import AuthenticationController
+from petstore.controller.commerce_controller import OPERATIONS, REQUESTS, CommerceController
 from petstore.controller.context import RequestContext
 from petstore.controller.health_controller import HealthController
 from petstore.controller.order_controller import OrderController
@@ -31,9 +34,10 @@ from petstore.controller.payment_controller import PaymentController
 from petstore.controller.pet_controller import PetController
 from petstore.controller.registration_controller import RegistrationController
 from petstore.controller.user_controller import UserController
+from petstore.data.commerce_order_data import CommerceOrderData
 from petstore.data.database import Database, Row
-from petstore.data.order_data import OrderData
 from petstore.data.user_data import UserData
+from petstore.model.commerce import CommerceRequest
 from petstore.model.requests import (
     AdminUserUpdateRequest,
     LoginRequest,
@@ -49,6 +53,7 @@ from petstore.model.requests import (
 )
 from petstore.service.auth_service import AuthService
 from petstore.service.exceptions import ApiException
+from petstore.service.media_service import MAX_BYTES
 from petstore.utils.responses import Responses
 
 logger = logging.getLogger("petstore")
@@ -69,6 +74,37 @@ REQUEST_MODELS: dict[str, type[RequestModel]] = {
     "updateOrderDraft": OrderCreateRequest,
     "createPayment": PaymentRequest,
 }
+REQUEST_MODELS.update(REQUESTS)
+REQUEST_MODELS["createCommercePayment"] = PaymentRequest
+
+
+async def upload_body(request: Request) -> tuple[bytes, str, str]:
+    """Bound the complete multipart stream before decoding a single image."""
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > MAX_BYTES + 65536:
+            raise ApiException(413, "IMAGE_TOO_LARGE", "Upload exceeds 10 MiB plus multipart metadata")
+        raw.extend(chunk)
+
+    async def receive() -> Message:
+        """Provide the already bounded form body to Starlette's parser."""
+        return {"type": "http.request", "body": bytes(raw), "more_body": False}
+
+    bounded = Request(request.scope, receive=receive)
+    try:
+        async with bounded.form(max_files=1, max_fields=2, max_part_size=2048) as form:
+            if set(form.keys()) - {"file", "sourceType", "sourceNote"}:
+                raise ApiException(422, "VALIDATION_ERROR", "Unknown upload fields")
+            file = form.get("file")
+            if not isinstance(file, UploadFile):
+                raise ApiException(422, "INVALID_IMAGE", "A single file is required")
+            payload = await file.read(MAX_BYTES + 1)
+            source_type, source_note = form.get("sourceType", "OWN"), form.get("sourceNote", "")
+            if not isinstance(source_type, str) or not isinstance(source_note, str):
+                raise ApiException(422, "VALIDATION_ERROR", "Invalid source metadata")
+            return payload, source_type, source_note
+    except HTTPException as exc:
+        raise ApiException(422, "INVALID_IMAGE", "Multipart form is invalid") from exc
 
 
 def resolve(document: Row, value: Row) -> Row:
@@ -152,7 +188,11 @@ async def parse_body(request: Request, model: type[RequestModel] | None) -> Requ
     """
     if model is None:
         return None
-    raw = await request.body()
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > 1024 * 1024:
+            raise ApiException(413, "REQUEST_TOO_LARGE", "JSON body exceeds 1 MiB")
+        raw.extend(chunk)
     if not raw.strip():
         raise ApiException(400, "BAD_REQUEST", "Request body is required")
     media_type = request.headers.get("Content-Type", "application/json").split(";", 1)[0].strip().lower()
@@ -165,7 +205,20 @@ async def parse_body(request: Request, model: type[RequestModel] | None) -> Requ
         if not isinstance(value, dict):
             raise ValueError("Body must be an object")
         return model.model_validate(value, by_alias=True, by_name=False)
-    except (ValueError, UnicodeError, ValidationError) as exc:
+    except ValidationError as exc:
+        if issubclass(model, CommerceRequest):
+            details = [
+                {
+                    "field": ".".join(str(part) for part in error["loc"]) or "body",
+                    "message": "Invalid field value",
+                }
+                for error in exc.errors()
+            ]
+            raise ApiException(422, "VALIDATION_ERROR", "Request validation failed", details) from exc
+        raise ApiException(
+            400, "BAD_REQUEST", "Request body contains malformed or incompatible JSON"
+        ) from exc
+    except (ValueError, UnicodeError) as exc:
         raise ApiException(
             400, "BAD_REQUEST", "Request body contains malformed or incompatible JSON"
         ) from exc
@@ -177,6 +230,7 @@ def endpoint(
     parameters: list[Row],
     document: Row,
     auth: AuthService,
+    multipart: bool = False,
 ) -> Callable[[Request], Any]:
     """Build a shared transport adapter without duplicating validation in every endpoint.
 
@@ -193,6 +247,10 @@ def endpoint(
         :param request: Incoming HTTP request.
         """
         parsed = parse_parameters(request, parameters, document)
+        if multipart:
+            await run_in_threadpool(auth.authorize, request.headers.get("Authorization"), "ADMIN")
+            upload = await upload_body(request)
+            return await run_in_threadpool(handler, RequestContext(request, auth, parsed, None, upload))
         body = await parse_body(request, model)
         return await run_in_threadpool(handler, RequestContext(request, auth, parsed, body))
 
@@ -222,7 +280,7 @@ def create_app(
         """Run a stoppable, row-lock-safe expiry job without logging database values."""
         while not stop.wait(settings.expire_interval):
             try:
-                OrderData(db).expire_overdue_orders()
+                CommerceOrderData(db).expire()
             except Exception as exc:
                 logger.error("reservation_expiry_failed type=%s", type(exc).__name__)
 
@@ -348,6 +406,7 @@ def create_app(
         UserController(),
         AdminUserController(),
     ]
+    commerce = CommerceController(db, settings)
     for path, path_item in document["paths"].items():
         for method, operation in path_item.items():
             if method not in {"get", "post", "put", "delete", "patch", "head", "options"}:
@@ -358,15 +417,26 @@ def create_app(
                 for controller in controllers
                 if hasattr(controller, operation_id)
             ]
+            if operation_id in OPERATIONS:
+                handlers.append(commerce.handler(operation_id))
             if len(handlers) != 1:
                 raise RuntimeError(f"Operation {operation_id} must have exactly one controller")
-            if "requestBody" in operation and operation_id not in REQUEST_MODELS:
+            if (
+                "requestBody" in operation
+                and operation_id not in REQUEST_MODELS
+                and operation_id != "uploadMedia"
+            ):
                 raise RuntimeError(f"Operation {operation_id} is missing its request model")
             parameters = path_item.get("parameters", []) + operation.get("parameters", [])
             app.add_api_route(
                 "/api/v3" + path,
                 endpoint(
-                    cast(Handler, handlers[0]), REQUEST_MODELS.get(operation_id), parameters, document, auth
+                    cast(Handler, handlers[0]),
+                    REQUEST_MODELS.get(operation_id),
+                    parameters,
+                    document,
+                    auth,
+                    operation_id == "uploadMedia",
                 ),
                 methods=[method.upper()],
                 name=operation_id,

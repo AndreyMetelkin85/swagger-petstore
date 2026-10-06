@@ -120,10 +120,9 @@ class PetData:
                 raise PetException(
                     409, "PET_VERSION_CONFLICT", "Pet was changed by another request; reload it and retry"
                 )
-            active = connection.execute(
-                "SELECT 1 FROM store_orders WHERE pet_id = %s AND status IN ('placed', 'approved', 'shipped') LIMIT 1",
-                (pet_id,),
-            ).fetchone()
+            from petstore.data.order_data import OrderData
+
+            active = OrderData.has_active_order(connection, pet_id)
             if request.status is not None and active:
                 raise PetException(409, "PET_HAS_ACTIVE_ORDER", "Pet status is managed by its active order")
             category, urls, tags = self.nested(request)
@@ -157,7 +156,10 @@ class PetData:
             ):
                 raise PetException(404, "PET_NOT_FOUND", "Pet was not found")
             if connection.execute(
-                "SELECT 1 FROM store_orders WHERE pet_id = %s LIMIT 1", (pet_id,)
+                """SELECT 1 WHERE EXISTS (SELECT 1 FROM store_orders WHERE pet_id=%s)
+                   OR EXISTS (SELECT 1 FROM order_lines WHERE item_type='pet' AND item_id=%s)""",
+                (pet_id, pet_id),
             ).fetchone():
                 raise PetException(409, "PET_HAS_ORDERS", "Pet with order history cannot be deleted")
+            connection.execute("DELETE FROM catalog_images WHERE pet_id=%s", (pet_id,))
             connection.execute("DELETE FROM pets WHERE id = %s", (pet_id,))

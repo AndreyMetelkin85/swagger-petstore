@@ -44,7 +44,8 @@ ENV JAVA_HOME=/opt/java/openjdk \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PETSTORE_RESOURCE_ROOT=/app/resources \
-    PETSTORE_STATIC_ROOT=/app/resources/web
+    PETSTORE_STATIC_ROOT=/app/resources/web \
+    PETSTORE_MEDIA_ROOT=/var/lib/petstore/media
 
 WORKDIR /app
 COPY pyproject.toml /app/
@@ -58,9 +59,12 @@ COPY resources/web/reset-password.html /app/resources/web/reset-password.html
 COPY docker/entrypoint.sh /usr/local/bin/petstore-entrypoint
 COPY LICENSE /licenses/LICENSE
 RUN chmod 0755 /usr/local/bin/petstore-entrypoint \
+    && mkdir -p /var/lib/petstore/media \
+    && chown petstore:petstore /var/lib/petstore/media \
     && chown -R petstore:petstore /app
 
 EXPOSE 8080 5432
+VOLUME ["/var/lib/petstore/media"]
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --retries=12 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v3/health', timeout=3)"

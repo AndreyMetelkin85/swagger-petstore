@@ -33,6 +33,30 @@ tags:
   - name: Administration
     description: Административные операции.
 
+  -
+    "name": "Products"
+    "description": "Products"
+  -
+    "name": "Categories"
+    "description": "Categories"
+  -
+    "name": "Pet cards"
+    "description": "Pet cards"
+  -
+    "name": "Media"
+    "description": "Media"
+  -
+    "name": "Cart"
+    "description": "Cart"
+  -
+    "name": "Store orders"
+    "description": "Store orders"
+  -
+    "name": "Store payments"
+    "description": "Store payments"
+  -
+    "name": "Telemetry"
+    "description": "Telemetry"
 paths:
   /health:
     get:
@@ -2690,6 +2714,4815 @@ paths:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
 
+  "/products":
+    "get":
+      "operationId": "listProducts"
+      "tags":
+        - "Products"
+      "summary": "Публичный каталог"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductPage"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "parameters":
+        -
+          "name": "page"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "default": 1
+        -
+          "name": "pageSize"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 24
+        -
+          "name": "q"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 150
+        -
+          "name": "sort"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum":
+              - "name"
+              - "priceAsc"
+              - "priceDesc"
+              - "newest"
+            "default": "name"
+        -
+          "name": "categoryId"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "minPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "maxPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "animalType"
+          "in": "query"
+          "required": false
+          "schema":
+            "$ref": "#/components/schemas/Animal"
+        -
+          "name": "brand"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+        -
+          "name": "productType"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+        -
+          "name": "feedForm"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+    "post":
+      "operationId": "createProduct"
+      "tags":
+        - "Products"
+      "summary": "Создать черновик карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "201":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "SKU_ALREADY_EXISTS":
+                  "value":
+                    "status": 409
+                    "error": "SKU_ALREADY_EXISTS"
+                    "message": "SKU is already used"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/ProductCommand"
+  "/products/{id}":
+    "get":
+      "operationId": "getProduct"
+      "tags":
+        - "Products"
+      "summary": "Карточка каталога"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PRODUCT_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+    "put":
+      "operationId": "updateProduct"
+      "tags":
+        - "Products"
+      "summary": "Обновить карточку по версии"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PRODUCT_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "SKU_ALREADY_EXISTS":
+                  "value":
+                    "status": 409
+                    "error": "SKU_ALREADY_EXISTS"
+                    "message": "SKU is already used"
+                    "details": []
+                "STOCK_ADJUSTMENT_REQUIRED":
+                  "value":
+                    "status": 409
+                    "error": "STOCK_ADJUSTMENT_REQUIRED"
+                    "message": "Use a stock adjustment to change inventory"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/ProductCommand"
+  "/admin/products":
+    "get":
+      "operationId": "listAdminProducts"
+      "tags":
+        - "Products"
+      "summary": "Каталог администратора"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductPage"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "page"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "default": 1
+        -
+          "name": "pageSize"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 24
+        -
+          "name": "q"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 150
+        -
+          "name": "sort"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum":
+              - "name"
+              - "priceAsc"
+              - "priceDesc"
+              - "newest"
+            "default": "name"
+        -
+          "name": "categoryId"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "minPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "maxPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "animalType"
+          "in": "query"
+          "required": false
+          "schema":
+            "$ref": "#/components/schemas/Animal"
+        -
+          "name": "brand"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+        -
+          "name": "productType"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+        -
+          "name": "feedForm"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+        -
+          "name": "publicationStatus"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum":
+              - "DRAFT"
+              - "PUBLISHED"
+              - "ARCHIVED"
+  "/admin/products/{id}":
+    "get":
+      "operationId": "getAdminProduct"
+      "tags":
+        - "Products"
+      "summary": "Карточка администратора"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PRODUCT_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/products/{id}/publish":
+    "post":
+      "operationId": "publishProduct"
+      "tags":
+        - "Products"
+      "summary": "Изменить публикацию карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PRODUCT_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+                "INVALID_PUBLICATION_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_PUBLICATION_TRANSITION"
+                    "message": "Archived cards cannot be published"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "IMAGE_REQUIRED":
+                  "value":
+                    "status": 422
+                    "error": "IMAGE_REQUIRED"
+                    "message": "At least one image is required"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/products/{id}/unpublish":
+    "post":
+      "operationId": "unpublishProduct"
+      "tags":
+        - "Products"
+      "summary": "Изменить публикацию карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PRODUCT_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+                "INVALID_PUBLICATION_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_PUBLICATION_TRANSITION"
+                    "message": "Archived cards cannot be published"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "IMAGE_REQUIRED":
+                  "value":
+                    "status": 422
+                    "error": "IMAGE_REQUIRED"
+                    "message": "At least one image is required"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/products/{id}/archive":
+    "post":
+      "operationId": "archiveProduct"
+      "tags":
+        - "Products"
+      "summary": "Изменить публикацию карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PRODUCT_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+                "INVALID_PUBLICATION_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_PUBLICATION_TRANSITION"
+                    "message": "Archived cards cannot be published"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "IMAGE_REQUIRED":
+                  "value":
+                    "status": 422
+                    "error": "IMAGE_REQUIRED"
+                    "message": "At least one image is required"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/catalog/pets":
+    "get":
+      "operationId": "listCatalogPets"
+      "tags":
+        - "Pet cards"
+      "summary": "Публичный каталог"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetPage"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "parameters":
+        -
+          "name": "page"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "default": 1
+        -
+          "name": "pageSize"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 24
+        -
+          "name": "q"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 150
+        -
+          "name": "sort"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum":
+              - "name"
+              - "priceAsc"
+              - "priceDesc"
+              - "newest"
+            "default": "name"
+        -
+          "name": "categoryId"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "minPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "maxPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "animalType"
+          "in": "query"
+          "required": false
+          "schema":
+            "$ref": "#/components/schemas/Animal"
+        -
+          "name": "status"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+  "/catalog/pets/{id}":
+    "get":
+      "operationId": "getCatalogPet"
+      "tags":
+        - "Pet cards"
+      "summary": "Карточка каталога"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PET_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PET_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/admin/pets":
+    "get":
+      "operationId": "listAdminPets"
+      "tags":
+        - "Pet cards"
+      "summary": "Каталог администратора"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetPage"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "page"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "default": 1
+        -
+          "name": "pageSize"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 24
+        -
+          "name": "q"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 150
+        -
+          "name": "sort"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum":
+              - "name"
+              - "priceAsc"
+              - "priceDesc"
+              - "newest"
+            "default": "name"
+        -
+          "name": "categoryId"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "minPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "maxPrice"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "number"
+            "minimum": 0
+            "multipleOf": 0.01
+        -
+          "name": "animalType"
+          "in": "query"
+          "required": false
+          "schema":
+            "$ref": "#/components/schemas/Animal"
+        -
+          "name": "status"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+        -
+          "name": "publicationStatus"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum":
+              - "DRAFT"
+              - "PUBLISHED"
+              - "ARCHIVED"
+    "post":
+      "operationId": "createPetCard"
+      "tags":
+        - "Pet cards"
+      "summary": "Создать черновик карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "201":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "SKU_ALREADY_EXISTS":
+                  "value":
+                    "status": 409
+                    "error": "SKU_ALREADY_EXISTS"
+                    "message": "SKU is already used"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/PetCardCommand"
+  "/admin/pets/{id}":
+    "get":
+      "operationId": "getAdminPet"
+      "tags":
+        - "Pet cards"
+      "summary": "Карточка администратора"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PET_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PET_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+    "put":
+      "operationId": "updatePetCard"
+      "tags":
+        - "Pet cards"
+      "summary": "Обновить карточку по версии"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PET_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PET_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "SKU_ALREADY_EXISTS":
+                  "value":
+                    "status": 409
+                    "error": "SKU_ALREADY_EXISTS"
+                    "message": "SKU is already used"
+                    "details": []
+                "STOCK_ADJUSTMENT_REQUIRED":
+                  "value":
+                    "status": 409
+                    "error": "STOCK_ADJUSTMENT_REQUIRED"
+                    "message": "Use a stock adjustment to change inventory"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/PetCardCommand"
+  "/admin/pets/{id}/publish":
+    "post":
+      "operationId": "publishPetCard"
+      "tags":
+        - "Pet cards"
+      "summary": "Изменить публикацию карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PET_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PET_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+                "INVALID_PUBLICATION_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_PUBLICATION_TRANSITION"
+                    "message": "Archived cards cannot be published"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "IMAGE_REQUIRED":
+                  "value":
+                    "status": 422
+                    "error": "IMAGE_REQUIRED"
+                    "message": "At least one image is required"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/admin/pets/{id}/unpublish":
+    "post":
+      "operationId": "unpublishPetCard"
+      "tags":
+        - "Pet cards"
+      "summary": "Изменить публикацию карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PET_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PET_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+                "INVALID_PUBLICATION_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_PUBLICATION_TRANSITION"
+                    "message": "Archived cards cannot be published"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "IMAGE_REQUIRED":
+                  "value":
+                    "status": 422
+                    "error": "IMAGE_REQUIRED"
+                    "message": "At least one image is required"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/admin/pets/{id}/archive":
+    "post":
+      "operationId": "archivePetCard"
+      "tags":
+        - "Pet cards"
+      "summary": "Изменить публикацию карточки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/PetCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PET_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PET_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CATEGORY_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_UNAVAILABLE"
+                    "message": "Category is inactive or belongs to another item kind"
+                    "details": []
+                "INVALID_PUBLICATION_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_PUBLICATION_TRANSITION"
+                    "message": "Archived cards cannot be published"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "IMAGE_REQUIRED":
+                  "value":
+                    "status": 422
+                    "error": "IMAGE_REQUIRED"
+                    "message": "At least one image is required"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/products/{id}/stock-adjustments":
+    "post":
+      "operationId": "adjustProductStock"
+      "tags":
+        - "Products"
+      "summary": "Корректировка остатков"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ProductCard"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "PRODUCT_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "INSUFFICIENT_STOCK":
+                  "value":
+                    "status": 409
+                    "error": "INSUFFICIENT_STOCK"
+                    "message": "Not enough unreserved stock"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/StockCommand"
+  "/catalog/categories":
+    "get":
+      "operationId": "listCategories"
+      "tags":
+        - "Categories"
+      "summary": "Активные категории"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "type": "array"
+                "items":
+                  "$ref": "#/components/schemas/CatalogCategory"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "parameters":
+        -
+          "name": "kind"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum":
+              - "product"
+              - "pet"
+  "/admin/catalog/categories":
+    "get":
+      "operationId": "listAdminCategories"
+      "tags":
+        - "Categories"
+      "summary": "Все категории"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "type": "array"
+                "items":
+                  "$ref": "#/components/schemas/CatalogCategory"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+    "post":
+      "operationId": "createCategory"
+      "tags":
+        - "Categories"
+      "summary": "Создать категорию"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CatalogCategory"
+        "201":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CatalogCategory"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CategoryCommand"
+  "/admin/catalog/categories/{id}":
+    "put":
+      "operationId": "updateCategory"
+      "tags":
+        - "Categories"
+      "summary": "Обновить или деактивировать категорию"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CatalogCategory"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "CATEGORY_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "CATEGORY_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CATEGORY_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_VERSION_CONFLICT"
+                    "message": "Reload the current category"
+                    "details": []
+                "CATEGORY_KIND_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "CATEGORY_KIND_CONFLICT"
+                    "message": "Category kind cannot be changed"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CategoryCommand"
+  "/media":
+    "post":
+      "operationId": "uploadMedia"
+      "tags":
+        - "Media"
+      "summary": "Загрузить проверенное фото (10 MiB / 40 MP)"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/MediaMetadata"
+        "201":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/MediaMetadata"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+        "413":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "IMAGE_TOO_LARGE":
+                  "value":
+                    "status": 413
+                    "error": "IMAGE_TOO_LARGE"
+                    "message": "Image exceeds the size or pixel limit"
+                    "details": []
+        "415":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "INVALID_IMAGE_FORMAT":
+                  "value":
+                    "status": 415
+                    "error": "INVALID_IMAGE_FORMAT"
+                    "message": "Only JPEG, PNG and static WebP are supported"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "INVALID_IMAGE":
+                  "value":
+                    "status": 422
+                    "error": "INVALID_IMAGE"
+                    "message": "Image cannot be decoded"
+                    "details": []
+                "ANIMATED_IMAGE_NOT_ALLOWED":
+                  "value":
+                    "status": 422
+                    "error": "ANIMATED_IMAGE_NOT_ALLOWED"
+                    "message": "Animated images are not supported"
+                    "details": []
+        "503":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_STORAGE_UNAVAILABLE":
+                  "value":
+                    "status": 503
+                    "error": "MEDIA_STORAGE_UNAVAILABLE"
+                    "message": "Storage is unavailable"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "requestBody":
+        "required": true
+        "content":
+          "multipart/form-data":
+            "schema":
+              "type": "object"
+              "properties":
+                "file":
+                  "type": "string"
+                  "format": "binary"
+                "sourceType":
+                  "type": "string"
+                  "enum":
+                    - "OWN"
+                    - "SUPPLIER"
+                    - "DEMO"
+                  "default": "OWN"
+                "sourceNote":
+                  "type": "string"
+                  "maxLength": 1000
+              "required":
+                - "file"
+  "/media/{id}":
+    "get":
+      "operationId": "getMedia"
+      "tags":
+        - "Media"
+      "summary": "Метаданные или изображение"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/MediaMetadata"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "MEDIA_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "413":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "IMAGE_TOO_LARGE":
+                  "value":
+                    "status": 413
+                    "error": "IMAGE_TOO_LARGE"
+                    "message": "Image exceeds the size or pixel limit"
+                    "details": []
+        "415":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "INVALID_IMAGE_FORMAT":
+                  "value":
+                    "status": 415
+                    "error": "INVALID_IMAGE_FORMAT"
+                    "message": "Only JPEG, PNG and static WebP are supported"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+        "503":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_STORAGE_UNAVAILABLE":
+                  "value":
+                    "status": 503
+                    "error": "MEDIA_STORAGE_UNAVAILABLE"
+                    "message": "Storage is unavailable"
+                    "details": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+    "delete":
+      "operationId": "deleteMedia"
+      "tags":
+        - "Media"
+      "summary": "Удалить неиспользуемое фото"
+      "responses":
+        "204":
+          "description": "Успешная операция"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "MEDIA_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "MEDIA_IN_USE":
+                  "value":
+                    "status": 409
+                    "error": "MEDIA_IN_USE"
+                    "message": "Media is used by a card or order snapshot"
+                    "details": []
+        "413":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "IMAGE_TOO_LARGE":
+                  "value":
+                    "status": 413
+                    "error": "IMAGE_TOO_LARGE"
+                    "message": "Image exceeds the size or pixel limit"
+                    "details": []
+        "415":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "INVALID_IMAGE_FORMAT":
+                  "value":
+                    "status": 415
+                    "error": "INVALID_IMAGE_FORMAT"
+                    "message": "Only JPEG, PNG and static WebP are supported"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+        "503":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_STORAGE_UNAVAILABLE":
+                  "value":
+                    "status": 503
+                    "error": "MEDIA_STORAGE_UNAVAILABLE"
+                    "message": "Storage is unavailable"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/media/{id}/image":
+    "get":
+      "operationId": "getMediaImage"
+      "tags":
+        - "Media"
+      "summary": "Метаданные или изображение"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "image/jpeg":
+              "schema":
+                "type": "string"
+                "format": "binary"
+            "image/png":
+              "schema":
+                "type": "string"
+                "format": "binary"
+            "image/webp":
+              "schema":
+                "type": "string"
+                "format": "binary"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "MEDIA_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "413":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "IMAGE_TOO_LARGE":
+                  "value":
+                    "status": 413
+                    "error": "IMAGE_TOO_LARGE"
+                    "message": "Image exceeds the size or pixel limit"
+                    "details": []
+        "415":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "INVALID_IMAGE_FORMAT":
+                  "value":
+                    "status": 415
+                    "error": "INVALID_IMAGE_FORMAT"
+                    "message": "Only JPEG, PNG and static WebP are supported"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+        "503":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_STORAGE_UNAVAILABLE":
+                  "value":
+                    "status": 503
+                    "error": "MEDIA_STORAGE_UNAVAILABLE"
+                    "message": "Storage is unavailable"
+                    "details": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/media/{id}/thumb":
+    "get":
+      "operationId": "getMediaThumb"
+      "tags":
+        - "Media"
+      "summary": "Метаданные или изображение"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "image/jpeg":
+              "schema":
+                "type": "string"
+                "format": "binary"
+            "image/png":
+              "schema":
+                "type": "string"
+                "format": "binary"
+            "image/webp":
+              "schema":
+                "type": "string"
+                "format": "binary"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "MEDIA_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "413":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "IMAGE_TOO_LARGE":
+                  "value":
+                    "status": 413
+                    "error": "IMAGE_TOO_LARGE"
+                    "message": "Image exceeds the size or pixel limit"
+                    "details": []
+        "415":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "INVALID_IMAGE_FORMAT":
+                  "value":
+                    "status": 415
+                    "error": "INVALID_IMAGE_FORMAT"
+                    "message": "Only JPEG, PNG and static WebP are supported"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+        "503":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "MEDIA_STORAGE_UNAVAILABLE":
+                  "value":
+                    "status": 503
+                    "error": "MEDIA_STORAGE_UNAVAILABLE"
+                    "message": "Storage is unavailable"
+                    "details": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/store/cart":
+    "get":
+      "operationId": "getCart"
+      "tags":
+        - "Cart"
+      "summary": "Общая корзина"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Cart"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+    "put":
+      "operationId": "replaceCart"
+      "tags":
+        - "Cart"
+      "summary": "Полная замена корзины по версии"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Cart"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CART_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "CART_VERSION_CONFLICT"
+                    "message": "Cart changed; reload it before merging"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": false
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CartCommand"
+  "/store/orders":
+    "get":
+      "operationId": "listCommerceOrders"
+      "tags":
+        - "Store orders"
+      "summary": "История заказов"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "type": "array"
+                "items":
+                  "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+    "post":
+      "operationId": "createCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Черновик из версии корзины"
+      "responses":
+        "200":
+          "description": "Повтор ранее выполненной операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "201":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "CART_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "CART_VERSION_CONFLICT"
+                    "message": "Cart changed; reload it before merging"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+                "PRODUCT_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_UNAVAILABLE"
+                    "message": "A checkout item is unpublished"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+                "CART_EMPTY":
+                  "value":
+                    "status": 422
+                    "error": "CART_EMPTY"
+                    "message": "Cart is empty"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CheckoutCommand"
+  "/store/orders/{id}":
+    "get":
+      "operationId": "getCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Состав заказа и снимок доставки"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+    "delete":
+      "operationId": "deleteCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Очистить черновик или терминальный заказ"
+      "responses":
+        "204":
+          "description": "Успешная операция"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "ORDER_NOT_DELETABLE":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_NOT_DELETABLE"
+                    "message": "Active orders cannot be deleted"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/store/orders/{id}/place":
+    "post":
+      "operationId": "placeCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Действие заказа: place"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "PRICE_CHANGED":
+                  "value":
+                    "status": 409
+                    "error": "PRICE_CHANGED"
+                    "message": "A checkout price changed; refresh the cart"
+                    "details": []
+                "INSUFFICIENT_STOCK":
+                  "value":
+                    "status": 409
+                    "error": "INSUFFICIENT_STOCK"
+                    "message": "Not enough unreserved stock"
+                    "details": []
+                "PET_NOT_AVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PET_NOT_AVAILABLE"
+                    "message": "Pet is already reserved"
+                    "details": []
+                "PRODUCT_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_UNAVAILABLE"
+                    "message": "A checkout item is unpublished"
+                    "details": []
+                "PROFILE_INCOMPLETE":
+                  "value":
+                    "status": 409
+                    "error": "PROFILE_INCOMPLETE"
+                    "message": "Complete the delivery profile"
+                    "details": []
+                "ORDER_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_VERSION_CONFLICT"
+                    "message": "Reload the current order"
+                    "details": []
+                "ORDER_NOT_PAID":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_NOT_PAID"
+                    "message": "Successful payment is required"
+                    "details": []
+                "INVALID_STATUS_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_STATUS_TRANSITION"
+                    "message": "This order transition is not allowed"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/store/orders/{id}/approve":
+    "post":
+      "operationId": "approveCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Действие заказа: approve"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "PRICE_CHANGED":
+                  "value":
+                    "status": 409
+                    "error": "PRICE_CHANGED"
+                    "message": "A checkout price changed; refresh the cart"
+                    "details": []
+                "INSUFFICIENT_STOCK":
+                  "value":
+                    "status": 409
+                    "error": "INSUFFICIENT_STOCK"
+                    "message": "Not enough unreserved stock"
+                    "details": []
+                "PET_NOT_AVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PET_NOT_AVAILABLE"
+                    "message": "Pet is already reserved"
+                    "details": []
+                "PRODUCT_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_UNAVAILABLE"
+                    "message": "A checkout item is unpublished"
+                    "details": []
+                "PROFILE_INCOMPLETE":
+                  "value":
+                    "status": 409
+                    "error": "PROFILE_INCOMPLETE"
+                    "message": "Complete the delivery profile"
+                    "details": []
+                "ORDER_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_VERSION_CONFLICT"
+                    "message": "Reload the current order"
+                    "details": []
+                "ORDER_NOT_PAID":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_NOT_PAID"
+                    "message": "Successful payment is required"
+                    "details": []
+                "INVALID_STATUS_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_STATUS_TRANSITION"
+                    "message": "This order transition is not allowed"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/store/orders/{id}/ship":
+    "post":
+      "operationId": "shipCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Действие заказа: ship"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "PRICE_CHANGED":
+                  "value":
+                    "status": 409
+                    "error": "PRICE_CHANGED"
+                    "message": "A checkout price changed; refresh the cart"
+                    "details": []
+                "INSUFFICIENT_STOCK":
+                  "value":
+                    "status": 409
+                    "error": "INSUFFICIENT_STOCK"
+                    "message": "Not enough unreserved stock"
+                    "details": []
+                "PET_NOT_AVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PET_NOT_AVAILABLE"
+                    "message": "Pet is already reserved"
+                    "details": []
+                "PRODUCT_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_UNAVAILABLE"
+                    "message": "A checkout item is unpublished"
+                    "details": []
+                "PROFILE_INCOMPLETE":
+                  "value":
+                    "status": 409
+                    "error": "PROFILE_INCOMPLETE"
+                    "message": "Complete the delivery profile"
+                    "details": []
+                "ORDER_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_VERSION_CONFLICT"
+                    "message": "Reload the current order"
+                    "details": []
+                "ORDER_NOT_PAID":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_NOT_PAID"
+                    "message": "Successful payment is required"
+                    "details": []
+                "INVALID_STATUS_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_STATUS_TRANSITION"
+                    "message": "This order transition is not allowed"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/store/orders/{id}/deliver":
+    "post":
+      "operationId": "deliverCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Действие заказа: deliver"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "PRICE_CHANGED":
+                  "value":
+                    "status": 409
+                    "error": "PRICE_CHANGED"
+                    "message": "A checkout price changed; refresh the cart"
+                    "details": []
+                "INSUFFICIENT_STOCK":
+                  "value":
+                    "status": 409
+                    "error": "INSUFFICIENT_STOCK"
+                    "message": "Not enough unreserved stock"
+                    "details": []
+                "PET_NOT_AVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PET_NOT_AVAILABLE"
+                    "message": "Pet is already reserved"
+                    "details": []
+                "PRODUCT_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_UNAVAILABLE"
+                    "message": "A checkout item is unpublished"
+                    "details": []
+                "PROFILE_INCOMPLETE":
+                  "value":
+                    "status": 409
+                    "error": "PROFILE_INCOMPLETE"
+                    "message": "Complete the delivery profile"
+                    "details": []
+                "ORDER_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_VERSION_CONFLICT"
+                    "message": "Reload the current order"
+                    "details": []
+                "ORDER_NOT_PAID":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_NOT_PAID"
+                    "message": "Successful payment is required"
+                    "details": []
+                "INVALID_STATUS_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_STATUS_TRANSITION"
+                    "message": "This order transition is not allowed"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/store/orders/{id}/cancel":
+    "post":
+      "operationId": "cancelCommerceOrder"
+      "tags":
+        - "Store orders"
+      "summary": "Действие заказа: cancel"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/StoreOrder"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "PRICE_CHANGED":
+                  "value":
+                    "status": 409
+                    "error": "PRICE_CHANGED"
+                    "message": "A checkout price changed; refresh the cart"
+                    "details": []
+                "INSUFFICIENT_STOCK":
+                  "value":
+                    "status": 409
+                    "error": "INSUFFICIENT_STOCK"
+                    "message": "Not enough unreserved stock"
+                    "details": []
+                "PET_NOT_AVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PET_NOT_AVAILABLE"
+                    "message": "Pet is already reserved"
+                    "details": []
+                "PRODUCT_UNAVAILABLE":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_UNAVAILABLE"
+                    "message": "A checkout item is unpublished"
+                    "details": []
+                "PROFILE_INCOMPLETE":
+                  "value":
+                    "status": 409
+                    "error": "PROFILE_INCOMPLETE"
+                    "message": "Complete the delivery profile"
+                    "details": []
+                "ORDER_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_VERSION_CONFLICT"
+                    "message": "Reload the current order"
+                    "details": []
+                "ORDER_NOT_PAID":
+                  "value":
+                    "status": 409
+                    "error": "ORDER_NOT_PAID"
+                    "message": "Successful payment is required"
+                    "details": []
+                "INVALID_STATUS_TRANSITION":
+                  "value":
+                    "status": 409
+                    "error": "INVALID_STATUS_TRANSITION"
+                    "message": "This order transition is not allowed"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/VersionCommand"
+  "/store/orders/{id}/payments":
+    "get":
+      "operationId": "listCommercePayments"
+      "tags":
+        - "Store payments"
+      "summary": "История общей оплаты"
+      "responses":
+        "200":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "type": "array"
+                "items":
+                  "$ref": "#/components/schemas/Payment"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+    "post":
+      "operationId": "createCommercePayment"
+      "tags":
+        - "Store payments"
+      "summary": "Единая оплата состава заказа"
+      "responses":
+        "200":
+          "description": "Повтор ранее выполненной операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Payment"
+        "201":
+          "description": "Успешная операция"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Payment"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "401":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "UNAUTHORIZED":
+                  "value":
+                    "status": 401
+                    "error": "UNAUTHORIZED"
+                    "message": "Bearer token is required"
+                    "details": []
+        "402":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PAYMENT_DECLINED":
+                  "value":
+                    "status": 402
+                    "error": "PAYMENT_DECLINED"
+                    "message": "The test card payment was declined"
+                    "details": []
+        "403":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "FORBIDDEN":
+                  "value":
+                    "status": 403
+                    "error": "FORBIDDEN"
+                    "message": "Required role is missing"
+                    "details": []
+        "404":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_NOT_FOUND":
+                  "value":
+                    "status": 404
+                    "error": "ORDER_NOT_FOUND"
+                    "message": "Catalog item was not found"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+                "IDEMPOTENCY_KEY_REUSED":
+                  "value":
+                    "status": 409
+                    "error": "IDEMPOTENCY_KEY_REUSED"
+                    "message": "Idempotency-Key was used with a different request"
+                    "details": []
+        "410":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "ORDER_PAYMENT_EXPIRED":
+                  "value":
+                    "status": 410
+                    "error": "ORDER_PAYMENT_EXPIRED"
+                    "message": "The payment period has expired"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+      "security":
+        -
+          "bearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/PaymentRequest"
+  "/telemetry/client-events":
+    "post":
+      "operationId": "clientEvents"
+      "tags":
+        - "Telemetry"
+      "summary": "Обезличенные события (allowlist)"
+      "responses":
+        "204":
+          "description": "Успешная операция"
+        "400":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "BAD_REQUEST":
+                  "value":
+                    "status": 400
+                    "error": "BAD_REQUEST"
+                    "message": "Request parameters are invalid"
+                    "details": []
+        "409":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "PRODUCT_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "PRODUCT_VERSION_CONFLICT"
+                    "message": "Reload the current version"
+                    "details": []
+        "422":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "VALIDATION_ERROR":
+                  "value":
+                    "status": 422
+                    "error": "VALIDATION_ERROR"
+                    "message": "Request validation failed"
+                    "details": []
+        "429":
+          "description": "Ошибка операции"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ErrorResponse"
+              "examples":
+                "TELEMETRY_RATE_LIMITED":
+                  "value":
+                    "status": 429
+                    "error": "TELEMETRY_RATE_LIMITED"
+                    "message": "Too many telemetry batches"
+                    "details": []
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/TelemetryCommand"
 components:
   securitySchemes:
     bearerAuth:
@@ -3546,3 +8379,871 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/ErrorDetail'
+    "CategoryCommand":
+      "additionalProperties": false
+      "description": "Category creation or versioned update; deactivation does not delete its cards."
+      "properties":
+        "name":
+          "maxLength": 100
+          "minLength": 1
+          "title": "Name"
+          "type": "string"
+        "kind":
+          "pattern": "^(product|pet)$"
+          "title": "Kind"
+          "type": "string"
+        "active":
+          "default": true
+          "title": "Active"
+          "type": "boolean"
+        "version":
+          "default": null
+          "title": "Version"
+          "minimum": 0
+          "type": "integer"
+          "nullable": true
+      "required":
+        - "name"
+        - "kind"
+      "title": "CategoryCommand"
+      "type": "object"
+    "ProductCommand":
+      "additionalProperties": false
+      "description": "Full product card; stock edits use the dedicated adjustment operation."
+      "properties":
+        "sku":
+          "maxLength": 64
+          "minLength": 1
+          "pattern": "^[A-Za-z0-9_.-]+$"
+          "title": "Sku"
+          "type": "string"
+        "name":
+          "maxLength": 150
+          "minLength": 1
+          "title": "Name"
+          "type": "string"
+        "description":
+          "default": ""
+          "maxLength": 5000
+          "title": "Description"
+          "type": "string"
+        "categoryId":
+          "default": null
+          "title": "Categoryid"
+          "format": "uuid"
+          "type": "string"
+          "nullable": true
+        "brand":
+          "default": ""
+          "maxLength": 100
+          "title": "Brand"
+          "type": "string"
+        "productType":
+          "default": "OTHER"
+          "pattern": "^(FEED|TREAT|TOY|ACCESSORY|HYGIENE|OTHER)$"
+          "title": "Producttype"
+          "type": "string"
+        "animalTypes":
+          "items":
+            "$ref": "#/components/schemas/Animal"
+          "maxItems": 7
+          "title": "Animaltypes"
+          "type": "array"
+        "price":
+          "anyOf":
+            -
+              "maximum": 9999999999.99
+              "minimum": 0
+              "multipleOf": 0.01
+              "type": "number"
+            -
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              "type": "string"
+          "title": "Price"
+        "feedForm":
+          "default": ""
+          "pattern": "^(|DRY|WET)$"
+          "title": "Feedform"
+          "type": "string"
+        "lifeStages":
+          "items":
+            "type": "string"
+          "maxItems": 20
+          "title": "Lifestages"
+          "type": "array"
+        "netWeightGrams":
+          "default": null
+          "title": "Netweightgrams"
+          "maximum": 1000000
+          "minimum": 1
+          "type": "integer"
+          "nullable": true
+        "ingredients":
+          "default": ""
+          "maxLength": 5000
+          "title": "Ingredients"
+          "type": "string"
+        "images":
+          "items":
+            "$ref": "#/components/schemas/ImageReference"
+          "maxItems": 20
+          "title": "Images"
+          "type": "array"
+        "version":
+          "default": null
+          "title": "Version"
+          "minimum": 0
+          "type": "integer"
+          "nullable": true
+        "stock":
+          "default": null
+          "title": "Stock"
+          "maximum": 1000000
+          "minimum": 0
+          "type": "integer"
+          "nullable": true
+      "required":
+        - "sku"
+        - "name"
+        - "price"
+      "title": "ProductCommand"
+      "type": "object"
+    "Animal":
+      "description": "Supported audience/species filters."
+      "enum":
+        - "dog"
+        - "cat"
+        - "bird"
+        - "rodent"
+        - "fish"
+        - "reptile"
+        - "other"
+      "title": "Animal"
+      "type": "string"
+    "ImageReference":
+      "additionalProperties": false
+      "description": "Ordered gallery entry; at most one explicit cover per card."
+      "properties":
+        "mediaId":
+          "format": "uuid"
+          "title": "Mediaid"
+          "type": "string"
+        "alt":
+          "default": ""
+          "maxLength": 300
+          "title": "Alt"
+          "type": "string"
+        "isCover":
+          "default": false
+          "title": "Iscover"
+          "type": "boolean"
+      "required":
+        - "mediaId"
+      "title": "ImageReference"
+      "type": "object"
+    "PetCardCommand":
+      "additionalProperties": false
+      "description": "Extended pet card without client-controlled reservations/publication state."
+      "properties":
+        "name":
+          "maxLength": 100
+          "minLength": 1
+          "title": "Name"
+          "type": "string"
+        "description":
+          "default": ""
+          "maxLength": 5000
+          "title": "Description"
+          "type": "string"
+        "animalType":
+          "$ref": "#/components/schemas/Animal"
+          "default": "other"
+        "categoryId":
+          "default": null
+          "title": "Categoryid"
+          "format": "uuid"
+          "type": "string"
+          "nullable": true
+        "breed":
+          "default": ""
+          "maxLength": 100
+          "title": "Breed"
+          "type": "string"
+        "sex":
+          "default": "UNKNOWN"
+          "pattern": "^(MALE|FEMALE|UNKNOWN)$"
+          "title": "Sex"
+          "type": "string"
+        "birthDate":
+          "default": null
+          "title": "Birthdate"
+          "format": "date"
+          "type": "string"
+          "nullable": true
+        "price":
+          "anyOf":
+            -
+              "maximum": 9999999999.99
+              "minimum": 0
+              "multipleOf": 0.01
+              "type": "number"
+            -
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              "type": "string"
+          "title": "Price"
+        "images":
+          "items":
+            "$ref": "#/components/schemas/ImageReference"
+          "maxItems": 20
+          "title": "Images"
+          "type": "array"
+        "version":
+          "default": null
+          "title": "Version"
+          "minimum": 0
+          "type": "integer"
+          "nullable": true
+      "required":
+        - "name"
+        - "price"
+      "title": "PetCardCommand"
+      "type": "object"
+    "VersionCommand":
+      "additionalProperties": false
+      "description": "Expected optimistic version for publication/lifecycle actions."
+      "properties":
+        "version":
+          "minimum": 0
+          "title": "Version"
+          "type": "integer"
+      "required":
+        - "version"
+      "title": "VersionCommand"
+      "type": "object"
+    "StockCommand":
+      "additionalProperties": false
+      "description": "Audited inventory delta; reserved stock cannot be removed."
+      "properties":
+        "version":
+          "minimum": 0
+          "title": "Version"
+          "type": "integer"
+        "delta":
+          "maximum": 1000000
+          "minimum": -1000000
+          "title": "Delta"
+          "type": "integer"
+        "reason":
+          "maxLength": 300
+          "minLength": 1
+          "title": "Reason"
+          "type": "string"
+      "required":
+        - "version"
+        - "delta"
+        - "reason"
+      "title": "StockCommand"
+      "type": "object"
+    "CartCommand":
+      "additionalProperties": false
+      "description": "Versioned full replacement; optional idempotency protects guest merging."
+      "properties":
+        "version":
+          "minimum": 0
+          "title": "Version"
+          "type": "integer"
+        "lines":
+          "items":
+            "$ref": "#/components/schemas/CartLineCommand"
+          "maxItems": 100
+          "title": "Lines"
+          "type": "array"
+      "required":
+        - "version"
+        - "lines"
+      "title": "CartCommand"
+      "type": "object"
+    "CartLineCommand":
+      "additionalProperties": false
+      "description": "A soft catalog reference that can remain visible when unavailable."
+      "properties":
+        "kind":
+          "pattern": "^(product|pet)$"
+          "title": "Kind"
+          "type": "string"
+        "id":
+          "format": "uuid"
+          "title": "Id"
+          "type": "string"
+        "quantity":
+          "maximum": 1000000
+          "minimum": 1
+          "title": "Quantity"
+          "type": "integer"
+      "required":
+        - "kind"
+        - "id"
+        - "quantity"
+      "title": "CartLineCommand"
+      "type": "object"
+    "CheckoutCommand":
+      "additionalProperties": false
+      "description": "Snapshot only a known version of the server-side cart."
+      "properties":
+        "cartVersion":
+          "minimum": 1
+          "title": "Cartversion"
+          "type": "integer"
+      "required":
+        - "cartVersion"
+      "title": "CheckoutCommand"
+      "type": "object"
+    "TelemetryCommand":
+      "additionalProperties": false
+      "description": "Bounded batch; unknown metadata is rejected instead of logged."
+      "properties":
+        "events":
+          "items":
+            "$ref": "#/components/schemas/TelemetryEvent"
+          "maxItems": 100
+          "minItems": 1
+          "title": "Events"
+          "type": "array"
+      "required":
+        - "events"
+      "title": "TelemetryCommand"
+      "type": "object"
+    "TelemetryEvent":
+      "additionalProperties": false
+      "description": "Allowlisted operational telemetry without arbitrary strings or personal data."
+      "properties":
+        "event":
+          "pattern": "^[a-z][a-z0-9_]{0,49}$"
+          "title": "Event"
+          "type": "string"
+        "method":
+          "default": null
+          "title": "Method"
+          "pattern": "^(GET|POST|PUT|DELETE|PATCH)$"
+          "type": "string"
+          "nullable": true
+        "httpStatus":
+          "default": null
+          "title": "Httpstatus"
+          "maximum": 599
+          "minimum": 100
+          "type": "integer"
+          "nullable": true
+        "durationMs":
+          "default": null
+          "title": "Durationms"
+          "maximum": 3600000
+          "minimum": 0
+          "type": "integer"
+          "nullable": true
+      "required":
+        - "event"
+      "title": "TelemetryEvent"
+      "type": "object"
+    "CatalogImage":
+      "type": "object"
+      "properties":
+        "mediaId":
+          "type": "string"
+          "format": "uuid"
+        "alt":
+          "type": "string"
+          "maxLength": 300
+        "position":
+          "type": "integer"
+          "minimum": 0
+          "maximum": 19
+        "isCover":
+          "type": "boolean"
+        "imageUrl":
+          "type": "string"
+        "thumbUrl":
+          "type": "string"
+      "required":
+        - "mediaId"
+        - "alt"
+        - "position"
+        - "isCover"
+        - "imageUrl"
+        - "thumbUrl"
+    "CatalogCategory":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "name":
+          "type": "string"
+        "kind":
+          "type": "string"
+          "enum":
+            - "product"
+            - "pet"
+        "active":
+          "type": "boolean"
+        "archived":
+          "type": "boolean"
+        "version":
+          "type": "integer"
+          "minimum": 0
+      "required":
+        - "id"
+        - "name"
+        - "kind"
+        - "active"
+        - "archived"
+        - "version"
+    "MediaMetadata":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "name":
+          "type": "string"
+        "mime":
+          "type": "string"
+          "enum":
+            - "image/jpeg"
+            - "image/png"
+            - "image/webp"
+        "width":
+          "type": "integer"
+          "minimum": 1
+        "height":
+          "type": "integer"
+          "minimum": 1
+        "size":
+          "type": "integer"
+          "minimum": 1
+        "sourceType":
+          "type": "string"
+          "enum":
+            - "OWN"
+            - "SUPPLIER"
+            - "DEMO"
+        "sourceNote":
+          "type": "string"
+          "maxLength": 1000
+        "createdAt":
+          "type": "string"
+          "format": "date-time"
+        "imageUrl":
+          "type": "string"
+        "thumbUrl":
+          "type": "string"
+      "required":
+        - "id"
+        - "name"
+        - "mime"
+        - "width"
+        - "height"
+        - "size"
+        - "sourceType"
+        - "sourceNote"
+        - "createdAt"
+        - "imageUrl"
+        - "thumbUrl"
+    "ProductCard":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "kind":
+          "type": "string"
+        "name":
+          "type": "string"
+        "description":
+          "type": "string"
+        "categoryId":
+          "type": "string"
+          "format": "uuid"
+          "nullable": true
+        "price":
+          "type": "number"
+          "minimum": 0
+          "multipleOf": 0.01
+        "currency":
+          "type": "string"
+          "enum":
+            - "RUB"
+        "publicationStatus":
+          "type": "string"
+          "enum":
+            - "DRAFT"
+            - "PUBLISHED"
+            - "ARCHIVED"
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "images":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/CatalogImage"
+        "sku":
+          "type": "string"
+        "brand":
+          "type": "string"
+        "productType":
+          "type": "string"
+          "enum":
+            - "FEED"
+            - "TREAT"
+            - "TOY"
+            - "ACCESSORY"
+            - "HYGIENE"
+            - "OTHER"
+        "animalTypes":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/Animal"
+        "feedForm":
+          "type": "string"
+        "lifeStages":
+          "type": "array"
+          "items":
+            "type": "string"
+        "netWeightGrams":
+          "type": "integer"
+          "nullable": true
+        "ingredients":
+          "type": "string"
+        "stock":
+          "type": "integer"
+          "minimum": 0
+        "reserved":
+          "type": "integer"
+          "minimum": 0
+        "availableQuantity":
+          "type": "integer"
+          "minimum": 0
+      "required":
+        - "id"
+        - "kind"
+        - "name"
+        - "description"
+        - "categoryId"
+        - "price"
+        - "currency"
+        - "publicationStatus"
+        - "version"
+        - "images"
+        - "sku"
+        - "brand"
+        - "productType"
+        - "animalTypes"
+        - "feedForm"
+        - "lifeStages"
+        - "netWeightGrams"
+        - "ingredients"
+        - "stock"
+        - "reserved"
+        - "availableQuantity"
+    "PetCard":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "kind":
+          "type": "string"
+        "name":
+          "type": "string"
+        "description":
+          "type": "string"
+        "categoryId":
+          "type": "string"
+          "format": "uuid"
+          "nullable": true
+        "price":
+          "type": "number"
+          "minimum": 0
+          "multipleOf": 0.01
+        "currency":
+          "type": "string"
+          "enum":
+            - "RUB"
+        "publicationStatus":
+          "type": "string"
+          "enum":
+            - "DRAFT"
+            - "PUBLISHED"
+            - "ARCHIVED"
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "images":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/CatalogImage"
+        "animalType":
+          "$ref": "#/components/schemas/Animal"
+        "breed":
+          "type": "string"
+        "sex":
+          "type": "string"
+          "enum":
+            - "MALE"
+            - "FEMALE"
+            - "UNKNOWN"
+        "birthDate":
+          "type": "string"
+          "format": "date"
+          "nullable": true
+        "status":
+          "type": "string"
+          "enum":
+            - "available"
+            - "pending"
+            - "reserved"
+            - "sold"
+        "photoUrls":
+          "type": "array"
+          "items":
+            "type": "string"
+      "required":
+        - "id"
+        - "kind"
+        - "name"
+        - "description"
+        - "categoryId"
+        - "price"
+        - "currency"
+        - "publicationStatus"
+        - "version"
+        - "images"
+        - "animalType"
+        - "breed"
+        - "sex"
+        - "birthDate"
+        - "status"
+        - "photoUrls"
+    "ProductPage":
+      "type": "object"
+      "properties":
+        "items":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/ProductCard"
+        "page":
+          "type": "integer"
+          "minimum": 1
+        "pageSize":
+          "type": "integer"
+          "minimum": 1
+          "maximum": 100
+        "total":
+          "type": "integer"
+          "minimum": 0
+      "required":
+        - "items"
+        - "page"
+        - "pageSize"
+        - "total"
+    "PetPage":
+      "type": "object"
+      "properties":
+        "items":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/PetCard"
+        "page":
+          "type": "integer"
+          "minimum": 1
+        "pageSize":
+          "type": "integer"
+          "minimum": 1
+          "maximum": 100
+        "total":
+          "type": "integer"
+          "minimum": 0
+      "required":
+        - "items"
+        - "page"
+        - "pageSize"
+        - "total"
+    "CartLine":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "kind":
+          "type": "string"
+          "enum":
+            - "product"
+            - "pet"
+        "quantity":
+          "type": "integer"
+          "minimum": 1
+        "name":
+          "type": "string"
+        "price":
+          "type": "number"
+          "minimum": 0
+          "multipleOf": 0.01
+          "nullable": true
+        "quotedPrice":
+          "type": "number"
+          "minimum": 0
+          "multipleOf": 0.01
+          "nullable": true
+        "currency":
+          "type": "string"
+          "enum":
+            - "RUB"
+        "priceChanged":
+          "type": "boolean"
+        "available":
+          "type": "boolean"
+        "reason":
+          "type": "string"
+          "nullable": true
+        "images":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/CatalogImage"
+      "required":
+        - "id"
+        - "kind"
+        - "quantity"
+        - "name"
+        - "price"
+        - "quotedPrice"
+        - "currency"
+        - "priceChanged"
+        - "available"
+        - "reason"
+        - "images"
+    "Cart":
+      "type": "object"
+      "properties":
+        "version":
+          "type": "integer"
+          "minimum": 1
+        "lines":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/CartLine"
+      "required":
+        - "version"
+        - "lines"
+    "StoreOrderLine":
+      "type": "object"
+      "properties":
+        "itemId":
+          "type": "string"
+          "format": "uuid"
+        "kind":
+          "type": "string"
+          "enum":
+            - "product"
+            - "pet"
+        "name":
+          "type": "string"
+        "sku":
+          "type": "string"
+        "quantity":
+          "type": "integer"
+          "minimum": 1
+        "price":
+          "type": "number"
+          "minimum": 0
+          "multipleOf": 0.01
+          "nullable": true
+        "images":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/CatalogImage"
+      "required":
+        - "itemId"
+        - "kind"
+        - "name"
+        - "sku"
+        - "quantity"
+        - "price"
+        - "images"
+    "StoreOrder":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "userId":
+          "type": "string"
+          "format": "uuid"
+        "status":
+          "type": "string"
+          "enum":
+            - "draft"
+            - "placed"
+            - "approved"
+            - "shipped"
+            - "delivered"
+            - "cancelled"
+            - "expired"
+        "paymentStatus":
+          "type": "string"
+          "enum":
+            - "NOT_STARTED"
+            - "NOT_REQUIRED"
+            - "UNPAID"
+            - "PAID"
+            - "REFUNDED"
+            - "EXPIRED"
+        "version":
+          "type": "integer"
+          "minimum": 1
+        "cartVersion":
+          "type": "integer"
+          "nullable": true
+        "createdAt":
+          "type": "string"
+          "format": "date-time"
+        "shipDate":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "paymentExpiresAt":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "lines":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/StoreOrderLine"
+        "total":
+          "type": "number"
+          "minimum": 0
+          "multipleOf": 0.01
+          "nullable": true
+        "currency":
+          "type": "string"
+          "enum":
+            - "RUB"
+        "delivery":
+          "$ref": "#/components/schemas/DeliveryDetails"
+          "nullable": true
+        "complete":
+          "type": "boolean"
+      "required":
+        - "id"
+        - "userId"
+        - "status"
+        - "paymentStatus"
+        - "version"
+        - "cartVersion"
+        - "createdAt"
+        - "shipDate"
+        - "paymentExpiresAt"
+        - "lines"
+        - "total"
+        - "currency"
+        - "delivery"
+        - "complete"

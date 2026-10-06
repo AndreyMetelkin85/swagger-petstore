@@ -116,7 +116,7 @@ class PaymentData:
             assert payment is not None
             if status == "SUCCEEDED":
                 updated = connection.execute(
-                    "UPDATE store_orders SET payment_status = 'PAID' WHERE id = %s AND status = 'placed' AND payment_status = 'UNPAID'",
+                    "UPDATE store_orders SET payment_status = 'PAID',version=version+1 WHERE id = %s AND status = 'placed' AND payment_status = 'UNPAID'",
                     (order_id,),
                 )
                 if updated.rowcount != 1:

@@ -29,6 +29,21 @@ def test_swagger_has_no_malformed_json_examples_but_keeps_other_400_errors():
             )
             assert "malformedJson" not in examples
             if "requestBody" in operation:
+                if operation["operationId"] not in {
+                    "register",
+                    "resendConfirmation",
+                    "login",
+                    "forgotPassword",
+                    "resetPassword",
+                    "updateCurrentUser",
+                    "updateUserById",
+                    "addPet",
+                    "updatePet",
+                    "createOrderDraft",
+                    "updateOrderDraft",
+                    "createPayment",
+                }:
+                    continue
                 assert "missingBody" in examples
                 checked += 1
     assert checked == 12

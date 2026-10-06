@@ -27,7 +27,7 @@ class OrderData:
         self.database = database
 
     @staticmethod
-    def lock_order(connection: DbConnection, order_id: UUID) -> Row:
+    def lock_order(connection: DbConnection, order_id: UUID, legacy_only: bool = False) -> Row:
         """Lock the parent order before any payment or lifecycle mutation.
 
         :param connection: Existing transaction.
@@ -36,7 +36,7 @@ class OrderData:
         row = connection.execute(
             "SELECT * FROM store_orders WHERE id = %s FOR UPDATE", (order_id,)
         ).fetchone()
-        if row is None:
+        if row is None or (legacy_only and row.get("order_kind", "LEGACY") != "LEGACY"):
             raise OrderException(404, "ORDER_NOT_FOUND", "Order was not found")
         return row
 
@@ -80,8 +80,10 @@ class OrderData:
         """
         return (
             connection.execute(
-                "SELECT 1 FROM store_orders WHERE pet_id = %s AND status IN ('placed', 'approved', 'shipped') LIMIT 1",
-                (pet_id,),
+                """SELECT 1 WHERE EXISTS (SELECT 1 FROM store_orders WHERE pet_id=%s AND status IN ('placed','approved','shipped'))
+                   OR EXISTS (SELECT 1 FROM order_lines l JOIN store_orders o ON o.id=l.order_id
+                              WHERE l.item_type='pet' AND l.item_id=%s AND o.status IN ('placed','approved','shipped'))""",
+                (pet_id, pet_id),
             ).fetchone()
             is not None
         )
@@ -94,6 +96,10 @@ class OrderData:
         :param order: Locked mutable order row.
         """
         expires = order["payment_expires_at"]
+        if order.get("order_kind", "LEGACY") == "MIXED":
+            from petstore.data.commerce_order_data import CommerceOrderData
+
+            return CommerceOrderData.expire_locked(connection, order)
         if (
             order["status"] == "placed"
             and order["payment_status"] == "UNPAID"
@@ -113,7 +119,7 @@ class OrderData:
         """Release overdue reservations without duplicating work done by another worker."""
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM store_orders WHERE status = 'placed' AND payment_status = 'UNPAID' AND payment_expires_at <= CURRENT_TIMESTAMP FOR UPDATE SKIP LOCKED"
+                "SELECT * FROM store_orders WHERE order_kind='LEGACY' AND status = 'placed' AND payment_status = 'UNPAID' AND payment_expires_at <= CURRENT_TIMESTAMP FOR UPDATE SKIP LOCKED"
             ).fetchall()
             return sum(self.expire_locked_order_if_needed(connection, row) for row in rows)
 
@@ -125,7 +131,9 @@ class OrderData:
         """
         self.expire_overdue_orders()
         with self.database.connect() as connection:
-            row = connection.execute("SELECT * FROM store_orders WHERE id = %s", (order_id,)).fetchone()
+            row = connection.execute(
+                "SELECT * FROM store_orders WHERE id = %s AND order_kind='LEGACY'", (order_id,)
+            ).fetchone()
             if row is None:
                 raise OrderException(404, "ORDER_NOT_FOUND", "Order was not found")
             self.assert_access(row, actor)
@@ -139,9 +147,12 @@ class OrderData:
         self.expire_overdue_orders()
         with self.database.connect() as connection:
             if actor["role"] == "ADMIN":
-                return connection.execute("SELECT * FROM store_orders ORDER BY created_at, id").fetchall()
+                return connection.execute(
+                    "SELECT * FROM store_orders WHERE order_kind='LEGACY' ORDER BY created_at, id"
+                ).fetchall()
             return connection.execute(
-                "SELECT * FROM store_orders WHERE owner_user_id = %s ORDER BY created_at, id", (actor["id"],)
+                "SELECT * FROM store_orders WHERE owner_user_id = %s AND order_kind='LEGACY' ORDER BY created_at, id",
+                (actor["id"],),
             ).fetchall()
 
     def get_count_by_status(self) -> Row:
@@ -149,7 +160,7 @@ class OrderData:
         self.expire_overdue_orders()
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT status, COALESCE(SUM(quantity), 0) AS total FROM store_orders GROUP BY status ORDER BY status"
+                "SELECT status, COALESCE(SUM(quantity), 0) AS total FROM store_orders WHERE order_kind='LEGACY' GROUP BY status ORDER BY status"
             ).fetchall()
             return {row["status"]: row["total"] for row in rows}
 
@@ -186,7 +197,7 @@ class OrderData:
         :param actor: Owner or administrator.
         """
         with self.database.connect() as connection:
-            order = self.lock_order(connection, order_id)
+            order = self.lock_order(connection, order_id, legacy_only=True)
             self.expire_locked_order_if_needed(connection, order)
             self.assert_access(order, actor, modifying=True)
             if order["status"] != "draft":
@@ -212,7 +223,7 @@ class OrderData:
         :param actor: Owner or administrator.
         """
         with self.database.connect() as connection:
-            order = self.lock_order(connection, order_id)
+            order = self.lock_order(connection, order_id, legacy_only=True)
             self.assert_access(order, actor, modifying=True)
             if order["status"] != "draft":
                 raise OrderException(
@@ -262,7 +273,7 @@ class OrderData:
         :param actor: Owner of a draft, or administrator.
         """
         with self.database.connect() as connection:
-            order = self.lock_order(connection, order_id)
+            order = self.lock_order(connection, order_id, legacy_only=True)
             self.expire_locked_order_if_needed(connection, order)
             self.assert_access(order, actor, modifying=True)
             status = OrderStatus(order["status"])
@@ -283,7 +294,7 @@ class OrderData:
         :param actor: Authorized owner or administrator.
         """
         with self.database.connect() as connection:
-            order = self.lock_order(connection, order_id)
+            order = self.lock_order(connection, order_id, legacy_only=True)
             self.expire_locked_order_if_needed(connection, order)
             self.assert_access(order, actor, modifying=True)
             if not OrderStatus(order["status"]).can_transition_to(target):

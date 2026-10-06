@@ -326,4 +326,7 @@ class UserData:
                 raise AccountException(
                     409, "USER_HAS_ORDERS", "Delete the user's orders before deleting the account"
                 )
+            connection.execute("DELETE FROM api_idempotency WHERE user_id=%s", (user_id,))
+            connection.execute("DELETE FROM cart_lines WHERE user_id=%s", (user_id,))
+            connection.execute("DELETE FROM carts WHERE user_id=%s", (user_id,))
             connection.execute("DELETE FROM users WHERE id = %s", (user_id,))

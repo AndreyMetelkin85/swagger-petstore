@@ -33,7 +33,10 @@ def test_main_compose_healthcheck_works_without_curl_and_keeps_volume():
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     api = compose["services"]["petstore"]
     assert api["healthcheck"]["test"][:2] == ["CMD", "python"]
-    assert api["volumes"] == ["petstore-data:/var/lib/postgresql/data"]
+    assert api["volumes"] == [
+        "petstore-data:/var/lib/postgresql/data",
+        "petstore-media:/var/lib/petstore/media",
+    ]
     assert compose["volumes"]["petstore-data"]["name"] == "${PETSTORE_DB_VOLUME:-swagger-petstore-db-data}"
     assert api["environment"]["PETSTORE_SMTP_HOST"] == "${PETSTORE_SMTP_HOST:-}"
 
@@ -66,7 +69,7 @@ def test_repository_has_no_java_sources_or_maven_build():
 
 def test_original_migration_filenames_are_retained():
     migrations = sorted((ROOT / "resources/db/migration").glob("V*__*.sql"))
-    assert [path.name.split("__")[0] for path in migrations] == [f"V{i}" for i in range(1, 10)]
+    assert {path.name.split("__")[0] for path in migrations} == {f"V{i}" for i in range(1, 12)}
 
 
 def test_source_resources_and_docker_paths_agree():

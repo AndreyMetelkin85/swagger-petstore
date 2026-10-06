@@ -35,6 +35,7 @@ class Settings:
     mail_frontend_url: str | None = None
     resources: Path = ROOT / "resources"
     static: Path = ROOT / "resources/web"
+    media_root: Path = ROOT / ".media"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -58,4 +59,5 @@ class Settings:
             mail_frontend_url=(os.getenv("PETSTORE_MAIL_FRONTEND_URL") or "").rstrip("/") or None,
             resources=Path(os.getenv("PETSTORE_RESOURCE_ROOT", str(ROOT / "resources"))),
             static=Path(os.getenv("PETSTORE_STATIC_ROOT", str(ROOT / "resources/web"))),
+            media_root=Path(os.getenv("PETSTORE_MEDIA_ROOT", str(ROOT / ".media"))),
         )
