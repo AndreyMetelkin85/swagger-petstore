@@ -1,0 +1,54 @@
+# Optional local SMTP/IMAP lab; do not expose these demo accounts to the internet.
+services:
+  petstore:
+    environment:
+      PETSTORE_SMTP_HOST: mail
+      PETSTORE_SMTP_PORT: "25"
+    depends_on:
+      mail:
+        condition: service_started
+
+  mail:
+    image: rnwood/smtp4dev:3.15.0@sha256:25c434c1900a9c5b61e17ead0a774d9e81b80554d05cf64719d69e5ea8c66537
+    environment:
+      ServerOptions__Urls: http://*:80
+      ServerOptions__HostName: mail.petstore.test
+      ServerOptions__Port: "25"
+      ServerOptions__ImapPort: "143"
+      ServerOptions__DisableIPv6: "true"
+      ServerOptions__TlsMode: None
+      ServerOptions__AuthenticationRequired: "false"
+      ServerOptions__WebAuthenticationRequired: "false"
+      ServerOptions__DeliverMessagesToUsersDefaultMailbox: "false"
+      ServerOptions__NumberOfMessagesToKeep: "500"
+      ServerOptions__NumberOfSessionsToKeep: "100"
+      ServerOptions__Mailboxes__0__Name: User1
+      ServerOptions__Mailboxes__0__Recipients: user1@petstore.test
+      ServerOptions__Mailboxes__1__Name: User2
+      ServerOptions__Mailboxes__1__Recipients: user2@petstore.test
+      ServerOptions__Mailboxes__2__Name: Tests
+      ServerOptions__Mailboxes__2__Recipients: "*"
+      # Deliberately public, local-only demo accounts; never use these credentials outside this lab.
+      ServerOptions__Users__0__Username: user1
+      ServerOptions__Users__0__Password: mail-test-only
+      ServerOptions__Users__0__DefaultMailbox: User1
+      ServerOptions__Users__1__Username: user2
+      ServerOptions__Users__1__Password: mail-test-only
+      ServerOptions__Users__1__DefaultMailbox: User2
+      ServerOptions__Users__2__Username: tests
+      ServerOptions__Users__2__Password: mail-test-only
+      ServerOptions__Users__2__DefaultMailbox: Tests
+      RelayOptions__SmtpServer: ""
+      RelayOptions__AutomaticRelayExpression: ""
+      Serilog__MinimumLevel__Default: Warning
+    ports:
+      - "127.0.0.1:${PETSTORE_MAIL_HTTP_PORT:-8025}:80"
+      - "127.0.0.1:${PETSTORE_MAIL_SMTP_PORT:-2525}:25"
+      - "127.0.0.1:${PETSTORE_MAIL_IMAP_PORT:-1143}:143"
+    volumes:
+      - mail-data:/smtp4dev
+    restart: unless-stopped
+
+volumes:
+  mail-data:
+    name: ${PETSTORE_MAIL_VOLUME:-swagger-petstore-mail-data}

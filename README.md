@@ -1,6 +1,110 @@
 # Локальный Swagger Petstore для API-тестирования
 
-Учебный Java API для практики ручного и автоматизированного API-тестирования. В нём
+## Python / FastAPI
+
+Перенос разрабатывается в `feature/python-fastapi-migration`, созданной от `origin/dev`
+(`fbed64b`). Эталон всей логики, OpenAPI и регрессионных тестов — актуальный `origin/master`
+(`380e37988b51c4329c3672ed55c62e958569c2be`). Java-файлы выровнены с этим master и
+сохранены как эталон. Основной `Dockerfile` и release-пайплайн теперь собирают Python;
+`Dockerfile.java` оставлен только для сравнения. Рабочая БД не пересоздаётся.
+
+- Python 3.12, FastAPI, Pydantic, psycopg 3, Uvicorn;
+- сохранены 36 операций, `operationId`, роли, ошибки и PostgreSQL-схема;
+- Python-слои: `python/petstore/{controller,service,data,model,utils}`;
+- исходные SQL-миграции V1–V9 не изменены; их по-прежнему применяет Flyway;
+- перенесены master-исправления: details конфликтов регистрации и единая блокировка
+  подтверждения/resend/удаления; устаревшие Swagger-примеры убраны как в master;
+- Swagger использует относительный `/api/v3`, чтобы Execute не обращался к другому контейнеру;
+- тесты: `tests/python/unit`, `tests/python/integration`, `tests/python/system`;
+- новый CI проверяет Ruff, строгий Pyright, покрытие не ниже 90%, исходные smoke-тесты,
+  все кнопки Swagger и повторный запуск с существующей базой;
+- публикация в Docker Hub зависит от успешных Python-проверок, smoke-тестов и
+  сканирования образа для обеих архитектур `linux/amd64`, `linux/arm64`;
+- runtime-зависимости закреплены в `requirements-runtime.txt`;
+- каждый выпуск получает `latest` и неизменяемый тег `sha-<commit>`;
+- локально используется один API worker, как один процесс Java: JWT development-key
+  и текущий login limiter остаются process-local. Для сохранения JWT между рестартами
+  задайте прежний `PETSTORE_TOKEN_SECRET`, не публикуя его в репозитории.
+
+Отдельный тестовый стенд, **не использующий volume рабочей БД**:
+
+```powershell
+docker compose -f docker-compose.python.yml up -d --build --wait
+```
+
+Swagger: <http://localhost:8081/>. PostgreSQL: `localhost:5433`.
+Контейнер: `petstore-python-preview`; volume: `petstore-python-preview-data`.
+Демо-аккаунты и их пароли создаются исходными миграциями, как в Java-версии.
+
+Для локальных проверок:
+
+```powershell
+py -3.12 -m venv .venv-python
+.\.venv-python\Scripts\python.exe -m pip install --constraint requirements-runtime.txt -e ".[test,quality]"
+.\.venv-python\Scripts\ruff.exe check python tests/python
+.\.venv-python\Scripts\pyright.exe --pythonpath .venv-python/Scripts/python.exe
+.\.venv-python\Scripts\python.exe -m pytest tests/python/unit -q
+```
+
+Интеграционные тесты требуют отдельно мигрированную БД `petstore_python_test`:
+`PETSTORE_TEST_DB_URL=postgresql://127.0.0.1:5433/petstore_python_test`.
+Системные smoke-тесты используют `BASE_URL=http://localhost:8081/api/v3`;
+UI-тест — `PETSTORE_UI_URL=http://localhost:8081` и установленный Playwright Chromium.
+Без явной настройки интеграционные/UI-тесты пропускаются, в CI все настройки обязательны.
+Очистка затрагивает только UUID, созданные конкретным прогоном; рабочий контейнер не меняется.
+
+Выпуск проходит PR в `dev`, проверки, затем PR в `master`; публикация выполняется
+GitHub Actions только после успешных проверок. До завершения workflow новый образ
+не считается выпущенным.
+
+### Локальная почта: SMTP + IMAP + Swagger
+
+В том же тестовом Compose работает `petstore-mail` (smtp4dev 3.15.0, образ закреплён
+digest). Рабочие контейнеры не переключаются. Письма хранятся в отдельном volume
+`petstore-mail-data`; внешняя пересылка отключена, порты опубликованы только на loopback.
+
+- Почтовый интерфейс: <http://localhost:8025/>.
+- Swagger почтового REST API: <http://localhost:8025/api/>.
+- SMTP для программ на хосте: `localhost:2525`; для Python API в Compose: `mail:25`.
+- IMAP: `localhost:1143`; локальные demo-логины `user1`, `user2`, `tests`, пароль
+  `mail-test-only`. Это публичные учебные данные, не production-учётные записи.
+- `user1@petstore.test` попадает в `User1`, `user2@petstore.test` — в `User2`, остальные
+  адреса — в `Tests`. Адреса остаются локальными; это не аккаунты публичной почтовой службы.
+
+Регистрация и resend отправляют HTML + plain text со ссылкой подтверждения на 24 часа;
+forgot password — письмо восстановления на 30 минут. Пароли в письмах отсутствуют.
+Отправка реализована в `python/petstore/notification/mail_service.py`, шаблоны —
+в `python/petstore/notification/templates.py`. Дополнительные SMTP/шаблонные библиотеки
+не нужны: используются стандартные `smtplib`, `email` и `html`.
+
+SMTP включается только при заданном `PETSTORE_SMTP_HOST`. Настройки:
+`PETSTORE_SMTP_PORT` (25), `PETSTORE_SMTP_FROM`, `PETSTORE_SMTP_TIMEOUT` (5 секунд).
+Текущий транспорт предназначен для локального сервера без SMTP authentication/TLS.
+Отправка ограничена timeout и выполняется в существующем worker pool FastAPI.
+Если SMTP недоступен, результат уже зафиксированной операции API не меняется;
+появляется безопасный `mail_delivery_failed` без паролей, email или одноразовых ссылок.
+Автоматической очереди повторной доставки пока нет: подтверждение можно повторно
+отправить через resend, восстановление — через forgot password.
+
+Пока React работает с моками, письмо подтверждения ведёт на рабочий API, а письмо
+восстановления — на форму Python-стенда `/reset-password.html`. Ответы существующего
+API (`confirmationUrl`, `resetUrl`) и схемы БД не изменены. Форма не логирует пароль
+или code, очищает code из адресной строки и отправляет `newPassword` в JSON-теле.
+
+После подключения реального auth API во фронте можно задать
+`PETSTORE_MAIL_FRONTEND_URL=http://localhost:8088`: ссылки писем станут
+`/confirm/{userId}?code=...` и `/reset-password?code=...`. До отключения моков этого
+делать не нужно. Фронт не должен получать SMTP/IMAP credentials.
+
+Системные проверки почты находятся в `tests/python/system/test_mail_delivery.py`:
+SMTP → отдельные ящики → IMAP; регистрация/resend → письмо → подтверждение;
+forgot password → письмо → браузерная форма → вход с новым паролем.
+Для запуска нужны `BASE_URL` тестового API и `PETSTORE_MAIL_UI_URL`; CI задаёт их явно.
+Тесты удаляют только созданные ими сообщения по точному API ID и пользователей по UUID.
+
+## Учебный Petstore API
+
+Учебный API для практики ручного и автоматизированного API-тестирования. В нём
 можно регистрировать и подтверждать пользователей, управлять профилем, искать питомцев,
 создавать заказы и проверять реалистичные успешные и ошибочные сценарии.
 
@@ -35,29 +139,29 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 - OpenAPI содержит подробные описания, `operationId`, примеры, перечисления,
   форматы и ограничения;
 - добавлена endpoint-specific runtime-валидация с ответом `422` и `details[]`;
-- in-memory хранилища заменены JDBC-репозиториями PostgreSQL;
+- данные хранятся в PostgreSQL; Python использует psycopg 3;
 - идентификаторы users, pets, categories, tags и orders имеют формат UUID;
 - статусы аккаунтов, питомцев и заказов представлены PostgreSQL ENUM;
 - Flyway применяет версионированные миграции без удаления существующих данных;
 - внешние ключи запрещают обход правил удаления, а уникальный индекс не допускает два активных заказа на одного питомца;
 - Dockerfile стал multi-stage и не требует заранее выполнять Maven на хосте;
 - Compose публикует API и PostgreSQL только на loopback и хранит БД в отдельном named volume;
-- добавлены Java contract tests и Pytest/httpx smoke tests.
+- сохранены Java reference tests; добавлены Python unit/integration/system и Pytest/httpx smoke tests.
 
 ## Стек и структура
 
-- Java 17, Maven, WAR;
-- Tomcat 9 и Swagger Inflector (OpenAPI управляет маршрутизацией);
-- Swagger UI 5.32.11, упакованный внутрь WAR без внешних CDN;
-- PostgreSQL 16 и JDBC;
+- Python 3.12, FastAPI, Pydantic, Uvicorn;
+- существующий OpenAPI управляет контрактом и маршрутизацией;
+- Swagger UI 5.32.11 без внешних CDN;
+- PostgreSQL 16 и psycopg 3;
 - OpenAPI 3.0.4: `src/main/resources/openapi.yaml`;
-- контроллеры: `src/main/java/io/swagger/petstore/controller`;
-- auth/validation services: `src/main/java/io/swagger/petstore/service`;
-- JDBC repositories: `src/main/java/io/swagger/petstore/data`;
+- контроллеры: `python/petstore/controller`;
+- auth/validation services: `python/petstore/service`;
+- репозитории: `python/petstore/data`;
 - единый Docker image API + PostgreSQL: `Dockerfile`;
 - версия схемы и seed: `src/main/resources/db/migration`;
-- модели: `src/main/java/io/swagger/petstore/model`;
-- Java tests: `src/test/java`;
+- модели: `python/petstore/model`;
+- Python tests: `tests/python`; Java reference tests: `src/test/java`;
 - AQA smoke tests: `tests/smoke`.
 
 ## Быстрый запуск через Docker Compose
@@ -68,6 +172,22 @@ Users, pets, orders и ownership хранятся в PostgreSQL. Named volume с
 ```bash
 docker compose up -d
 ```
+
+Для локальной почты подключите необязательный overlay:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.mail.yml up -d --wait
+```
+
+Без overlay SMTP выключен по умолчанию. Почта не встроена в API-образ и не пересылает
+письма в интернет. При одновременно работающем preview освободите его почтовые порты
+или задайте другие `PETSTORE_MAIL_HTTP_PORT`, `PETSTORE_MAIL_SMTP_PORT`,
+`PETSTORE_MAIL_IMAP_PORT`. Старый preview не нужно удалять вместе с его данными.
+
+При обновлении существующей установки сохраните **её фактический volume**. Для
+запуска через `docker run` из примера ниже это `swagger-petstore-data`, для прежнего
+Compose по умолчанию — `swagger-petstore-db-data`. Не подменяйте один другим.
+Перед переходом сделайте `pg_dump` своей БД; не используйте `down -v`.
 
 Для разработки из локальных исходников подключите overlay:
 
@@ -179,7 +299,7 @@ docker compose up -d
 `PETSTORE_EXPOSE_TEST_LINKS=false`. Без почтовой доставки восстановление пароля в
 этом режиме будет недоступно.
 
-## Сборка через Maven
+## Java-эталон: сборка через Maven
 
 Для проверки без запуска контейнеров требуются JDK 17 и Maven 3.9+:
 
@@ -447,11 +567,10 @@ provenance и OCI-label с точным Git commit.
 
 - JWT не имеет refresh flow; для отзыва используется внутренняя версия token;
 - при автоматически сгенерированном JWT secret все Bearer tokens отзываются после рестарта API;
-- JDBC сделан компактно без connection pool; схема обновляется Flyway migrations;
+- Python использует psycopg connection pool; схема обновляется прежними Flyway migrations;
 - recovery-ссылки возвращаются клиенту только в явно включённом учебном режиме;
 - демонстрационные credentials и выдача confirmation-ссылки в ответе предназначены только
   для локального обучения;
 - перед production-подобным использованием нужны TLS/reverse proxy, secret manager,
-  rate limiting, connection pool, доставка ссылок через почту, аудит и structured logging;
-- Swagger Inflector оставлен для сохранения архитектуры fork; переход на современный
-  framework был бы отдельным крупным рефакторингом.
+  распределённый rate limiting, SMTP authentication/TLS и очередь повторной доставки, аудит;
+- локальная почта и development-настройки не предназначены для публичного интернет-сервиса.
