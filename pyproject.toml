@@ -11,6 +11,7 @@ dependencies = [
     "fastapi==0.142.2", "pydantic==2.13.5", "psycopg[binary,pool]==3.3.6",
     "psycopg-pool==3.3.3", "uvicorn==0.54.0", "PyJWT==2.15.1",
     "bcrypt==5.0.0", "PyYAML==6.0.3", "simplejson==4.2.0",
+    "Pillow==12.3.0", "python-multipart==0.0.32",
 ]
 
 [project.optional-dependencies]
@@ -18,16 +19,17 @@ test = ["pytest==9.1.1", "pytest-cov==7.1.0", "httpx==0.28.1", "playwright==1.63
 quality = ["pyright==1.1.414", "ruff==0.16.10"]
 
 [tool.setuptools.packages.find]
-where = ["python"]
+where = ["src"]
+include = ["petstore*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/python"]
-pythonpath = ["python"]
-addopts = "-ra --strict-markers"
+testpaths = ["tests/unit", "tests/integration", "tests/system"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers --import-mode=importlib"
 markers = ["integration: isolated PostgreSQL required", "system: isolated running server required", "ui: browser required"]
 
 [tool.pyright]
-include = ["python"]
+include = ["src"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
@@ -35,8 +37,8 @@ reportMissingTypeStubs = false
 [tool.ruff]
 target-version = "py312"
 line-length = 110
-src = ["python"]
-include = ["python/**/*.py", "tests/python/**/*.py", "pyproject.toml"]
+src = ["src"]
+include = ["src/**/*.py", "tests/**/*.py", "pyproject.toml"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

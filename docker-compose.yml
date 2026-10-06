@@ -15,8 +15,10 @@ services:
       PETSTORE_SMTP_FROM: ${PETSTORE_SMTP_FROM:-noreply@petstore.test}
       PETSTORE_SMTP_TIMEOUT: ${PETSTORE_SMTP_TIMEOUT:-5}
       PETSTORE_MAIL_FRONTEND_URL: ${PETSTORE_MAIL_FRONTEND_URL:-}
+      PETSTORE_MEDIA_ROOT: /var/lib/petstore/media
     volumes:
       - petstore-data:/var/lib/postgresql/data
+      - petstore-media:/var/lib/petstore/media
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
@@ -31,3 +33,5 @@ services:
 volumes:
   petstore-data:
     name: ${PETSTORE_DB_VOLUME:-swagger-petstore-db-data}
+  petstore-media:
+    name: ${PETSTORE_MEDIA_VOLUME:-swagger-petstore-media-data}
