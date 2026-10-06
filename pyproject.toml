@@ -29,7 +29,7 @@ addopts = "-ra --strict-markers --import-mode=importlib"
 markers = ["integration: isolated PostgreSQL required", "system: isolated running server required", "ui: browser required"]
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "docker/fetch_migration_artifacts.py"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
@@ -38,7 +38,7 @@ reportMissingTypeStubs = false
 target-version = "py312"
 line-length = 110
 src = ["src"]
-include = ["src/**/*.py", "tests/**/*.py", "pyproject.toml"]
+include = ["src/**/*.py", "tests/**/*.py", "docker/*.py", "pyproject.toml"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
