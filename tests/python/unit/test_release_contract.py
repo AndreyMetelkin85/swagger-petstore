@@ -22,6 +22,9 @@ def test_publication_requires_python_tests_and_both_platform_scans():
     assert build["with"]["file"] == "Dockerfile.python"
     assert build["with"]["platforms"] == "linux/amd64,linux/arm64"
     assert "sha-" in build["with"]["tags"]
+    start = next(step for step in steps if step["name"] == "Start exactly the published digest")
+    assert "@${{ steps.image.outputs.digest }}" in start["env"]["PUBLISHED_IMAGE"]
+    assert any("tests/python/system/test_swagger_ui.py" in step.get("run", "") for step in steps)
 
 
 def test_main_compose_healthcheck_works_without_curl_and_keeps_volume():
@@ -43,8 +46,23 @@ def test_local_mail_overlay_is_opt_in_loopback_only_and_has_no_relay():
 
 
 def test_build_context_excludes_secrets_and_local_database_backups():
-    for name in [".dockerignore", "Dockerfile.python.dockerignore", "Dockerfile.java.dockerignore"]:
+    for name in [".dockerignore", "Dockerfile.python.dockerignore"]:
         patterns = (ROOT / name).read_text().splitlines()
         assert ".env" in patterns
         assert ".env.*" in patterns
         assert "backups" in patterns
+
+
+def test_repository_has_no_java_sources_or_maven_build():
+    assert not list((ROOT / "src").rglob("*.java"))
+    assert not (ROOT / "pom.xml").exists()
+    assert not (ROOT / "Dockerfile.java").exists()
+    assert not list((ROOT / ".github/workflows").glob("maven*.yml"))
+    workflow = yaml.safe_load((ROOT / ".github/workflows/codeql-analysis.yml").read_text())
+    initialize = next(step for step in workflow["jobs"]["python"]["steps"] if step.get("with"))
+    assert initialize["with"]["languages"] == "python"
+
+
+def test_original_migration_filenames_are_retained():
+    migrations = sorted((ROOT / "src/main/resources/db/migration").glob("V*__*.sql"))
+    assert [path.name.split("__")[0] for path in migrations] == [f"V{i}" for i in range(1, 10)]
