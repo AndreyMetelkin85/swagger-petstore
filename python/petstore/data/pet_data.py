@@ -25,7 +25,7 @@ class PetData:
 
         :param row: Persisted pet row.
         """
-        return {
+        result = {
             "id": row["id"],
             "name": row["name"],
             "category": json.loads(row["category_json"]),
@@ -36,6 +36,7 @@ class PetData:
             "currency": "RUB",
             "version": row["version"],
         }
+        return {key: value for key, value in result.items() if value is not None}
 
     def get_pet_by_id(self, pet_id: UUID) -> Row:
         """Read a public pet or return its operation-specific 404.

@@ -222,15 +222,17 @@ def test_public_user_cannot_leak_security_fields():
     assert set(response) == {
         "id",
         "username",
-        "firstName",
-        "lastName",
         "email",
-        "phone",
         "address",
         "userStatus",
         "role",
     }
     assert "never-expose" not in str(response)
+    assert response["address"] is None
+    populated = public_user(row | {"first_name": "Имя", "last_name": "Фамилия", "phone": "+79991234567"})
+    assert populated["firstName"] == "Имя"
+    assert populated["lastName"] == "Фамилия"
+    assert populated["phone"] == "+79991234567"
 
 
 def test_legacy_password_is_upgraded_after_successful_login():

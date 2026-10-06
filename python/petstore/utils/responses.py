@@ -56,7 +56,9 @@ def public_user(row: Row) -> Row:
             "apartment": row["address_apartment"],
             "postalCode": row["address_postal_code"],
         }
-    return {
+        if address["apartment"] is None:
+            del address["apartment"]
+    result = {
         "id": row["id"],
         "username": row["username"],
         "firstName": row["first_name"],
@@ -66,6 +68,12 @@ def public_user(row: Row) -> Row:
         "address": address,
         "userStatus": row["user_status"],
         "role": row["role"],
+    }
+    # Jackson omitted optional null contact fields, but explicitly kept address: null.
+    return {
+        key: value
+        for key, value in result.items()
+        if value is not None or key not in {"firstName", "lastName", "phone"}
     }
 
 
@@ -90,7 +98,11 @@ def public_order(row: Row) -> Row:
         "shipDate": "ship_date",
         "complete": "complete",
     }
-    return {public: row[column] for public, column in mapping.items()}
+    return {
+        public: row[column]
+        for public, column in mapping.items()
+        if public != "shipDate" or row[column] is not None
+    }
 
 
 def public_payment(row: Row) -> Row:
@@ -110,4 +122,8 @@ def public_payment(row: Row) -> Row:
         "createdAt": "created_at",
         "updatedAt": "updated_at",
     }
-    return {public: row[column] for public, column in mapping.items()}
+    return {
+        public: row[column]
+        for public, column in mapping.items()
+        if public != "failureCode" or row[column] is not None
+    }
