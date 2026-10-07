@@ -7,6 +7,7 @@ from PIL import Image
 
 from petstore.config import Settings
 from petstore.data.catalog_data import CatalogData
+from petstore.service.catalog_service import CatalogService
 from petstore.service.exceptions import ApiException
 from petstore.service.media_service import MediaService, normalize_image
 
@@ -152,10 +153,10 @@ def test_catalog_table_and_optimistic_version_guards():
     with pytest.raises(ApiException):
         CatalogData.table("users; DROP")
     with pytest.raises(ApiException) as failure:
-        CatalogData.version({"version": 1}, None)
+        CatalogService.version({"version": 1}, None)
     assert failure.value.details == [{"field": "version", "message": "Version is required"}]
     with pytest.raises(ApiException) as failure:
-        CatalogData.version({"version": 1}, 0, "ORDER_VERSION_CONFLICT")
+        CatalogService.version({"version": 1}, 0, "ORDER_VERSION_CONFLICT")
     assert failure.value.code == "ORDER_VERSION_CONFLICT"
 
 

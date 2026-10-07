@@ -22,7 +22,7 @@ class PaymentController:
         """
         self.data = PaymentData(database)
 
-    def createPayment(self, context: RequestContext) -> Response:
+    def create_payment(self, context: RequestContext) -> Response:
         """Create or replay a payment using its required idempotency key.
 
         :param context: Parent UUID, idempotency header and payment body.
@@ -36,7 +36,7 @@ class PaymentController:
         )
         return Responses(public_payment(payment), status_code=200 if replayed else 201)
 
-    def listPayments(self, context: RequestContext) -> Response:
+    def list_payments(self, context: RequestContext) -> Response:
         """Read an authorized order's payment history.
 
         :param context: Authenticated parent order UUID.
@@ -46,7 +46,7 @@ class PaymentController:
             [public_payment(row) for row in self.data.find_payments(context.identifier("orderId"), actor)]
         )
 
-    def getPayment(self, context: RequestContext) -> Response:
+    def get_payment(self, context: RequestContext) -> Response:
         """Read an authorized payment summary.
 
         :param context: Parent and payment UUIDs with Bearer token.
@@ -58,7 +58,7 @@ class PaymentController:
             )
         )
 
-    def deletePayment(self, context: RequestContext) -> Response:
+    def delete_payment(self, context: RequestContext) -> Response:
         """Delete a declined attempt only as an administrator.
 
         :param context: Parent and payment UUIDs with ADMIN token.

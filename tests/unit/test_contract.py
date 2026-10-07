@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 import yaml
+from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 
 from petstore.app import create_app
@@ -32,8 +33,8 @@ def test_every_openapi_operation_is_registered_once(client):
     }
     actual = {
         (method, route.path, route.name)
-        for route in app.routes
-        if hasattr(route, "methods")
+        for route in iter_route_contexts(app.routes)
+        if route.methods is not None
         for method in route.methods
         if route.path not in {"/api/v3/openapi.json", "/api/v3/openapi.yaml"}
     }

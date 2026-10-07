@@ -65,8 +65,8 @@ services:
 
 volumes:
   python-preview-media:
-    name: petstore-python-preview-media-data
+    name: ${PETSTORE_PREVIEW_MEDIA_VOLUME:-petstore-python-preview-media-data}
   python-preview-data:
-    name: petstore-python-preview-data
+    name: ${PETSTORE_PREVIEW_DB_VOLUME:-petstore-python-preview-data}
   mail-data:
-    name: petstore-mail-data
+    name: ${PETSTORE_PREVIEW_MAIL_VOLUME:-petstore-mail-data}

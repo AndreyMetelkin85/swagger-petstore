@@ -25,7 +25,7 @@ class AuthenticationController:
         request = context.validated(LoginRequest, V.login)
         return Responses(context.auth.login(cast(str, request.email), cast(str, request.password)))
 
-    def forgotPassword(self, context: RequestContext) -> Response:
+    def forgot_password(self, context: RequestContext) -> Response:
         """Generate a password-reset link with configured exposure.
 
         :param context: Recovery email.
@@ -33,7 +33,7 @@ class AuthenticationController:
         request = context.validated(PasswordForgotRequest, V.forgot)
         return Responses(context.auth.forgot_password(cast(str, request.email)))
 
-    def resetPassword(self, context: RequestContext) -> Response:
+    def reset_password(self, context: RequestContext) -> Response:
         """Consume the query code and set the JSON-body password.
 
         :param context: Parsed reset code and payload.

@@ -79,7 +79,8 @@ def test_complete_upload_body_is_bounded_before_parsing(client):
     assert response.status_code == 413 and response.json()["error"] == "IMAGE_TOO_LARGE"
 
 
-def test_telemetry_allows_only_operational_events_and_limits_batches(client, caplog):
+def test_telemetry_allows_only_operational_events_and_limits_batches(client, caplog, monkeypatch):
+    monkeypatch.setattr(client.app.state.controllers.telemetry, "clock", lambda: 100.0)
     caplog.set_level("INFO")
     valid = {"events": [{"event": "api_failure", "method": "GET", "httpStatus": 503, "durationMs": 2}]}
     assert client.post("/api/v3/telemetry/client-events", json=valid).status_code == 204

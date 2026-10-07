@@ -97,9 +97,9 @@ class OrderData:
         """
         expires = order["payment_expires_at"]
         if order.get("order_kind", "LEGACY") == "MIXED":
-            from petstore.data.commerce_order_data import CommerceOrderData
+            from petstore.service.commerce_order_service import CommerceOrderService
 
-            return CommerceOrderData.expire_locked(connection, order)
+            return CommerceOrderService.expire_locked(connection, order)
         if (
             order["status"] == "placed"
             and order["payment_status"] == "UNPAID"

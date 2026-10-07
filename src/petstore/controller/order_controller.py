@@ -23,7 +23,7 @@ class OrderController:
         """
         self.data = OrderData(database)
 
-    def getInventory(self, context: RequestContext) -> Response:
+    def get_inventory(self, context: RequestContext) -> Response:
         """Read order inventory totals only as an administrator.
 
         :param context: Administrator request.
@@ -31,7 +31,7 @@ class OrderController:
         context.authorize("ADMIN")
         return Responses(self.data.get_count_by_status())
 
-    def listOrders(self, context: RequestContext) -> Response:
+    def list_orders(self, context: RequestContext) -> Response:
         """List all orders for administrators or only the caller's orders.
 
         :param context: Authenticated list request.
@@ -40,7 +40,7 @@ class OrderController:
             [public_order(row) for row in self.data.find_all(context.authorize("USER", "ADMIN"))]
         )
 
-    def getOrderById(self, context: RequestContext) -> Response:
+    def get_order_by_id(self, context: RequestContext) -> Response:
         """Read an order after checking ownership.
 
         :param context: Authenticated order UUID.
@@ -48,7 +48,7 @@ class OrderController:
         actor = context.authorize("USER", "ADMIN")
         return Responses(public_order(self.data.get_order_by_id(context.identifier("orderId"), actor)))
 
-    def createOrderDraft(self, context: RequestContext) -> Response:
+    def create_order_draft(self, context: RequestContext) -> Response:
         """Create a draft without reserving a pet.
 
         :param context: Authenticated draft payload.
@@ -59,7 +59,7 @@ class OrderController:
             status_code=201,
         )
 
-    def updateOrderDraft(self, context: RequestContext) -> Response:
+    def update_order_draft(self, context: RequestContext) -> Response:
         """Replace editable fields of an owned draft.
 
         :param context: Authenticated draft UUID and payload.
@@ -73,7 +73,7 @@ class OrderController:
             )
         )
 
-    def placeOrderDraft(self, context: RequestContext) -> Response:
+    def place_order_draft(self, context: RequestContext) -> Response:
         """Capture snapshots and reserve the draft's pet.
 
         :param context: Authenticated draft UUID.
@@ -84,7 +84,7 @@ class OrderController:
             )
         )
 
-    def deleteOrder(self, context: RequestContext) -> Response:
+    def delete_order(self, context: RequestContext) -> Response:
         """Delete only a draft or an administrator-deletable terminal order.
 
         :param context: Authenticated order UUID.
@@ -102,28 +102,28 @@ class OrderController:
         actor = context.authorize(*(("ADMIN",) if admin_only else ("USER", "ADMIN")))
         return Responses(public_order(self.data.transition(context.identifier("orderId"), target, actor)))
 
-    def approveOrder(self, context: RequestContext) -> Response:
+    def approve_order(self, context: RequestContext) -> Response:
         """Approve a payable or preserved legacy order as ADMIN.
 
         :param context: Authenticated order UUID.
         """
         return self.transition(context, OrderStatus.APPROVED, True)
 
-    def shipOrder(self, context: RequestContext) -> Response:
+    def ship_order(self, context: RequestContext) -> Response:
         """Ship an approved order as ADMIN.
 
         :param context: Authenticated order UUID.
         """
         return self.transition(context, OrderStatus.SHIPPED, True)
 
-    def deliverOrder(self, context: RequestContext) -> Response:
+    def deliver_order(self, context: RequestContext) -> Response:
         """Deliver a shipped order and mark its pet sold.
 
         :param context: Authenticated order UUID.
         """
         return self.transition(context, OrderStatus.DELIVERED, True)
 
-    def cancelOrder(self, context: RequestContext) -> Response:
+    def cancel_order(self, context: RequestContext) -> Response:
         """Cancel an owned eligible order and refund if paid.
 
         :param context: Authenticated order UUID.
