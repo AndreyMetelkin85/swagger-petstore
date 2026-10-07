@@ -3244,7 +3244,7 @@ paths:
                     "status": 422
                     "error": "PUBLICATION_INCOMPLETE"
                     "message": "Complete the required fields before publishing"
-                    "details": 
+                    "details":
                       - "field": "price"
                         "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
@@ -3726,7 +3726,7 @@ paths:
                     "status": 422
                     "error": "PUBLICATION_INCOMPLETE"
                     "message": "Complete the required fields before publishing"
-                    "details": 
+                    "details":
                       - "field": "price"
                         "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
@@ -4880,7 +4880,7 @@ paths:
                     "status": 422
                     "error": "PUBLICATION_INCOMPLETE"
                     "message": "Complete the required fields before publishing"
-                    "details": 
+                    "details":
                       - "field": "price"
                         "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
@@ -5071,7 +5071,7 @@ paths:
                     "status": 422
                     "error": "PUBLICATION_INCOMPLETE"
                     "message": "Complete the required fields before publishing"
-                    "details": 
+                    "details":
                       - "field": "price"
                         "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
