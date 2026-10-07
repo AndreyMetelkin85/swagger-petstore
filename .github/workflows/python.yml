@@ -2,7 +2,7 @@ name: Python checks
 
 on:
   push:
-    branches: ["feature/python-fastapi-migration", "feature/store-commerce", "dev"]
+    branches: ["feature/python-fastapi-migration", "feature/store-commerce", "feature/fastapi-native-refactor", "dev"]
   workflow_call:
 
 permissions:

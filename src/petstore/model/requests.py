@@ -1,6 +1,7 @@
 """Transport types; business validation deliberately preserves original errors."""
 
 from decimal import Decimal
+from typing import Any, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,6 +13,17 @@ class RequestModel(BaseModel):
     """Retain unknown fields so each operation can report its own validation errors."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    @classmethod
+    def from_wire(cls, value: Any) -> Self:
+        """Validate HTTP aliases without changing Python-side constructor ergonomics.
+
+        :param value: JSON object supplied to the native FastAPI body field.
+        :raises ValidationError: A field has an incompatible type or value.
+        """
+        if isinstance(value, cls):
+            return value
+        return cls.model_validate(value, by_alias=True, by_name=False)
 
 
 class Address(RequestModel):

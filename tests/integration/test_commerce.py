@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 from petstore.config import Settings
-from petstore.data.commerce_order_data import CommerceOrderData
+from petstore.service.commerce_order_service import CommerceOrderService
 from petstore.service.media_service import MediaService
 
 pytestmark = pytest.mark.integration
@@ -529,13 +529,13 @@ def test_cancel_payment_and_expiry_payment_races_do_not_leak_reserves(commerce):
                 lambda fn: fn(),
                 [
                     lambda: commerce.pay(user, order),
-                    lambda: CommerceOrderData(commerce.scenario.database).expire(),
+                    lambda: CommerceOrderService(commerce.scenario.database).expire(),
                 ],
             )
         )
     assert paid.status_code == 410
     assert commerce.client.get("/products/" + product["id"]).json()["reserved"] == 0
-    assert CommerceOrderData(commerce.scenario.database).expire() == 0
+    assert CommerceOrderService(commerce.scenario.database).expire() == 0
 
 
 def test_publication_validation_and_gallery_replacement_are_atomic(commerce):
