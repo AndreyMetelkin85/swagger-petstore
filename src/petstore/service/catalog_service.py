@@ -109,7 +109,7 @@ class CatalogService:
 
     @staticmethod
     def set_gallery(
-        connection: DbConnection, kind: str, identifier: UUID, images: list[ImageReference]
+        connection: DbConnection, kind: str, identifier: UUID, images: list[ImageReference], name: str
     ) -> None:
         """Lock all referenced media before replacing gallery entries."""
         for media_id in sorted({image.media_id for image in images}, key=str):
@@ -118,6 +118,7 @@ class CatalogService:
         CatalogData.clear_gallery(connection, kind, identifier)
         explicit = any(image.is_cover for image in images)
         for position, image in enumerate(images):
+            image = image.model_copy(update={"alt": image.alt or f"{name}, фото {position + 1}"})
             CatalogData.add_gallery_image(
                 connection,
                 kind,
@@ -140,20 +141,16 @@ class CatalogService:
                         "PRODUCT_VERSION_CONFLICT" if kind == "product" else "PET_VERSION_CONFLICT",
                     )
                 published = current is not None and current["publication_status"] == "PUBLISHED"
-                self.category(connection, request.category_id, kind, required=published and kind == "product")
-                if (
-                    published
-                    and not request.images
-                    and not (kind == "pet" and current is not None and json.loads(current["photo_urls_json"]))
-                ):
-                    raise ApiException(422, "IMAGE_REQUIRED", "Published cards must keep at least one image")
+                if published:
+                    self.publication_fields(request, bool(request.images))
+                self.category(connection, request.category_id, kind, required=published)
                 if isinstance(request, ProductCommand):
                     if current and request.stock is not None and request.stock != current["stock"]:
                         raise ApiException(
                             409, "STOCK_ADJUSTMENT_REQUIRED", "Use a stock adjustment to change inventory"
                         )
                     fields = {
-                        "sku": request.sku.strip(),
+                        "sku": request.sku.strip() if request.sku is not None else None,
                         "name": request.name.strip(),
                         "description": request.description,
                         "category_id": request.category_id,
@@ -189,7 +186,7 @@ class CatalogService:
                     else CatalogData.insert_card(connection, kind, fields).fetchone()
                 )
                 assert row is not None
-                self.set_gallery(connection, kind, row["id"], request.images)
+                self.set_gallery(connection, kind, row["id"], request.images, request.name)
                 return CatalogData.public(connection, kind, row)
         except errors.UniqueViolation as exc:
             raise ApiException(
@@ -223,15 +220,71 @@ class CatalogService:
                     409, "INVALID_PUBLICATION_TRANSITION", "Archived cards cannot be published"
                 )
             if target == "PUBLISHED":
-                self.category(connection, row["category_id"], kind, required=kind == "product")
                 images = CatalogData.gallery(connection, kind, identifier)
-                if not images and not (kind == "pet" and json.loads(row["photo_urls_json"])):
-                    raise ApiException(
-                        422, "IMAGE_REQUIRED", "At least one image is required for publication"
-                    )
+                card = CatalogData.public(connection, kind, row)
+                fields = {
+                    key: value
+                    for key, value in card.items()
+                    if key
+                    in {
+                        "sku",
+                        "name",
+                        "categoryId",
+                        "brand",
+                        "productType",
+                        "animalTypes",
+                        "price",
+                        "feedForm",
+                        "lifeStages",
+                        "netWeightGrams",
+                        "animalType",
+                    }
+                }
+                command = (
+                    ProductCommand.model_validate(fields)
+                    if kind == "product"
+                    else PetCardCommand.model_validate(fields)
+                )
+                self.publication_fields(
+                    command, bool(images) or (kind == "pet" and bool(json.loads(row["photo_urls_json"])))
+                )
+                self.category(connection, row["category_id"], kind, required=True)
             updated = CatalogData.set_publication(connection, kind, identifier, target).fetchone()
             assert updated is not None
             return CatalogData.public(connection, kind, updated)
+
+    @staticmethod
+    def publication_fields(request: ProductCommand | PetCardCommand, has_images: bool) -> None:
+        """Reject incomplete publication/replacement with field errors, without changing the draft."""
+        errors: list[dict[str, str]] = []
+
+        def require(field: str, present: bool) -> None:
+            """Append a safe public field error without submitted values."""
+            if not present:
+                errors.append({"field": field, "message": "Field is required for publication"})
+
+        require("name", bool(request.name.strip()))
+        require("categoryId", request.category_id is not None)
+        require("price", request.price is not None and request.price > 0)
+        if isinstance(request, ProductCommand):
+            require("sku", bool(request.sku))
+            require("productType", request.product_type is not None)
+            require("animalTypes", bool(request.animal_types))
+            if request.product_type == "FEED":
+                require("brand", bool(request.brand.strip()))
+                require("feedForm", bool(request.feed_form))
+                require("lifeStages", bool(request.life_stages))
+                require("netWeightGrams", request.net_weight_grams is not None)
+        else:
+            require("animalType", request.animal_type is not None)
+        require("images", has_images)
+        if errors:
+            code = (
+                "IMAGE_REQUIRED"
+                if len(errors) == 1 and errors[0]["field"] == "images"
+                else "PUBLICATION_INCOMPLETE"
+            )
+            raise ApiException(422, code, "Complete the required fields before publishing", errors)
 
     def adjust_stock(self, identifier: UUID, command: StockCommand, actor: Row) -> Row:
         """Keep available inventory nonnegative and append an immutable adjustment audit."""

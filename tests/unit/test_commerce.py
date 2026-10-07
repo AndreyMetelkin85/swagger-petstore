@@ -65,15 +65,15 @@ def test_static_only_webp():
     assert failure.value.code == "ANIMATED_IMAGE_NOT_ALLOWED"
 
 
-@pytest.mark.parametrize("price", ["0", "-1", "1.001", "NaN", "Infinity", "10000000000"])
+@pytest.mark.parametrize("price", ["-1", "1.001", "NaN", "Infinity", "10000000000"])
 def test_money_constraints(price):
     with pytest.raises(ValidationError):
         ProductCommand(sku="SKU", name="Product", price=price)
 
 
-def test_feed_requires_form_weight_and_ingredients():
-    with pytest.raises(ValidationError):
-        ProductCommand(sku="FEED", name="Feed", price=Decimal("1"), productType="FEED")
+def test_feed_draft_does_not_require_publication_fields():
+    request = ProductCommand(name="Feed", productType="FEED")
+    assert request.sku is None and request.price is None
 
 
 def test_gallery_unique_ids_one_cover_and_limit():

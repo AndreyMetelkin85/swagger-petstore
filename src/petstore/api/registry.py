@@ -70,7 +70,7 @@ class Controllers:
             media=MediaController(database, settings),
             cart=CartController(database),
             checkout=CommerceOrderController(database),
-            telemetry=TelemetryController(),
+            telemetry=TelemetryController(settings=settings),
         )
 
 

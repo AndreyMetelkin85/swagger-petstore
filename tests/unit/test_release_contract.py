@@ -69,7 +69,7 @@ def test_repository_has_no_java_sources_or_maven_build():
 
 def test_original_migration_filenames_are_retained():
     migrations = sorted((ROOT / "resources/db/migration").glob("V*__*.sql"))
-    assert {path.name.split("__")[0] for path in migrations} == {f"V{i}" for i in range(1, 12)}
+    assert {path.name.split("__")[0] for path in migrations} == {f"V{i}" for i in range(1, 13)}
 
 
 def test_source_resources_and_docker_paths_agree():

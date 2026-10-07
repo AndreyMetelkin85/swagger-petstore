@@ -3239,6 +3239,14 @@ paths:
                       -
                         "field": "body"
                         "message": "Invalid field value"
+                "PUBLICATION_INCOMPLETE":
+                  "value":
+                    "status": 422
+                    "error": "PUBLICATION_INCOMPLETE"
+                    "message": "Complete the required fields before publishing"
+                    "details":
+                      - "field": "price"
+                        "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
                   "value":
                     "status": 422
@@ -3713,6 +3721,14 @@ paths:
                       -
                         "field": "body"
                         "message": "Invalid field value"
+                "PUBLICATION_INCOMPLETE":
+                  "value":
+                    "status": 422
+                    "error": "PUBLICATION_INCOMPLETE"
+                    "message": "Complete the required fields before publishing"
+                    "details":
+                      - "field": "price"
+                        "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
                   "value":
                     "status": 422
@@ -4859,6 +4875,14 @@ paths:
                       -
                         "field": "body"
                         "message": "Invalid field value"
+                "PUBLICATION_INCOMPLETE":
+                  "value":
+                    "status": 422
+                    "error": "PUBLICATION_INCOMPLETE"
+                    "message": "Complete the required fields before publishing"
+                    "details":
+                      - "field": "price"
+                        "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
                   "value":
                     "status": 422
@@ -5042,6 +5066,14 @@ paths:
                       -
                         "field": "body"
                         "message": "Invalid field value"
+                "PUBLICATION_INCOMPLETE":
+                  "value":
+                    "status": 422
+                    "error": "PUBLICATION_INCOMPLETE"
+                    "message": "Complete the required fields before publishing"
+                    "details":
+                      - "field": "price"
+                        "message": "Field is required for publication"
                 "IMAGE_REQUIRED":
                   "value":
                     "status": 422
@@ -7514,6 +7546,12 @@ paths:
                     "error": "PRODUCT_UNAVAILABLE"
                     "message": "A checkout item is unpublished"
                     "details": []
+                "CART_VERSION_CONFLICT":
+                  "value":
+                    "status": 409
+                    "error": "CART_VERSION_CONFLICT"
+                    "message": "Cart changed after the order draft was created"
+                    "details": []
                 "IDEMPOTENCY_KEY_REUSED":
                   "value":
                     "status": 409
@@ -9650,107 +9688,111 @@ components:
         - "kind"
       "title": "CategoryCommand"
       "type": "object"
-    "ProductCommand":
-      "additionalProperties": false
-      "description": "Full product card; stock edits use the dedicated adjustment operation."
-      "properties":
-        "sku":
-          "maxLength": 64
-          "minLength": 1
-          "pattern": "^[A-Za-z0-9_.-]+$"
-          "title": "Sku"
-          "type": "string"
-        "name":
-          "maxLength": 150
-          "minLength": 1
-          "title": "Name"
-          "type": "string"
-        "description":
-          "default": ""
-          "maxLength": 5000
-          "title": "Description"
-          "type": "string"
-        "categoryId":
-          "default": null
-          "title": "Categoryid"
-          "format": "uuid"
-          "type": "string"
-          "nullable": true
-        "brand":
-          "default": ""
-          "maxLength": 100
-          "title": "Brand"
-          "type": "string"
-        "productType":
-          "default": "OTHER"
-          "pattern": "^(FEED|TREAT|TOY|ACCESSORY|HYGIENE|OTHER)$"
-          "title": "Producttype"
-          "type": "string"
-        "animalTypes":
-          "items":
-            "$ref": "#/components/schemas/Animal"
-          "maxItems": 7
-          "title": "Animaltypes"
-          "type": "array"
-        "price":
-          "anyOf":
-            -
-              "maximum": 9999999999.99
-              "minimum": 0.01
-              "multipleOf": 0.01
-              "type": "number"
-            -
-              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              "type": "string"
-          "title": "Price"
-        "feedForm":
-          "default": ""
-          "pattern": "^(|DRY|WET)$"
-          "title": "Feedform"
-          "type": "string"
-        "lifeStages":
-          "items":
-            "type": "string"
-          "maxItems": 20
-          "title": "Lifestages"
-          "type": "array"
-        "netWeightGrams":
-          "default": null
-          "title": "Netweightgrams"
-          "maximum": 1000000
-          "minimum": 1
-          "type": "integer"
-          "nullable": true
-        "ingredients":
-          "default": ""
-          "maxLength": 5000
-          "title": "Ingredients"
-          "type": "string"
-        "images":
-          "items":
-            "$ref": "#/components/schemas/ImageReference"
-          "maxItems": 20
-          "title": "Images"
-          "type": "array"
-        "version":
-          "default": null
-          "title": "Version"
-          "minimum": 0
-          "type": "integer"
-          "nullable": true
-        "stock":
-          "default": null
-          "title": "Stock"
-          "maximum": 1000000
-          "minimum": 0
-          "type": "integer"
-          "nullable": true
-      "required":
-        - "sku"
-        - "name"
-        - "price"
-      "title": "ProductCommand"
-      "type": "object"
+    ProductCommand:
+      additionalProperties: false
+      description: A name is sufficient for DRAFT. Validate supplied values; publication
+        requires complete card fields. FEED composition is optional. Updates are full
+        replacements.
+      properties:
+        sku:
+          maxLength: 64
+          minLength: 1
+          pattern: ^[A-Za-z0-9_.-]+$
+          title: Sku
+          type: string
+          nullable: true
+          default: null
+        name:
+          maxLength: 150
+          minLength: 1
+          title: Name
+          type: string
+        description:
+          default: ''
+          maxLength: 5000
+          title: Description
+          type: string
+        categoryId:
+          default: null
+          title: Categoryid
+          format: uuid
+          type: string
+          nullable: true
+        brand:
+          default: ''
+          maxLength: 100
+          title: Brand
+          type: string
+        productType:
+          default: null
+          pattern: ^(FEED|TREAT|TOY|ACCESSORY|HYGIENE|OTHER)$
+          title: Producttype
+          type: string
+          nullable: true
+        animalTypes:
+          items:
+            $ref: '#/components/schemas/Animal'
+          maxItems: 7
+          title: Animaltypes
+          type: array
+        price:
+          anyOf:
+          - maximum: 9999999999.99
+            minimum: 0.01
+            multipleOf: 0.01
+            type: number
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          title: Price
+          minimum: 0
+          nullable: true
+          default: null
+        feedForm:
+          default: ''
+          pattern: ^(|DRY|WET)$
+          title: Feedform
+          type: string
+        lifeStages:
+          items:
+            type: string
+          maxItems: 20
+          title: Lifestages
+          type: array
+        netWeightGrams:
+          default: null
+          title: Netweightgrams
+          maximum: 1000000
+          minimum: 1
+          type: integer
+          nullable: true
+        ingredients:
+          default: ''
+          maxLength: 5000
+          title: Ingredients
+          type: string
+        images:
+          items:
+            $ref: '#/components/schemas/ImageReference'
+          maxItems: 20
+          title: Images
+          type: array
+        version:
+          default: null
+          title: Version
+          minimum: 0
+          type: integer
+          nullable: true
+        stock:
+          default: null
+          title: Stock
+          maximum: 1000000
+          minimum: 0
+          type: integer
+          nullable: true
+      required:
+      - name
+      title: ProductCommand
+      type: object
     "Animal":
       "description": "Supported audience/species filters."
       "enum":
@@ -9784,73 +9826,76 @@ components:
         - "mediaId"
       "title": "ImageReference"
       "type": "object"
-    "PetCardCommand":
-      "additionalProperties": false
-      "description": "Extended pet card without client-controlled reservations/publication state."
-      "properties":
-        "name":
-          "maxLength": 100
-          "minLength": 1
-          "title": "Name"
-          "type": "string"
-        "description":
-          "default": ""
-          "maxLength": 5000
-          "title": "Description"
-          "type": "string"
-        "animalType":
-          "$ref": "#/components/schemas/Animal"
-          "default": "other"
-        "categoryId":
-          "default": null
-          "title": "Categoryid"
-          "format": "uuid"
-          "type": "string"
-          "nullable": true
-        "breed":
-          "default": ""
-          "maxLength": 100
-          "title": "Breed"
-          "type": "string"
-        "sex":
-          "default": "UNKNOWN"
-          "pattern": "^(MALE|FEMALE|UNKNOWN)$"
-          "title": "Sex"
-          "type": "string"
-        "birthDate":
-          "default": null
-          "title": "Birthdate"
-          "format": "date"
-          "type": "string"
-          "nullable": true
-        "price":
-          "anyOf":
-            -
-              "maximum": 9999999999.99
-              "minimum": 0.01
-              "multipleOf": 0.01
-              "type": "number"
-            -
-              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              "type": "string"
-          "title": "Price"
-        "images":
-          "items":
-            "$ref": "#/components/schemas/ImageReference"
-          "maxItems": 20
-          "title": "Images"
-          "type": "array"
-        "version":
-          "default": null
-          "title": "Version"
-          "minimum": 0
-          "type": "integer"
-          "nullable": true
-      "required":
-        - "name"
-        - "price"
-      "title": "PetCardCommand"
-      "type": "object"
+    PetCardCommand:
+      additionalProperties: false
+      description: A name is sufficient for DRAFT. Publication requires category, species,
+        price and image.
+      properties:
+        name:
+          maxLength: 100
+          minLength: 1
+          title: Name
+          type: string
+        description:
+          default: ''
+          maxLength: 5000
+          title: Description
+          type: string
+        animalType:
+          allOf:
+          - $ref: '#/components/schemas/Animal'
+          nullable: true
+          default: null
+        categoryId:
+          default: null
+          title: Categoryid
+          format: uuid
+          type: string
+          nullable: true
+        breed:
+          default: ''
+          maxLength: 100
+          title: Breed
+          type: string
+        sex:
+          default: UNKNOWN
+          pattern: ^(MALE|FEMALE|UNKNOWN)$
+          title: Sex
+          type: string
+        birthDate:
+          default: null
+          title: Birthdate
+          format: date
+          type: string
+          nullable: true
+        price:
+          anyOf:
+          - maximum: 9999999999.99
+            minimum: 0.01
+            multipleOf: 0.01
+            type: number
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          title: Price
+          minimum: 0
+          nullable: true
+          default: null
+        images:
+          items:
+            $ref: '#/components/schemas/ImageReference'
+          maxItems: 20
+          title: Images
+          type: array
+        version:
+          default: null
+          title: Version
+          minimum: 0
+          type: integer
+          nullable: true
+      required:
+      - name
+      title: PetCardCommand
+      type: object
     "VersionCommand":
       "additionalProperties": false
       "description": "Expected optimistic version for publication/lifecycle actions."
@@ -9956,38 +10001,67 @@ components:
         - "events"
       "title": "TelemetryCommand"
       "type": "object"
-    "TelemetryEvent":
-      "additionalProperties": false
-      "description": "Allowlisted operational telemetry without arbitrary strings or personal data."
-      "properties":
-        "event":
-          "pattern": "^[a-z][a-z0-9_]{0,49}$"
-          "title": "Event"
-          "type": "string"
-        "method":
-          "default": null
-          "title": "Method"
-          "pattern": "^(GET|POST|PUT|DELETE|PATCH)$"
-          "type": "string"
-          "nullable": true
-        "httpStatus":
-          "default": null
-          "title": "Httpstatus"
-          "maximum": 599
-          "minimum": 100
-          "type": "integer"
-          "nullable": true
-        "durationMs":
-          "default": null
-          "title": "Durationms"
-          "maximum": 3600000
-          "minimum": 0
-          "type": "integer"
-          "nullable": true
-      "required":
-        - "event"
-      "title": "TelemetryEvent"
-      "type": "object"
+    TelemetryEvent:
+      additionalProperties: false
+      description: Allowlisted operational telemetry without arbitrary strings or personal
+        data.
+      properties:
+        event:
+          pattern: ^[a-z][a-z0-9_]{0,49}$
+          title: Event
+          type: string
+        method:
+          default: null
+          title: Method
+          pattern: ^(GET|POST|PUT|DELETE|PATCH)$
+          type: string
+          nullable: true
+        httpStatus:
+          default: null
+          title: Httpstatus
+          maximum: 599
+          minimum: 100
+          type: integer
+          nullable: true
+        durationMs:
+          default: null
+          title: Durationms
+          maximum: 3600000
+          minimum: 0
+          type: integer
+          nullable: true
+        requestId:
+          type: string
+          format: uuid
+          nullable: true
+        errorCode:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{0,99}$
+          maxLength: 100
+          nullable: true
+          description: Known server or documented client error code only.
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+        routeId:
+          type: string
+          maxLength: 160
+          nullable: true
+          description: Known frontend route template only.
+        endpointTemplate:
+          type: string
+          maxLength: 160
+          nullable: true
+          description: Known API path template with :id placeholders, never a raw URL.
+        timestamp:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - event
+      title: TelemetryEvent
+      type: object
     "CatalogImage":
       "type": "object"
       "properties":
@@ -10092,181 +10166,187 @@ components:
         - "createdAt"
         - "imageUrl"
         - "thumbUrl"
-    "ProductCard":
-      "type": "object"
-      "properties":
-        "id":
-          "type": "string"
-          "format": "uuid"
-        "kind":
-          "type": "string"
-        "name":
-          "type": "string"
-        "description":
-          "type": "string"
-        "categoryId":
-          "type": "string"
-          "format": "uuid"
-          "nullable": true
-        "price":
-          "type": "number"
-          "minimum": 0
-          "multipleOf": 0.01
-        "currency":
-          "type": "string"
-          "enum":
-            - "RUB"
-        "publicationStatus":
-          "type": "string"
-          "enum":
-            - "DRAFT"
-            - "PUBLISHED"
-            - "ARCHIVED"
-        "version":
-          "type": "integer"
-          "minimum": 0
-        "images":
-          "type": "array"
-          "items":
-            "$ref": "#/components/schemas/CatalogImage"
-        "sku":
-          "type": "string"
-        "brand":
-          "type": "string"
-        "productType":
-          "type": "string"
-          "enum":
-            - "FEED"
-            - "TREAT"
-            - "TOY"
-            - "ACCESSORY"
-            - "HYGIENE"
-            - "OTHER"
-        "animalTypes":
-          "type": "array"
-          "items":
-            "$ref": "#/components/schemas/Animal"
-        "feedForm":
-          "type": "string"
-        "lifeStages":
-          "type": "array"
-          "items":
-            "type": "string"
-        "netWeightGrams":
-          "type": "integer"
-          "nullable": true
-        "ingredients":
-          "type": "string"
-        "stock":
-          "type": "integer"
-          "minimum": 0
-        "reserved":
-          "type": "integer"
-          "minimum": 0
-        "availableQuantity":
-          "type": "integer"
-          "minimum": 0
-      "required":
-        - "id"
-        - "kind"
-        - "name"
-        - "description"
-        - "categoryId"
-        - "price"
-        - "currency"
-        - "publicationStatus"
-        - "version"
-        - "images"
-        - "sku"
-        - "brand"
-        - "productType"
-        - "animalTypes"
-        - "feedForm"
-        - "lifeStages"
-        - "netWeightGrams"
-        - "ingredients"
-        - "stock"
-        - "reserved"
-        - "availableQuantity"
-    "PetCard":
-      "type": "object"
-      "properties":
-        "id":
-          "type": "string"
-          "format": "uuid"
-        "kind":
-          "type": "string"
-        "name":
-          "type": "string"
-        "description":
-          "type": "string"
-        "categoryId":
-          "type": "string"
-          "format": "uuid"
-          "nullable": true
-        "price":
-          "type": "number"
-          "minimum": 0
-          "multipleOf": 0.01
-        "currency":
-          "type": "string"
-          "enum":
-            - "RUB"
-        "publicationStatus":
-          "type": "string"
-          "enum":
-            - "DRAFT"
-            - "PUBLISHED"
-            - "ARCHIVED"
-        "version":
-          "type": "integer"
-          "minimum": 0
-        "images":
-          "type": "array"
-          "items":
-            "$ref": "#/components/schemas/CatalogImage"
-        "animalType":
-          "$ref": "#/components/schemas/Animal"
-        "breed":
-          "type": "string"
-        "sex":
-          "type": "string"
-          "enum":
-            - "MALE"
-            - "FEMALE"
-            - "UNKNOWN"
-        "birthDate":
-          "type": "string"
-          "format": "date"
-          "nullable": true
-        "status":
-          "type": "string"
-          "enum":
-            - "available"
-            - "pending"
-            - "reserved"
-            - "sold"
-        "photoUrls":
-          "type": "array"
-          "items":
-            "type": "string"
-      "required":
-        - "id"
-        - "kind"
-        - "name"
-        - "description"
-        - "categoryId"
-        - "price"
-        - "currency"
-        - "publicationStatus"
-        - "version"
-        - "images"
-        - "animalType"
-        - "breed"
-        - "sex"
-        - "birthDate"
-        - "status"
-        - "photoUrls"
+    ProductCard:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        price:
+          type: number
+          minimum: 0
+          multipleOf: 0.01
+          nullable: true
+        currency:
+          type: string
+          enum:
+          - RUB
+        publicationStatus:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - ARCHIVED
+        version:
+          type: integer
+          minimum: 0
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogImage'
+        sku:
+          type: string
+          nullable: true
+        brand:
+          type: string
+        productType:
+          type: string
+          enum:
+          - FEED
+          - TREAT
+          - TOY
+          - ACCESSORY
+          - HYGIENE
+          - OTHER
+          nullable: true
+        animalTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Animal'
+        feedForm:
+          type: string
+        lifeStages:
+          type: array
+          items:
+            type: string
+        netWeightGrams:
+          type: integer
+          nullable: true
+        ingredients:
+          type: string
+        stock:
+          type: integer
+          minimum: 0
+        reserved:
+          type: integer
+          minimum: 0
+        availableQuantity:
+          type: integer
+          minimum: 0
+      required:
+      - id
+      - kind
+      - name
+      - description
+      - categoryId
+      - price
+      - currency
+      - publicationStatus
+      - version
+      - images
+      - sku
+      - brand
+      - productType
+      - animalTypes
+      - feedForm
+      - lifeStages
+      - netWeightGrams
+      - ingredients
+      - stock
+      - reserved
+      - availableQuantity
+    PetCard:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        price:
+          type: number
+          minimum: 0
+          multipleOf: 0.01
+          nullable: true
+        currency:
+          type: string
+          enum:
+          - RUB
+        publicationStatus:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - ARCHIVED
+        version:
+          type: integer
+          minimum: 0
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogImage'
+        animalType:
+          allOf:
+          - $ref: '#/components/schemas/Animal'
+          nullable: true
+        breed:
+          type: string
+        sex:
+          type: string
+          enum:
+          - MALE
+          - FEMALE
+          - UNKNOWN
+        birthDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum:
+          - available
+          - pending
+          - reserved
+          - sold
+        photoUrls:
+          type: array
+          items:
+            type: string
+      required:
+      - id
+      - kind
+      - name
+      - description
+      - categoryId
+      - price
+      - currency
+      - publicationStatus
+      - version
+      - images
+      - animalType
+      - breed
+      - sex
+      - birthDate
+      - status
+      - photoUrls
     "ProductPage":
       "type": "object"
       "properties":

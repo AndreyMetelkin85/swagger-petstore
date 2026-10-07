@@ -190,7 +190,7 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
             "exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query
         )
         assert migrated.startswith(history + ",")
-        assert len(migrated.split(",")) == 11
+        assert len(migrated.split(",")) == 12
         assert len(history.split(",")) == 9
     finally:
         existing = docker("ps", "-aq", "--filter", "name=^/" + container + "$")
