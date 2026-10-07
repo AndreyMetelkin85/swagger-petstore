@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Annotated, Any, cast
 
 from fastapi import Depends
+from fastapi.dependencies.utils import request_params_to_args
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from starlette.concurrency import run_in_threadpool
@@ -47,6 +48,15 @@ class ContractRoute(APIRoute):
             """Keep missing/malformed body errors distinct from field validation."""
             request = DecimalRequest(request.scope, request.receive)
             if self.body_field is not None:
+                # Reuse native fields, not YAML parsing: legacy parameter errors precede body errors.
+                for fields, values in (
+                    (self.dependant.path_params, request.path_params),
+                    (self.dependant.query_params, request.query_params),
+                    (self.dependant.header_params, request.headers),
+                ):
+                    _, errors = request_params_to_args(fields, values)
+                    if errors:
+                        raise RequestValidationError(errors)
                 raw = bytearray()
                 async for chunk in request.stream():
                     if len(raw) + len(chunk) > 1024 * 1024:

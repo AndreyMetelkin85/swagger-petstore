@@ -132,6 +132,34 @@ def test_reused_payment_request_keeps_legacy_incompatible_json_error(client, pat
     assert response.json()["error"] == "BAD_REQUEST"
 
 
+@pytest.mark.parametrize(
+    "method,path,headers,code,message",
+    [
+        ("POST", "/auth/password/reset", {}, "INVALID_RESET_LINK", "The one-time link is invalid"),
+        ("PUT", "/pet/bad", {}, "BAD_REQUEST", "Pet id must be a valid UUID"),
+        ("POST", "/store/orders", {}, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required"),
+        (
+            "POST",
+            "/store/orders",
+            {"Idempotency-Key": "bad"},
+            "INVALID_IDEMPOTENCY_KEY",
+            "Idempotency-Key must be a valid UUID",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "body", [b"", b"{", b"x" * (1024 * 1024 + 1)], ids=["missing", "malformed", "oversized"]
+)
+def test_parameter_errors_keep_priority_over_missing_malformed_or_oversized_body(
+    client, method, path, headers, code, message, body
+):
+    response = client.request(method, "/api/v3" + path, headers=headers, content=body)
+    assert response.status_code == 400
+    assert response.json()["error"] == code
+    assert response.json()["message"] == message
+    client.app.state.database.connect.assert_not_called()
+
+
 @pytest.mark.parametrize("amount", ["0.01", "10.25", "999999999999.99"])
 def test_response_money_stays_numeric_and_preserves_allowed_cent_precision(amount):
     model = Payment(
