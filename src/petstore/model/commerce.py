@@ -1,6 +1,6 @@
 """Validated catalog, gallery, cart and checkout commands."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Self
@@ -57,16 +57,16 @@ class CategoryCommand(CommerceRequest):
 class ProductCommand(CommerceRequest):
     """Full product card; stock edits use the dedicated adjustment operation."""
 
-    sku: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    sku: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
     name: str = Field(min_length=1, max_length=150)
     description: str = Field(default="", max_length=5000)
     category_id: UUID | None = Field(default=None, alias="categoryId")
     brand: str = Field(default="", max_length=100)
-    product_type: str = Field(
-        default="OTHER", alias="productType", pattern="^(FEED|TREAT|TOY|ACCESSORY|HYGIENE|OTHER)$"
+    product_type: str | None = Field(
+        default=None, alias="productType", pattern="^(FEED|TREAT|TOY|ACCESSORY|HYGIENE|OTHER)$"
     )
     animal_types: list[Animal] = Field(default_factory=list[Animal], alias="animalTypes", max_length=7)
-    price: Decimal = Field(ge=Decimal("0.01"), le=Decimal("9999999999.99"), multiple_of=0.01)
+    price: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999999.99"), multiple_of=0.01)
     feed_form: str = Field(default="", alias="feedForm", pattern="^(|DRY|WET)$")
     life_stages: list[str] = Field(default_factory=list, alias="lifeStages", max_length=20)
     net_weight_grams: int | None = Field(default=None, alias="netWeightGrams", ge=1, le=1000000)
@@ -77,14 +77,14 @@ class ProductCommand(CommerceRequest):
 
     @model_validator(mode="after")
     def validate_gallery_and_feed(self) -> Self:
-        """Require unique gallery IDs, one cover and meaningful feed attributes."""
+        """Validate supplied draft values; publication completeness belongs to the service."""
         validate_gallery(self.images)
-        if self.product_type == "FEED" and (
-            not self.feed_form or self.net_weight_grams is None or not self.ingredients.strip()
-        ):
-            raise ValueError("Feed requires form, package weight and ingredients")
         if any(not value.strip() or len(value) > 50 for value in self.life_stages):
             raise ValueError("Invalid life stage")
+        if len(set(self.life_stages)) != len(self.life_stages) or (
+            "ALL" in self.life_stages and len(self.life_stages) != 1
+        ):
+            raise ValueError("Life stages must be unique; ALL cannot be combined with other stages")
         return self
 
 
@@ -93,12 +93,12 @@ class PetCardCommand(CommerceRequest):
 
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=5000)
-    animal_type: Animal = Field(default=Animal.OTHER, alias="animalType")
+    animal_type: Animal | None = Field(default=None, alias="animalType")
     category_id: UUID | None = Field(default=None, alias="categoryId")
     breed: str = Field(default="", max_length=100)
     sex: str = Field(default="UNKNOWN", pattern="^(MALE|FEMALE|UNKNOWN)$")
     birth_date: date | None = Field(default=None, alias="birthDate")
-    price: Decimal = Field(ge=Decimal("0.01"), le=Decimal("9999999999.99"), multiple_of=0.01)
+    price: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999999.99"), multiple_of=0.01)
     images: list[ImageReference] = Field(default_factory=list[ImageReference], max_length=20)
     version: int | None = Field(default=None, ge=0)
 
@@ -177,6 +177,19 @@ class TelemetryEvent(CommerceRequest):
     method: str | None = Field(default=None, pattern="^(GET|POST|PUT|DELETE|PATCH)$")
     http_status: int | None = Field(default=None, alias="httpStatus", ge=100, le=599)
     duration_ms: int | None = Field(default=None, alias="durationMs", ge=0, le=3600000)
+    request_id: UUID | None = Field(default=None, alias="requestId")
+    error_code: str | None = Field(default=None, alias="errorCode", pattern=r"^[A-Z][A-Z0-9_]{0,99}$")
+    resource_id: UUID | None = Field(default=None, alias="resourceId")
+    route_id: str | None = Field(default=None, alias="routeId", max_length=160)
+    endpoint_template: str | None = Field(default=None, alias="endpointTemplate", max_length=160)
+    timestamp: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_timestamp(self) -> Self:
+        """Require timezone-aware event times; no arbitrary timestamp text enters logs."""
+        if self.timestamp is not None and self.timestamp.tzinfo is None:
+            raise ValueError("Event timestamp must contain a timezone")
+        return self
 
 
 class TelemetryCommand(CommerceRequest):

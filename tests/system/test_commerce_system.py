@@ -164,6 +164,7 @@ def shop():
                         "stock": 3,
                         "categoryId": category["id"],
                         "productType": "FEED",
+                        "brand": "System brand",
                         "animalTypes": ["cat"],
                         "feedForm": "DRY",
                         "lifeStages": ["ADULT"],
@@ -178,7 +179,20 @@ def shop():
                 client.post(
                     "/admin/pets",
                     headers=admin,
-                    json={"name": "System pet", "price": 1000, "animalType": "cat", "images": image},
+                    json={
+                        "name": "System pet",
+                        "price": 1000,
+                        "animalType": "cat",
+                        "categoryId": created(
+                            client.post(
+                                "/admin/catalog/categories",
+                                headers=admin,
+                                json={"name": "Pets-" + suffix, "kind": "pet"},
+                            ),
+                            "categories",
+                        )["id"],
+                        "images": image,
+                    },
                 ),
                 "pets",
             )
@@ -293,7 +307,7 @@ def test_full_shop_acceptance_and_sanitized_photo_survive_recreation(shop):
         assert not result.getexif() and result.size == (640, 480)
     thumb = client.get("/media/" + media["id"] + "/thumb")
     with Image.open(io.BytesIO(thumb.content)) as result:
-        assert max(result.size) <= 480
+        assert max(result.size) <= 400
     digest = hashlib.sha256(image.content).digest()
     verify_recreation(client, container, media, order, email, password, digest)
     assert hashlib.sha256(client.get("/media/" + media["id"] + "/image").content).digest() == digest

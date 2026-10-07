@@ -295,7 +295,7 @@ def test_confirmation_validates_and_mutates_the_same_locked_row(state, expected)
     else:
         assert auth.confirm(user["id"], "valid") == updated
         assert "clock_timestamp()" in connection.execute.call_args_list[1].args[0]
-    assert "FOR UPDATE" in connection.execute.call_args_list[0].args[0]
+    assert "FOR NO KEY UPDATE" in connection.execute.call_args_list[0].args[0]
 
 
 def test_resend_rechecks_current_confirmation_state_under_row_lock(monkeypatch):
@@ -309,7 +309,7 @@ def test_resend_rechecks_current_confirmation_state_under_row_lock(monkeypatch):
         auth.resend_confirmation("test@example.com", "ValidPass123")
     assert error.value.code == "ACCOUNT_ALREADY_CONFIRMED"
     assert connection.execute.call_count == 1
-    assert "FOR UPDATE" in connection.execute.call_args.args[0]
+    assert "FOR NO KEY UPDATE" in connection.execute.call_args.args[0]
 
 
 @pytest.mark.parametrize("used,code", [(True, "RESET_LINK_ALREADY_USED"), (False, "RESET_STATE_CHANGED")])

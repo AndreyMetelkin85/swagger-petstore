@@ -39,11 +39,12 @@ def media(tmp_path):
 
 def test_verified_upload_and_private_storage_names(media):
     service, connection, row = media
+    row["mime_type"] = "image/jpeg"
     actor = {"id": uuid4(), "role": "ADMIN"}
     result = service.upload(image_bytes(), "OWN", "", actor)
-    assert result["mime"] == "image/png" and result["width"] == 8
+    assert result["mime"] == "image/jpeg" and result["width"] == 8
     paths = list(service.root.iterdir())
-    assert len(paths) == 2 and all(p.suffix == ".png" for p in paths)
+    assert len(paths) == 2 and all(p.suffix == ".jpg" for p in paths)
     assert not {"created_by", "path", "password"} & result.keys()
 
 

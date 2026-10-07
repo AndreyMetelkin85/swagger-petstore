@@ -208,7 +208,7 @@ class CatalogCard(ResponseModel):
     name: str
     description: str
     category_id: UUID | None = Field(alias="categoryId")
-    price: Money
+    price: Money | None
     currency: Literal["RUB"]
     publication_status: Publication = Field(alias="publicationStatus")
     version: int
@@ -219,9 +219,9 @@ class ProductCard(CatalogCard):
     """A product/feed card including current unreserved inventory."""
 
     kind: Literal["product"]
-    sku: str
+    sku: str | None
     brand: str
-    product_type: Literal["FEED", "TREAT", "TOY", "ACCESSORY", "HYGIENE", "OTHER"] = Field(
+    product_type: Literal["FEED", "TREAT", "TOY", "ACCESSORY", "HYGIENE", "OTHER"] | None = Field(
         alias="productType"
     )
     animal_types: list[Animal] = Field(alias="animalTypes")
@@ -238,7 +238,7 @@ class PetCard(CatalogCard):
     """Extended pet card: availability remains separate from publication."""
 
     kind: Literal["pet"]
-    animal_type: Animal = Field(alias="animalType")
+    animal_type: Animal | None = Field(alias="animalType")
     breed: str
     sex: Literal["MALE", "FEMALE", "UNKNOWN"]
     birth_date: date | None = Field(alias="birthDate")

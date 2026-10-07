@@ -66,6 +66,8 @@ class Commerce:
             "categoryId": category["id"],
             "stock": stock,
             "productType": "FEED",
+            "brand": "Test",
+            "lifeStages": ["ADULT"],
             "feedForm": "DRY",
             "netWeightGrams": 1000,
             "ingredients": "Chicken",
@@ -84,6 +86,7 @@ class Commerce:
 
     def pet(self, price=50):
         image = self.image()
+        category = self.category("pet")
         response = self.client.post(
             "/admin/pets",
             headers=self.admin,
@@ -91,6 +94,7 @@ class Commerce:
                 "name": "Test cat",
                 "price": price,
                 "animalType": "cat",
+                "categoryId": category["id"],
                 "images": [{"mediaId": image["id"]}],
             },
         )
@@ -640,6 +644,8 @@ def test_unpublished_pet_cannot_leak_or_be_ordered_through_legacy_routes(commerc
         headers=commerce.admin,
         json={
             "name": "Private draft pet",
+            "animalType": "cat",
+            "categoryId": commerce.category("pet")["id"],
             "price": 100,
             "images": [{"mediaId": image["id"]}],
         },

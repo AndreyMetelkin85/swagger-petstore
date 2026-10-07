@@ -1,6 +1,9 @@
 """Content-verified images stored under opaque UUIDs in a dedicated volume."""
 
 import io
+import logging
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import BoundedSemaphore
 from uuid import UUID, uuid4
@@ -16,6 +19,7 @@ MAX_PIXELS = 40000000
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 IMAGE_WORKERS = BoundedSemaphore(2)
 FORMATS = {"JPEG": ("image/jpeg", "jpg"), "PNG": ("image/png", "png"), "WEBP": ("image/webp", "webp")}
+logger = logging.getLogger("petstore.media")
 
 
 def normalize_image(payload: bytes) -> tuple[bytes, bytes, str, int, int]:
@@ -42,17 +46,20 @@ def normalize_image(payload: bytes) -> tuple[bytes, bytes, str, int, int]:
             probe.verify()
         with Image.open(io.BytesIO(payload)) as opened:
             oriented = ImageOps.exif_transpose(opened)
-            image = oriented.convert("RGB" if format_name == "JPEG" else "RGBA")
+            oriented.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+            rgba = oriented.convert("RGBA")
+            image = Image.new("RGB", rgba.size, "white")
+            image.paste(rgba, mask=rgba.getchannel("A"))
             image.info.clear()
             output = io.BytesIO()
-            image.save(output, format=format_name, **({"quality": 90} if format_name != "PNG" else {}))
+            image.save(output, format="JPEG", quality=90)
             thumb = image.copy()
-            thumb.thumbnail((480, 480))
+            thumb.thumbnail((400, 400), Image.Resampling.LANCZOS)
             thumbnail = io.BytesIO()
-            thumb.save(thumbnail, format=format_name, **({"quality": 85} if format_name != "PNG" else {}))
+            thumb.save(thumbnail, format="JPEG", quality=85)
             if output.tell() > 50 * 1024 * 1024:
                 raise ApiException(413, "IMAGE_TOO_LARGE", "Normalized image exceeds the storage limit")
-            return output.getvalue(), thumbnail.getvalue(), FORMATS[format_name][0], image.width, image.height
+            return output.getvalue(), thumbnail.getvalue(), "image/jpeg", image.width, image.height
     except Image.DecompressionBombError as exc:
         raise ApiException(413, "IMAGE_TOO_LARGE", "Image exceeds 40 megapixels") from exc
     except (UnidentifiedImageError, OSError, ValueError) as exc:
@@ -178,9 +185,76 @@ class MediaService:
             if used:
                 raise ApiException(409, "MEDIA_IN_USE", "Media is used by a card or order snapshot")
             connection.execute("UPDATE media SET deleted=TRUE WHERE id=%s", (identifier,))
-        # A failed unlink can only leave an inaccessible orphan, never remove another record's files.
+        self.remove_files(row)
+
+    def remove_files(self, row: Row) -> bool:
+        """Remove only a tombstoned UUID's two files; failed removals remain retryable."""
         for thumbnail in (False, True):
             try:
-                self.path(identifier, row["mime_type"], thumbnail).unlink(missing_ok=True)
-            except OSError:
-                pass
+                self.path(row["id"], row["mime_type"], thumbnail).unlink(missing_ok=True)
+            except (OSError, ApiException):
+                logger.warning("media_cleanup_failed resourceId=%s", row["id"])
+                return False
+        with self.database.connect() as connection:
+            connection.execute("UPDATE media SET files_removed=TRUE WHERE id=%s AND deleted", (row["id"],))
+        return True
+
+    def cleanup(self, limit: int = 100) -> int:
+        """Tombstone unlinked uploads older than 24 hours, then retry safe file removals.
+
+        Gallery writers share the media row lock. SKIP LOCKED never delays a save;
+        links are rechecked after locking, including drafts and immutable order covers.
+        :param limit: Bounded batch size, never a client-provided filesystem path.
+        :return: Number of completed file removals in this batch.
+        """
+        if not 1 <= limit <= 1000:
+            raise ValueError("Cleanup batch must be between 1 and 1000")
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """SELECT m.* FROM media m WHERE (m.deleted AND NOT m.files_removed)
+                   OR (NOT m.deleted AND m.created_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                       AND NOT EXISTS (SELECT 1 FROM catalog_images i WHERE i.media_id=m.id)
+                       AND NOT EXISTS (SELECT 1 FROM order_lines l WHERE l.cover_id=m.id))
+                   ORDER BY m.created_at,m.id LIMIT %s FOR UPDATE OF m SKIP LOCKED""",
+                (limit,),
+            ).fetchall()
+            removable: list[Row] = []
+            for row in rows:
+                linked = connection.execute(
+                    "SELECT 1 WHERE EXISTS (SELECT 1 FROM catalog_images WHERE media_id=%s) OR EXISTS (SELECT 1 FROM order_lines WHERE cover_id=%s)",
+                    (row["id"], row["id"]),
+                ).fetchone()
+                if linked:
+                    continue
+                connection.execute("UPDATE media SET deleted=TRUE WHERE id=%s", (row["id"],))
+                removable.append(row)
+        removed = sum(self.remove_files(row) for row in removable)
+        self.cleanup_orphan_files(limit)
+        return removed
+
+    def cleanup_orphan_files(self, limit: int = 100) -> int:
+        """Remove aged UUID files left before metadata commit, never arbitrary files or directories."""
+        if not self.root.is_dir():
+            return 0
+        cutoff = datetime.now(UTC).timestamp() - 86400
+        removed = 0
+        for path in self.root.iterdir():
+            match = re.fullmatch(r"([a-f0-9-]{36})(?:\.thumb)?\.(jpg|png|webp)", path.name)
+            if not match or path.is_symlink() or not path.is_file():
+                continue
+            try:
+                identifier = UUID(match[1])
+                if path.stat().st_mtime > cutoff:
+                    continue
+                with self.database.connect() as connection:
+                    existing = connection.execute(
+                        "SELECT id FROM media WHERE id=%s", (identifier,)
+                    ).fetchone()
+                    if existing is None:
+                        path.unlink(missing_ok=True)
+                        removed += 1
+                if removed >= limit:
+                    break
+            except (ValueError, OSError):
+                continue
+        return removed
