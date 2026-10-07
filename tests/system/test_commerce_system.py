@@ -21,9 +21,10 @@ def docker(*arguments):
     ).stdout.strip()
 
 
-def wait_ready(client):
+def wait_ready(client, container=None):
     """Wait for the isolated candidate without changing real application data."""
-    deadline = time.monotonic() + 60
+    # Flyway/JRE startup under ARM emulation can exceed a native one-minute budget.
+    deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         try:
             if client.get("/health", timeout=1).status_code == 200:
@@ -31,7 +32,8 @@ def wait_ready(client):
         except httpx.HTTPError:
             pass
         time.sleep(0.5)
-    pytest.fail("The commerce candidate did not become ready")
+    state = docker("inspect", "--format", "{{json .State}}", container) if container else "unavailable"
+    pytest.fail("The commerce candidate did not become ready: " + state)
 
 
 def verify_recreation(client, container, media, order, email, password, digest):
@@ -47,6 +49,8 @@ def verify_recreation(client, container, media, order, email, password, digest):
         "--detach",
         "--name",
         replacement,
+        "--platform",
+        docker("image", "inspect", original["Image"], "--format", "{{.Os}}/{{.Architecture}}"),
         "--label",
         "petstore.commerce-test=" + owner,
         "--publish",
@@ -60,7 +64,7 @@ def verify_recreation(client, container, media, order, email, password, digest):
         docker(*args)
         port = docker("port", replacement, "8080/tcp").rsplit(":", 1)[1]
         with httpx.Client(base_url="http://127.0.0.1:" + port + "/api/v3", timeout=20) as candidate:
-            wait_ready(candidate)
+            wait_ready(candidate, replacement)
             actual = candidate.get("/media/" + media["id"] + "/image")
             assert actual.status_code == 200 and hashlib.sha256(actual.content).digest() == digest
             buyer = login(candidate, email, password)
@@ -75,7 +79,7 @@ def verify_recreation(client, container, media, order, email, password, digest):
             # Never remove volumes: both belong to the original isolated candidate.
             docker("rm", "--force", replacement)
         docker("start", container)
-        wait_ready(client)
+        wait_ready(client, container)
 
 
 def login(client, email, password):
