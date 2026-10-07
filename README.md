@@ -1,49 +1,43 @@
-# Swagger Petstore API
+# Лапки — полный учебный зоомагазин
 
-Учебный API зоомагазина для ручного и автоматизированного тестирования.
-Пользователи регистрируются и подтверждают почту, управляют профилем,
-выбирают питомцев и зоотовары, собирают общую корзину, оформляют заказ
-и проверяют оплату, отмену и возврат.
+React-фронт, Python/FastAPI, PostgreSQL и тестовая почта smtp4dev работают **в одном контейнере** из общего образа `andymentor/swagger-petstore`. Данные настоящие и сохраняются сервером; каталог, пользователи и платежи используются для обучения тестированию. Оплата — серверный симулятор с тестовыми картами.
 
-Стек: Python 3.12+, FastAPI, Pydantic, psycopg 3, Uvicorn, PostgreSQL 16.
-Swagger UI позволяет выполнять запросы. Платежи — локальный симулятор, не банковский сервис.
+## Сборка и запуск
 
-## Запуск
-
-Нужны запущенный Docker Desktop и Docker Compose. Из корня проекта:
+Из корня этого репозитория:
 
 ```powershell
+docker compose build
 docker compose up -d --wait
 ```
 
-Скачивается `andymentor/swagger-petstore:latest`. API и PostgreSQL работают
-в одном контейнере; БД и фотографии хранятся в отдельных named volumes.
-Порты доступны только на localhost.
-
-| Назначение | Адрес |
-|---|---|
-| Swagger | http://localhost:8080/ |
-| API | http://localhost:8080/api/v3 |
-| Готовность API и БД | http://localhost:8080/api/v3/health |
-| Контракт | http://localhost:8080/api/v3/openapi.json |
-| PostgreSQL | localhost:5432; база/user/password: `petstore` |
-
-Демо-аккаунты создаются один раз при инициализации БД:
-
-| Роль | Email | Username | Password |
-|---|---|---|---|
-| ADMIN | admin@example.com | admin | admin123 |
-| USER | test@example.com | user1 | password123 |
-
-Для сборки из исходников:
+Или собрать и запустить одной командой:
 
 ```powershell
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --wait
+docker compose up -d --build --wait --wait-timeout 300
 ```
 
-Основной Compose описывает окружение; dev-overlay переключает образ на локальную сборку.
-Во всех режимах используется один `Dockerfile`.
+Compose содержит один сервис `petstore`. Отдельные контейнеры фронта, БД и почты не требуются. Dockerfile сам собирает React из `ui/`, устанавливает API и включает Nginx, PostgreSQL и smtp4dev. Node нужен только на стадии сборки. Встроенный .NET runtime почты закреплён на исправленной версии; SMTP-релей во внешний мир выключен.
 
+| Назначение | Адрес |
+| --- | --- |
+| Магазин | http://localhost:8090/ |
+| Swagger | http://localhost:8080/ |
+| API | http://localhost:8080/api/v3 |
+| Почта | http://localhost:8025/ — ящик Tests для произвольных тестовых адресов |
+| SMTP / IMAP | localhost:2525 / localhost:1143 |
+| PostgreSQL | localhost:5432 |
+
+Первоначальные аккаунты: `admin@example.com / admin123` и `test@example.com / password123`. Пользователь может зарегистрироваться и подтвердить настоящее письмо в smtp4dev. Учётные записи и их изменения сохраняются в PostgreSQL.
+
+База, фотографии и письма хранятся в отдельных постоянных volumes. Пересоздание одного контейнера сохраняет данные. В `.env` сохраните прежние имена томов и JWT secret. Пример для нового учебного окружения находится в `.env.example`; существующую `.env` заменять не требуется. Если в старой `.env` перечислялись overlay-файлы почты/фронта, используйте `COMPOSE_FILE=docker-compose.yml`.
+
+Для скачивания уже опубликованного общего образа вместо локальной сборки:
+
+```powershell
+docker compose pull
+docker compose up -d --no-build --wait
+```
 ## Структура проекта
 
 ```text
@@ -198,16 +192,16 @@ ADMIN и демонстрационный USER защищены. Пользов�
 ## Почта
 
 ```powershell
-docker compose -f docker-compose.yml -f docker/compose.mail.yml up -d --wait
+docker compose up -d --wait
 ```
 
 smtp4dev принимает письма, хранит их в отдельном volume и предоставляет SMTP/IMAP.
-Внешняя пересылка выключена. Без overlay отправка выключена, если PETSTORE_SMTP_HOST не задан.
+Внешняя пересылка выключена. Почта запускается внутри общего контейнера; отдельный overlay не нужен.
 
 | Назначение | Адрес |
 |---|---|
 | Интерфейс / Swagger почты | http://localhost:8025/ / http://localhost:8025/api/ |
-| SMTP с хоста / внутри Compose | localhost:2525 / mail:25 |
+| SMTP с хоста / внутри Compose | localhost:2525 / 127.0.0.1:2525 |
 | IMAP | localhost:1143 |
 
 Логины `user1,user2,tests`, пароль `mail-test-only` — публичные учебные данные.

@@ -1,0 +1,34 @@
+import type { CatalogItem, CartLine } from './domain';
+export type Animal = 'dog' | 'cat' | 'bird' | 'rodent' | 'fish' | 'reptile' | 'other';
+export type Publication = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type ImageRef = { mediaId?: string; url?: string; alt: string };
+export type Item = Omit<CatalogItem, 'animalTypes'> & {
+  animalTypes: Animal[]; version: number; sku: string; categoryId: string; brand: string;
+  productType: 'FEED' | 'TREAT' | 'TOY' | 'ACCESSORY' | 'HYGIENE' | 'OTHER';
+  feedForm: 'DRY' | 'WET' | ''; lifeStages: string[]; netWeightGrams: number; ingredients: string;
+  publicationStatus: Publication; images: ImageRef[]; reserved: number;
+  status: 'available' | 'pending' | 'reserved' | 'sold'; breed: string; sex: string; birthDate: string;
+};
+export type Category = { id: string; name: string; kind: 'product' | 'pet'; version: number; archived: boolean };
+export type Profile = { name: string; firstName?: string; lastName?: string; phone: string; city: string; street: string; building: string; apartment: string; postalCode: string };
+export type User = { id: string; username?: string; email: string; role: 'USER' | 'ADMIN'; status: 'ACTIVE' | 'PENDING' | 'BLOCKED'; profile: Profile };
+export type StoredUser = User & { passwordHash: string; salt: string };
+export type Cart = { lines: CartLine[]; version: number };
+export type OrderStatus = 'DRAFT' | 'PLACED' | 'APPROVED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'EXPIRED';
+export type OrderLine = { itemId: string; kind: 'product' | 'pet'; name: string; sku: string; quantity: number; price: number; images: ImageRef[] };
+export type Payment = { id: string; status: 'SUCCEEDED' | 'DECLINED' | 'REFUNDED'; last4: string; createdAt: string };
+export type Order = { id: string; userId: string; version: number; cartVersion: number; status: OrderStatus; paymentStatus: 'NOT_STARTED' | 'NOT_REQUIRED' | 'UNPAID' | 'PAID' | 'REFUNDED' | 'EXPIRED'; createdAt: string; reserveUntil: string | null; lines: OrderLine[]; total: number; delivery: Profile | null; payments: Payment[]; estimated?: boolean };
+export type Media = { id: string; name: string; mime: string; sourceType: 'OWN' | 'SUPPLIER' | 'DEMO'; sourceNote: string; seedUrl?: string; createdAt: string };
+export type Scenario = 'NORMAL' | 'MEDIA_STORAGE_UNAVAILABLE' | 'PRODUCT_VERSION_CONFLICT' | 'PRICE_CHANGED' | 'INSUFFICIENT_STOCK' | 'RESERVATION_EXPIRED' | 'SERVICE_UNAVAILABLE';
+export type State = {
+  schema: number; items: Item[]; categories: Category[]; users: StoredUser[]; carts: Record<string, Cart>; orders: Order[]; media: Media[];
+  sessions: { token: string; userId: string; expiresAt: number }[];
+  confirmations: { code: string; userId: string; kind: 'confirm' | 'reset'; expiresAt: number }[];
+  idempotency: Record<string, { fingerprint: string; result: unknown; expiresAt: number }>;
+  stockHistory: { id: string; itemId: string; actorId: string; before: number; after: number; reason: string; createdAt: string }[];
+  scenario: Scenario;
+  authAttempts?: Record<string, { count: number; windowStart: number; blockedUntil: number }>;
+};
+export const emptyProfile: Profile = { name: '', phone: '', city: '', street: '', building: '', apartment: '', postalCode: '' };
+export const animalLabels: Record<Animal, string> = { dog: 'Собаки', cat: 'Кошки', bird: 'Птицы', rodent: 'Грызуны', fish: 'Рыбы', reptile: 'Рептилии', other: 'Другие' };
+export const statusLabels: Record<string, string> = { DRAFT: 'Черновик', PUBLISHED: 'Опубликован', ARCHIVED: 'В архиве', PLACED: 'Оформлен', APPROVED: 'Подтверждён', SHIPPED: 'В пути', DELIVERED: 'Доставлен', CANCELLED: 'Отменён', EXPIRED: 'Резерв истёк', NOT_STARTED: 'Оплата после оформления', NOT_REQUIRED: 'Оплата не требуется', UNPAID: 'Не оплачен', PAID: 'Оплачен', REFUNDED: 'Возврат выполнен', ACTIVE: 'Активен', PENDING: 'Ожидает подтверждения', BLOCKED: 'Заблокирован', SUCCEEDED: 'Успешно', DECLINED: 'Отказ', available: 'Доступен', pending: 'Пока недоступен', reserved: 'Зарезервирован', sold: 'Продан' };
