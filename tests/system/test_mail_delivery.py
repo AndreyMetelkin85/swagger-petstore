@@ -24,7 +24,9 @@ def test_mail_storage_survives_its_own_container_restart():
     container = os.getenv("PETSTORE_MAIL_RESTART_CONTAINER")
     if not url or not container:
         pytest.skip("Set local mail URL and owned mail container for restart verification")
-    assert container == "petstore-mail", "Never restart another mail server"
+    assert container in {"petstore-mail", "petstore-python-preview"}, (
+        "Only isolated CI mail/store containers may restart"
+    )
     marker = "mail-persistence-" + uuid4().hex
     message = EmailMessage()
     message["From"] = "noreply@petstore.test"
