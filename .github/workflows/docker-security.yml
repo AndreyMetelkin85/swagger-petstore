@@ -47,17 +47,10 @@ jobs:
         run: |
           docker logs petstore-ci || true
           docker rm --force --volumes petstore-ci || true
-      - name: Scan Python application image
-        run: >-
-          docker run --rm
-          -v /var/run/docker.sock:/var/run/docker.sock
-          aquasec/trivy:0.74.0 image
-          --exit-code 1
-          --severity CRITICAL,HIGH
-          --ignore-unfixed
-          --scanners vuln
-          --no-progress
-          swagger-petstore:ci
+      - name: Scan complete application image without Docker socket
+        run: |
+          docker save --output candidate-image.tar swagger-petstore:ci
+          docker run --rm --mount type=bind,source="$PWD/candidate-image.tar",target=/image.tar,readonly aquasec/trivy:0.74.0 image --input /image.tar --timeout 15m --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --no-progress
 
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -90,7 +83,7 @@ jobs:
           sbom: true
           provenance: mode=max
           labels: |
-            org.opencontainers.image.title=Swagger Petstore Python API
+            org.opencontainers.image.title=Lapki complete training store
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
       - name: Record published digest

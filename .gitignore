@@ -28,3 +28,10 @@ test-results/
 .pytest_cache_python/
 .pytest_cache_python_*/
 .pytest_cache_java_master_reference/
+ui/node_modules/
+ui/dist/
+ui/*.tsbuildinfo
+ui/qa/screenshots/
+ui/qa/ci/
+ui/qa/*result.json
+ui/qa/python/.venv/

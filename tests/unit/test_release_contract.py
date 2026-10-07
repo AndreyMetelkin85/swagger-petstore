@@ -36,18 +36,23 @@ def test_main_compose_healthcheck_works_without_curl_and_keeps_volume():
     assert api["volumes"] == [
         "petstore-data:/var/lib/postgresql/data",
         "petstore-media:/var/lib/petstore/media",
+        "mail-data:/smtp4dev",
     ]
     assert compose["volumes"]["petstore-data"]["name"] == "${PETSTORE_DB_VOLUME:-swagger-petstore-db-data}"
-    assert api["environment"]["PETSTORE_SMTP_HOST"] == "${PETSTORE_SMTP_HOST:-}"
+    assert api["environment"]["PETSTORE_SMTP_HOST"] == "127.0.0.1"
+    assert set(compose["services"]) == {"petstore"}
+    assert compose["volumes"]["mail-data"]["name"] == "${PETSTORE_MAIL_VOLUME:-swagger-petstore-mail-data}"
 
 
-def test_local_mail_overlay_is_opt_in_loopback_only_and_has_no_relay():
-    compose = yaml.safe_load((ROOT / "docker/compose.mail.yml").read_text())
-    assert compose["services"]["petstore"]["environment"]["PETSTORE_SMTP_HOST"] == "mail"
-    mail = compose["services"]["mail"]
-    assert all(port.startswith("127.0.0.1:") for port in mail["ports"])
-    assert mail["environment"]["RelayOptions__SmtpServer"] == ""
-    assert mail["environment"]["RelayOptions__AutomaticRelayExpression"] == ""
+def test_embedded_mail_is_loopback_only_and_has_no_external_relay():
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    app = compose["services"]["petstore"]
+    assert app["environment"]["PETSTORE_EMBEDDED_MAIL"] == "true"
+    assert all(port.startswith("127.0.0.1:") for port in app["ports"])
+    entrypoint = (ROOT / "docker/entrypoint.sh").read_text()
+    assert "RelayOptions__SmtpServer=''" in entrypoint
+    assert "RelayOptions__AutomaticRelayExpression=''" in entrypoint
+    assert "petstore-run-mail.py" in entrypoint
 
 
 def test_build_context_excludes_secrets_and_local_database_backups():

@@ -30,6 +30,18 @@ jobs:
         run: pyright
       - name: Unit tests
         run: python -m pytest tests/unit -q
+      - name: Set up Node for the bundled frontend
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Check frontend sources
+        working-directory: ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build
       - name: Build isolated candidate image
         run: docker compose -f tests/docker-compose.yml build
       - name: Start isolated candidate
@@ -53,11 +65,27 @@ jobs:
           PETSTORE_UI_URL: http://127.0.0.1:8081
           PETSTORE_RESTART_CONTAINER: petstore-python-preview
           PETSTORE_MAIL_UI_URL: http://127.0.0.1:8025
-          PETSTORE_MAIL_RESTART_CONTAINER: petstore-mail
+          PETSTORE_MAIL_RESTART_CONTAINER: petstore-python-preview
           PETSTORE_TEST_UPGRADE_IMAGE: swagger-petstore-python:preview
           PETSTORE_COMMERCE_CONTAINER: petstore-python-preview
+          PETSTORE_UNIFIED_CONTAINER: petstore-python-preview
+          PETSTORE_STORE_UI_URL: http://127.0.0.1:8091
           BASE_URL: http://127.0.0.1:8081/api/v3
         run: python -m pytest tests/system -q
+      - name: Test frontend, API and mail inside one container
+        env:
+          LAPKI_PREVIEW_URL: http://127.0.0.1:8090
+          LAPKI_MAIL_URL: http://127.0.0.1:8025
+          LAPKI_BROWSER_CHANNEL: chrome
+        run: |
+          docker compose -f tests/docker-compose.yml down
+          docker run --detach --name petstore-unified-ci --publish 127.0.0.1:8090:8090 --publish 127.0.0.1:8025:8025 --env PETSTORE_PUBLIC_BASE_URL=http://127.0.0.1:8090/api/v3 --env PETSTORE_MAIL_FRONTEND_URL=http://127.0.0.1:8090 swagger-petstore-python:preview
+          for attempt in $(seq 1 90); do
+            if docker inspect --format '{{.State.Health.Status}}' petstore-unified-ci | grep -q '^healthy$'; then break; fi
+            sleep 2
+          done
+          cd ui
+          npm run test:api
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,4 +97,6 @@ jobs:
         run: docker compose -f tests/docker-compose.yml logs --tail=100
       - name: Remove only the isolated CI candidate
         if: always()
-        run: docker compose -f tests/docker-compose.yml down --volumes
+        run: |
+          docker rm --force --volumes petstore-unified-ci || true
+          docker compose -f tests/docker-compose.yml down --volumes
