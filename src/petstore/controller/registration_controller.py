@@ -33,7 +33,7 @@ class RegistrationController:
             public_user(context.auth.confirm(context.identifier("userId"), context.parameters["code"]))
         )
 
-    def resendConfirmation(self, context: RequestContext) -> Response:
+    def resend_confirmation(self, context: RequestContext) -> Response:
         """Replace an unconfirmed account's confirmation link.
 
         :param context: Account credentials.

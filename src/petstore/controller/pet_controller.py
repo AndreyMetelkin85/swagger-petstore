@@ -24,7 +24,7 @@ class PetController:
         """
         self.data = PetData(database)
 
-    def findPetsByStatus(self, context: RequestContext) -> Response:
+    def find_pets_by_status(self, context: RequestContext) -> Response:
         """Search the original comma-separated status filter.
 
         :param context: Public search request.
@@ -36,7 +36,7 @@ class PetController:
             V.ensure([{"field": "status", "message": "Status must be available, pending, reserved or sold"}])
         return Responses(self.data.find_pet_by_status(status))
 
-    def findPetsByTags(self, context: RequestContext) -> Response:
+    def find_pets_by_tags(self, context: RequestContext) -> Response:
         """Search pets by their tag names.
 
         :param context: Public tag query.
@@ -46,14 +46,14 @@ class PetController:
             raise ApiException(400, "BAD_REQUEST", "At least one tag is required")
         return Responses(self.data.find_pet_by_tags(tags))
 
-    def getPetById(self, context: RequestContext) -> Response:
+    def get_pet_by_id(self, context: RequestContext) -> Response:
         """Read one public pet by UUID.
 
         :param context: Catalog path parameter.
         """
         return Responses(self.data.get_pet_by_id(context.identifier("petId")))
 
-    def addPet(self, context: RequestContext) -> Response:
+    def add_pet(self, context: RequestContext) -> Response:
         """Create a pet only as an administrator.
 
         :param context: Authorized creation request.
@@ -61,7 +61,7 @@ class PetController:
         context.authorize("ADMIN")
         return Responses(self.data.create_pet(context.validated(PetCreateRequest, V.pet)), status_code=201)
 
-    def updatePet(self, context: RequestContext) -> Response:
+    def update_pet(self, context: RequestContext) -> Response:
         """Update a pet only with the current optimistic version.
 
         :param context: Authorized full update.
@@ -71,7 +71,7 @@ class PetController:
             self.data.update_pet(context.identifier("petId"), context.validated(PetUpdateRequest, V.pet))
         )
 
-    def deletePet(self, context: RequestContext) -> Response:
+    def delete_pet(self, context: RequestContext) -> Response:
         """Delete an unused pet as an administrator.
 
         :param context: Authorized deletion request.
