@@ -1,0 +1,10 @@
+.layout { display: grid; grid-template-columns: 185px minmax(0, 1fr); gap: 36px; padding-top: 28px; min-height: 70vh; }
+.sidebar { padding-top: 24px; }
+.sidebar h2 { font-size: 18px; margin: 0 0 18px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 5px; }
+.sidebar nav a { text-decoration: none; padding: 12px 14px; border-radius: 8px; color: #526465; font-size: 13px; }
+.sidebar nav a:hover { background: #edf7f5; color: #087f7b; }
+.sidebar > a { margin-top: 20px; }
+.content { min-width: 0; }
+@media (max-width: 1000px) { .layout { grid-template-columns: 155px minmax(0, 1fr); gap: 20px; } }
+@media (max-width: 700px) { .layout { grid-template-columns: 1fr; gap: 0; padding-top: 15px; } .sidebar { padding-top: 0; } .sidebar h2 { font-size: 16px; margin-bottom: 10px; } .sidebar nav { display: flex; flex-direction: row; flex-wrap: wrap; gap: 5px; } .sidebar nav a { padding: 8px 10px; font-size: 11px; border: 1px solid #e5eaea; } .sidebar > a { display: none; } }

@@ -10,58 +10,22 @@ services:
     environment:
       PETSTORE_PUBLIC_BASE_URL: http://localhost:8081/api/v3
       PETSTORE_EXPOSE_TEST_LINKS: "true"
-      PETSTORE_SMTP_HOST: mail
-      PETSTORE_SMTP_PORT: "25"
+      PETSTORE_SMTP_HOST: 127.0.0.1
+      PETSTORE_SMTP_PORT: "2525"
       PETSTORE_SMTP_FROM: noreply@petstore.test
     ports:
       - "127.0.0.1:8081:8080"
       - "127.0.0.1:5433:5432"
+      - "127.0.0.1:8091:8090"
+      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_HTTP_PORT:-8025}:8025"
+      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_SMTP_PORT:-2525}:2525"
+      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_IMAP_PORT:-1143}:1143"
     volumes:
       - python-preview-data:/var/lib/postgresql/data
       - python-preview-media:/var/lib/petstore/media
-    restart: unless-stopped
-
-  mail:
-    image: rnwood/smtp4dev:3.15.0@sha256:25c434c1900a9c5b61e17ead0a774d9e81b80554d05cf64719d69e5ea8c66537
-    container_name: petstore-mail
-    environment:
-      ServerOptions__Urls: http://*:80
-      ServerOptions__HostName: mail.petstore.test
-      ServerOptions__Port: "25"
-      ServerOptions__ImapPort: "143"
-      ServerOptions__DisableIPv6: "true"
-      ServerOptions__TlsMode: None
-      ServerOptions__AuthenticationRequired: "false"
-      ServerOptions__WebAuthenticationRequired: "false"
-      ServerOptions__DeliverMessagesToUsersDefaultMailbox: "false"
-      ServerOptions__NumberOfMessagesToKeep: "500"
-      ServerOptions__NumberOfSessionsToKeep: "100"
-      ServerOptions__Mailboxes__0__Name: User1
-      ServerOptions__Mailboxes__0__Recipients: user1@petstore.test
-      ServerOptions__Mailboxes__1__Name: User2
-      ServerOptions__Mailboxes__1__Recipients: user2@petstore.test
-      ServerOptions__Mailboxes__2__Name: Tests
-      ServerOptions__Mailboxes__2__Recipients: "*"
-      # Deliberately public, local-only demo accounts; never use these credentials outside this lab.
-      ServerOptions__Users__0__Username: user1
-      ServerOptions__Users__0__Password: mail-test-only
-      ServerOptions__Users__0__DefaultMailbox: User1
-      ServerOptions__Users__1__Username: user2
-      ServerOptions__Users__1__Password: mail-test-only
-      ServerOptions__Users__1__DefaultMailbox: User2
-      ServerOptions__Users__2__Username: tests
-      ServerOptions__Users__2__Password: mail-test-only
-      ServerOptions__Users__2__DefaultMailbox: Tests
-      RelayOptions__SmtpServer: ""
-      RelayOptions__AutomaticRelayExpression: ""
-      Serilog__MinimumLevel__Default: Warning
-    ports:
-      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_HTTP_PORT:-8025}:80"
-      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_SMTP_PORT:-2525}:25"
-      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_IMAP_PORT:-1143}:143"
-    volumes:
       - mail-data:/smtp4dev
     restart: unless-stopped
+
 
 volumes:
   python-preview-media:

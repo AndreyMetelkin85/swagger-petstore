@@ -13,6 +13,11 @@ database-backups
 db-backups
 allure*
 frontend
+ui/node_modules
+ui/dist
+ui/qa
+ui/tests
+ui/*.tsbuildinfo
 test-results
 htmlcov
 .coverage
