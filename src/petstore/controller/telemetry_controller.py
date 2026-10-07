@@ -2,6 +2,7 @@
 
 import logging
 import time
+from collections.abc import Callable
 from threading import Lock
 
 from starlette.responses import Response
@@ -16,8 +17,12 @@ logger = logging.getLogger("petstore.telemetry")
 class TelemetryController:
     """Own rate-limit state for one application instance, not global module state."""
 
-    def __init__(self) -> None:
-        """Initialize a thread-safe 100-batch-per-minute window."""
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        """Initialize a thread-safe 100-batch-per-minute window.
+
+        :param clock: Monotonic clock; tests inject time without changing asyncio timers.
+        """
+        self.clock = clock
         self.lock = Lock()
         self.window = 0.0
         self.count = 0
@@ -38,7 +43,7 @@ class TelemetryController:
         if any(event.event not in allowed for event in command.events):
             raise ApiException(422, "VALIDATION_ERROR", "Unknown telemetry event")
         with self.lock:
-            now = time.monotonic()
+            now = self.clock()
             if now - self.window >= 60:
                 self.window, self.count = now, 0
             if self.count >= 100:
