@@ -64,7 +64,7 @@ tests/
   smoke/          HTTP-сценарии запущенного сервера
   docker-compose.yml  Изолированный тестовый стенд
 
-docker/           Entrypoint контейнера и почтовый overlay
+docker/           Запуск PostgreSQL, API, Nginx и встроенной почты
 docs/history.md   Архив исправлений
 .github/workflows/ Проверки и публикация
 ```
