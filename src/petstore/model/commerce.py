@@ -3,10 +3,10 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Self
+from typing import Self, cast
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from petstore.model.requests import RequestModel
 
@@ -35,6 +35,15 @@ class Animal(StrEnum):
     FISH = "fish"
     REPTILE = "reptile"
     OTHER = "other"
+
+
+class LifeStage(StrEnum):
+    """Supported feed age groups; ALL is exclusive of specific stages."""
+
+    YOUNG = "YOUNG"
+    ADULT = "ADULT"
+    SENIOR = "SENIOR"
+    ALL = "ALL"
 
 
 class ImageReference(CommerceRequest):
@@ -68,23 +77,41 @@ class ProductCommand(CommerceRequest):
     animal_types: list[Animal] = Field(default_factory=list[Animal], alias="animalTypes", max_length=7)
     price: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999999.99"), multiple_of=0.01)
     feed_form: str = Field(default="", alias="feedForm", pattern="^(|DRY|WET)$")
-    life_stages: list[str] = Field(default_factory=list, alias="lifeStages", max_length=20)
+    life_stages: list[LifeStage] = Field(
+        default_factory=list[LifeStage],
+        alias="lifeStages",
+        max_length=20,
+        description="Unique age groups; ALL cannot be combined with specific stages.",
+        json_schema_extra={"uniqueItems": True},
+    )
     net_weight_grams: int | None = Field(default=None, alias="netWeightGrams", ge=1, le=1000000)
     ingredients: str = Field(default="", max_length=5000)
     images: list[ImageReference] = Field(default_factory=list[ImageReference], max_length=20)
     version: int | None = Field(default=None, ge=0)
     stock: int | None = Field(default=None, ge=0, le=1000000)
 
-    @model_validator(mode="after")
-    def validate_gallery_and_feed(self) -> Self:
-        """Validate supplied draft values; publication completeness belongs to the service."""
-        validate_gallery(self.images)
-        if any(not value.strip() or len(value) > 50 for value in self.life_stages):
-            raise ValueError("Invalid life stage")
-        if len(set(self.life_stages)) != len(self.life_stages) or (
-            "ALL" in self.life_stages and len(self.life_stages) != 1
-        ):
+    @field_validator("life_stages", mode="before")
+    @classmethod
+    def validate_life_stages(cls, value: object) -> object:
+        """Reject invalid age groups at the field level, including in partial drafts.
+
+        :param value: Submitted age list, before native enum conversion.
+        :return: The valid list, or a value left for native list-shape validation.
+        """
+        if not isinstance(value, list):
+            return value
+        stages = cast(list[object], value)
+        allowed = {stage.value for stage in LifeStage}
+        if any(not isinstance(stage, str) or stage not in allowed for stage in stages):
+            raise ValueError("Unsupported life stage")
+        if len(set(stages)) != len(stages) or (LifeStage.ALL in stages and len(stages) != 1):
             raise ValueError("Life stages must be unique; ALL cannot be combined with other stages")
+        return stages
+
+    @model_validator(mode="after")
+    def validate_product_gallery(self) -> Self:
+        """Reject duplicate images and covers without requiring a complete draft."""
+        validate_gallery(self.images)
         return self
 
 
