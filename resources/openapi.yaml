@@ -9688,6 +9688,15 @@ components:
         - "kind"
       "title": "CategoryCommand"
       "type": "object"
+    LifeStage:
+      description: Supported feed age groups; ALL is exclusive of specific stages.
+      enum:
+      - YOUNG
+      - ADULT
+      - SENIOR
+      - ALL
+      title: LifeStage
+      type: string
     ProductCommand:
       additionalProperties: false
       description: A name is sufficient for DRAFT. Validate supplied values; publication
@@ -9753,11 +9762,13 @@ components:
           title: Feedform
           type: string
         lifeStages:
+          description: Unique age groups; ALL cannot be combined with specific stages.
           items:
-            type: string
+            $ref: '#/components/schemas/LifeStage'
           maxItems: 20
           title: Lifestages
           type: array
+          uniqueItems: true
         netWeightGrams:
           default: null
           title: Netweightgrams

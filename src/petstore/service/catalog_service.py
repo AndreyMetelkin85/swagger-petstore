@@ -6,6 +6,7 @@ from uuid import UUID
 
 from psycopg import errors
 from psycopg.types.json import Jsonb
+from pydantic import ValidationError
 
 from petstore.data.catalog_data import CatalogData
 from petstore.data.database import Database, DbConnection, Row
@@ -240,11 +241,25 @@ class CatalogService:
                         "animalType",
                     }
                 }
-                command = (
-                    ProductCommand.model_validate(fields)
-                    if kind == "product"
-                    else PetCardCommand.model_validate(fields)
-                )
+                try:
+                    command = (
+                        ProductCommand.model_validate(fields)
+                        if kind == "product"
+                        else PetCardCommand.model_validate(fields)
+                    )
+                except ValidationError as exc:
+                    raise ApiException(
+                        422,
+                        "VALIDATION_ERROR",
+                        "Stored card validation failed",
+                        [
+                            {
+                                "field": (".".join(str(part) for part in error["loc"]) or "body")[:100],
+                                "message": "Invalid field value",
+                            }
+                            for error in exc.errors()[:100]
+                        ],
+                    ) from exc
                 self.publication_fields(
                     command, bool(images) or (kind == "pet" and bool(json.loads(row["photo_urls_json"])))
                 )
