@@ -56,9 +56,9 @@ services:
       RelayOptions__AutomaticRelayExpression: ""
       Serilog__MinimumLevel__Default: Warning
     ports:
-      - "127.0.0.1:8025:80"
-      - "127.0.0.1:2525:25"
-      - "127.0.0.1:1143:143"
+      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_HTTP_PORT:-8025}:80"
+      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_SMTP_PORT:-2525}:25"
+      - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_IMAP_PORT:-1143}:143"
     volumes:
       - mail-data:/smtp4dev
     restart: unless-stopped

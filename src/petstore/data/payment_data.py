@@ -115,6 +115,9 @@ class PaymentData:
             ).fetchone()
             assert payment is not None
             if status == "SUCCEEDED":
+                from petstore.service.commerce_order_service import CommerceOrderService
+
+                CommerceOrderService.consume_paid_products(connection, order)
                 updated = connection.execute(
                     "UPDATE store_orders SET payment_status = 'PAID',version=version+1 WHERE id = %s AND status = 'placed' AND payment_status = 'UNPAID'",
                     (order_id,),

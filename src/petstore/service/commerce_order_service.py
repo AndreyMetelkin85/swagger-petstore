@@ -1,5 +1,6 @@
 """Mixed checkout over the existing order/payment parent, with atomic allocations."""
 
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -129,6 +130,8 @@ class CommerceOrderService:
                 item = inventory[identity]
                 if item.publication_status != "PUBLISHED":
                     raise ApiException(409, "PRODUCT_UNAVAILABLE", "A cart item is no longer published")
+                if item.price is None:
+                    raise ApiException(409, "PRODUCT_UNAVAILABLE", "A cart item has no valid price")
                 cover = covers[identity]
                 price = line["price_snapshot"] if line["price_snapshot"] is not None else item.price
                 snapshot = {"images": [cover] if cover else []}
@@ -140,7 +143,7 @@ class CommerceOrderService:
                     line["item_id"],
                     line["quantity"],
                     item.name,
-                    item.sku,
+                    item.sku or "",
                     price,
                     cover["mediaId"] if cover else None,
                     snapshot,
@@ -172,6 +175,11 @@ class CommerceOrderService:
             CatalogService.version(order, version, "ORDER_VERSION_CONFLICT")
             if order["order_kind"] != "MIXED" or order["status"] != "draft":
                 raise ApiException(409, "INVALID_STATUS_TRANSITION", "Only a mixed draft can be placed")
+            cart = CartData.lock(connection, order["owner_user_id"])
+            if cart["version"] != order["cart_version"]:
+                raise ApiException(
+                    409, "CART_VERSION_CONFLICT", "Cart changed after the order draft was created"
+                )
             owner = UserData.locked_user(connection, order["owner_user_id"])
             missing = ValidationService.missing_order_profile_fields(owner)
             if missing:
@@ -180,6 +188,14 @@ class CommerceOrderService:
                     "PROFILE_INCOMPLETE",
                     "Complete the delivery profile before placing an order",
                     missing,
+                )
+            phone = re.sub(r"[ ()-]", "", owner["phone"])
+            if not re.fullmatch(r"\+7[0-9]{10}", phone):
+                raise ApiException(
+                    409,
+                    "PROFILE_INCOMPLETE",
+                    "Complete the delivery profile before placing an order",
+                    [{"field": "phone", "message": "Delivery phone must contain +7 and ten digits"}],
                 )
             lines = self.lines(connection, identifier)
             inventory = self.inventory_locks(connection, lines)
@@ -199,6 +215,8 @@ class CommerceOrderService:
             delivery = {name: profile[name] for name in ("firstName", "lastName", "phone", "address")}
             updated = CommerceOrderData.place(connection, identifier, total, delivery).fetchone()
             assert updated is not None
+            CartData.clear(connection, order["owner_user_id"])
+            CartData.bump_version(connection, order["owner_user_id"])
             result = self.public(connection, updated)
             IdempotencyData.save(connection, actor["id"], "order:place", key, payload, result, 200)
             return result
@@ -210,10 +228,25 @@ class CommerceOrderService:
             CommerceOrderData.lock_pet(connection, order["pet_id"])
             OrderData.update_pet_status(connection, order["pet_id"], "sold" if consume else "available")
             return
-        lines = [r for r in cls.lines(connection, order["id"]) if r["allocation"] == "RESERVED"]
+        lines = [
+            r
+            for r in cls.lines(connection, order["id"])
+            if r["allocation"] == "RESERVED"
+            or (not consume and r["item_type"] == "product" and r["allocation"] == "CONSUMED")
+        ]
         cls.inventory_locks(connection, lines)
         for line in lines:
             if line["item_type"] == "product":
+                if line["allocation"] == "CONSUMED":
+                    restored = CommerceOrderData.restore_product(
+                        connection, line["item_id"], line["quantity"]
+                    )
+                    if restored.rowcount != 1:
+                        raise ApiException(
+                            409, "INVENTORY_STATE_CONFLICT", "Paid inventory cannot be restored"
+                        )
+                    CommerceOrderData.restore_line(connection, order["id"], line["position"])
+                    continue
                 delta = line["quantity"] if consume else 0
                 updated = CommerceOrderData.release_product(
                     connection, line["item_id"], line["quantity"], delta
@@ -227,6 +260,25 @@ class CommerceOrderService:
             CommerceOrderData.release_line(
                 connection, order["id"], line["position"], "CONSUMED" if consume else "RELEASED"
             )
+
+    @classmethod
+    def consume_paid_products(cls, connection: DbConnection, order: Row) -> None:
+        """Debit reserved goods once during successful payment; pets remain reserved until delivery."""
+        if order.get("order_kind", "LEGACY") != "MIXED":
+            return
+        lines = [
+            line
+            for line in cls.lines(connection, order["id"])
+            if line["item_type"] == "product" and line["allocation"] == "RESERVED"
+        ]
+        cls.inventory_locks(connection, lines)
+        for line in lines:
+            updated = CommerceOrderData.release_product(
+                connection, line["item_id"], line["quantity"], line["quantity"]
+            )
+            if updated.rowcount != 1:
+                raise ApiException(409, "INVENTORY_STATE_CONFLICT", "Reserved inventory cannot be consumed")
+            CommerceOrderData.release_line(connection, order["id"], line["position"], "CONSUMED")
 
     @classmethod
     def expire_locked(cls, connection: DbConnection, order: Row) -> bool:

@@ -12,6 +12,7 @@ def test_rate_window_resets_at_60_seconds_without_real_waiting():
     now = 100.0
     controller = TelemetryController(clock=lambda: now)
     context = RequestContext(Mock(), Mock(), {}, TelemetryCommand(events=[TelemetryEvent(event="checkout")]))
+    context.request.headers.get.return_value = None
     for _ in range(100):
         assert controller.client_events(context).status_code == 204
     now = 159.999

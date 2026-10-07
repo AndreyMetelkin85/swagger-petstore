@@ -1,0 +1,17 @@
+services:
+  petstore:
+    networks:
+      default:
+        aliases: [backend]
+    environment:
+      PETSTORE_PUBLIC_BASE_URL: http://localhost:${FRONTEND_PORT:-8090}/api/v3
+      PETSTORE_MAIL_FRONTEND_URL: http://localhost:${FRONTEND_PORT:-8090}
+  frontend:
+    image: ${FRONTEND_IMAGE:-andymentor/lapki-frontend:latest}
+    pull_policy: always
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8090}:8080"
+    depends_on:
+      petstore:
+        condition: service_healthy
+    restart: unless-stopped

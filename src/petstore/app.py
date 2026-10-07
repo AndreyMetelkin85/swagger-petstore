@@ -28,6 +28,7 @@ from petstore.model.responses import ErrorResponse
 from petstore.service.auth_service import AuthService
 from petstore.service.commerce_order_service import CommerceOrderService
 from petstore.service.exceptions import ApiException
+from petstore.service.media_service import MediaService
 from petstore.utils.responses import Responses
 
 logger = logging.getLogger("petstore")
@@ -54,9 +55,13 @@ def create_app(
 
     def expire() -> None:
         """Run a stoppable, row-lock-safe expiry job without logging database values."""
+        next_media_cleanup = 0.0
         while not stop.wait(settings.expire_interval):
             try:
                 CommerceOrderService(db).expire()
+                if time.monotonic() >= next_media_cleanup:
+                    MediaService(db, settings).cleanup()
+                    next_media_cleanup = time.monotonic() + 3600
             except Exception as exc:
                 logger.error("reservation_expiry_failed type=%s", type(exc).__name__)
 

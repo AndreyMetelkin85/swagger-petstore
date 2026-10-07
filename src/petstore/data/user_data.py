@@ -56,7 +56,9 @@ class UserData:
         :param connection: Current transaction connection.
         :param user_id: Target UUID.
         """
-        user = connection.execute("SELECT * FROM users WHERE id = %s FOR UPDATE", (user_id,)).fetchone()
+        user = connection.execute(
+            "SELECT * FROM users WHERE id = %s FOR NO KEY UPDATE", (user_id,)
+        ).fetchone()
         if user is None:
             raise AccountException(404, "USER_NOT_FOUND", "User was not found")
         return user

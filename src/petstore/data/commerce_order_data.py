@@ -140,6 +140,21 @@ class CommerceOrderData:
         )
 
     @staticmethod
+    def restore_product(connection: DbConnection, identifier: UUID, quantity: int) -> Cursor[Row]:
+        """Restore a service-approved paid quantity; the locked allocation prevents duplicate refunds."""
+        return connection.execute(
+            "UPDATE products SET stock=stock+%s,version=version+1 WHERE id=%s", (quantity, identifier)
+        )
+
+    @staticmethod
+    def restore_line(connection: DbConnection, identifier: UUID, position: int) -> Cursor[Row]:
+        """Mark a consumed product allocation restored under its parent lock."""
+        return connection.execute(
+            "UPDATE order_lines SET allocation='RELEASED' WHERE order_id=%s AND position=%s AND allocation='CONSUMED'",
+            (identifier, position),
+        )
+
+    @staticmethod
     def set_expired(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
         """Persist a service-approved unpaid expiry."""
         return connection.execute(
