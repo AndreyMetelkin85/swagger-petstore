@@ -35,6 +35,7 @@ FROM eclipse-temurin:21-jre-jammy@sha256:f04fb34e053148344e83317976114ec3f37e4b8
 FROM swaggerapi/swagger-ui:v5.32.11@sha256:e43eb34b978af58d8cb78e5da9c12d605cf43d113ad3a96b18f9b028d6479d68 AS swagger-ui
 FROM postgres:16.15-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
 
+ARG SECURITY_UPDATE_EPOCH=local
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     tini util-linux libffi8 libsqlite3-0 libbz2-1.0 libexpat1 liblzma5 \
     nginx-light libicu72 libcurl4 libgssapi-krb5-2 \
@@ -65,8 +66,9 @@ ENV JAVA_HOME=/opt/java/openjdk \
 WORKDIR /app
 COPY pyproject.toml /app/
 COPY requirements-runtime.txt /app/
+RUN python -m pip install --no-cache-dir --requirement requirements-runtime.txt
 COPY src /app/src
-RUN python -m pip install --no-cache-dir --constraint requirements-runtime.txt .
+RUN python -m pip install --no-cache-dir --no-deps .
 COPY resources /app/resources
 COPY --from=swagger-ui /usr/share/nginx/html/ /app/resources/web/
 COPY resources/web/index.html /app/resources/web/index.html

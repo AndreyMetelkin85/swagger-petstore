@@ -2,73 +2,105 @@ name: Docker build and security scan
 
 on:
   push:
-    branches: ["dev", "master"]
+    branches: [dev, master]
   pull_request:
-    branches: ["dev", "master"]
+    branches: [dev, master]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
 
 permissions:
   contents: read
+  actions: read
+
+concurrency:
+  group: store-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  python-verification:
-    uses: ./.github/workflows/python.yml
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      backend: ${{ steps.scope.outputs.backend }}
+      ui: ${{ steps.scope.outputs.ui }}
+      runtime: ${{ steps.scope.outputs.runtime }}
+      build: ${{ steps.scope.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compare with the last verified production release
+        id: scope
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python docker/ci_changes.py
 
-  scan:
-    runs-on: ubuntu-latest
+  quality:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-runtime.txt
+      - name: Install quality dependencies
+        run: python -m pip install --constraint requirements-runtime.txt -e '.[test,quality]'
+      - name: Ruff and strict types
+        run: |
+          ruff check src tests docker
+          ruff format --check src tests docker
+          pyright
+      - name: Verify the offline data package on the fast path
+        if: needs.changes.outputs.backend != 'true'
+        run: python -m pytest tests/unit -n 4 --dist loadscope -q
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Frontend unit tests and TypeScript
+        working-directory: ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.build == 'true' && github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      - name: Build Python application for the target architecture
-        run: docker build --pull --platform linux/${{ matrix.arch }} --file Dockerfile --tag swagger-petstore:ci .
-      - name: Set up Python for API smoke tests
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      # QEMU is used only for the upstream amd64 Flyway distribution layer.
+      # The application build and all ARM64 test processes run natively.
+      - uses: docker/setup-qemu-action@v4
         with:
-          python-version: '3.12'
-      - name: Install smoke and commerce test dependencies
-        run: python -m pip install --constraint requirements-runtime.txt -e '.[test]'
-      - name: Test isolated application before publication
-        run: |
-          docker run --detach --platform linux/${{ matrix.arch }} --name petstore-ci --env PETSTORE_DEMO_CATALOG=false --publish 127.0.0.1:8080:8080 swagger-petstore:ci
-          for attempt in $(seq 1 90); do
-            if curl --fail --silent http://localhost:8080/api/v3/health; then break; fi
-            sleep 2
-          done
-          curl --fail http://localhost:8080/api/v3/health
-          python -m pytest -q tests/smoke
-          BASE_URL=http://127.0.0.1:8080/api/v3 PETSTORE_COMMERCE_CONTAINER=petstore-ci python -m pytest -q tests/system/test_commerce_system.py
-      - name: Remove isolated test application
-        if: always()
-        run: |
-          docker logs petstore-ci || true
-          docker rm --force --volumes petstore-ci || true
-      - name: Scan complete application image without Docker socket
-        run: |
-          docker save --output candidate-image.tar swagger-petstore:ci
-          docker run --rm --mount type=bind,source="$PWD/candidate-image.tar",target=/image.tar,readonly aquasec/trivy:0.74.0 image --input /image.tar --timeout 15m --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --no-progress
-
-  publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [scan, python-verification]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+          platforms: amd64
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and publish multi-platform Python image
+      - name: Cache daily security updates
+        id: epoch
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - name: Build each candidate exactly once
         id: image
         uses: docker/build-push-action@v7
         with:
@@ -76,51 +108,113 @@ jobs:
           file: Dockerfile
           pull: true
           push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore:latest
-            ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore:sha-${{ github.sha }}
+          platforms: linux/${{ matrix.arch }}
+          tags: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore:candidate-${{ github.sha }}-${{ github.run_id }}-${{ matrix.arch }}
+          build-args: SECURITY_UPDATE_EPOCH=${{ steps.epoch.outputs.day }}
+          cache-from: type=gha,scope=store-${{ matrix.arch }}
+          cache-to: type=gha,scope=store-${{ matrix.arch }},mode=max
           sbom: true
           provenance: mode=max
-          labels: |
-            org.opencontainers.image.title=Lapki complete training store
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-      - name: Record published digest
-        run: echo 'Published Python image digest ${{ steps.image.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"
-      - name: Set up Python for published image verification
-        uses: actions/setup-python@v5
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+      - name: Load the exact candidate digest
+        env:
+          CANDIDATE: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore@${{ steps.image.outputs.digest }}
+        run: |
+          docker pull "$CANDIDATE"
+          docker tag "$CANDIDATE" swagger-petstore:ci
+          mkdir -p digest
+          printf '%s' "$CANDIDATE" > digest/${{ matrix.arch }}
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Install verification dependencies
+          cache: pip
+          cache-dependency-path: requirements-runtime.txt
+      - name: Install contract dependencies
         run: python -m pip install --constraint requirements-runtime.txt -e '.[test]'
-      - name: Start exactly the published digest
+      - name: Contracts and persistence on the target architecture
         env:
-          PUBLISHED_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore@${{ steps.image.outputs.digest }}
+          BASE_URL: http://127.0.0.1:8080/api/v3
+          PETSTORE_COMMERCE_CONTAINER: petstore-ci
         run: |
-          docker run --detach --name petstore-published-ci --env PETSTORE_DEMO_CATALOG=false --publish 127.0.0.1:8080:8080 "$PUBLISHED_IMAGE"
-          for attempt in $(seq 1 90); do
+          docker run --detach --name petstore-ci --env PETSTORE_DEMO_CATALOG=false --publish 127.0.0.1:8080:8080 swagger-petstore:ci
+          for _attempt in $(seq 1 90); do
             if curl --fail --silent http://localhost:8080/api/v3/health; then break; fi
             sleep 2
           done
           curl --fail http://localhost:8080/api/v3/health
-      - name: Contract smoke tests of the Docker Hub image
-        run: python -m pytest -q tests/smoke -o addopts=''
-      - name: Complete shop and persistent photographs on the published digest
-        env:
-          BASE_URL: http://127.0.0.1:8080/api/v3
-          PETSTORE_COMMERCE_CONTAINER: petstore-published-ci
-        run: python -m pytest -q tests/system/test_commerce_system.py
-      - name: Install browser for published Swagger verification
+          python -m pytest tests/smoke tests/system/test_commerce_system.py -q -o addopts=''
+      - name: Restore scanner databases
+        uses: actions/cache@v4
+        with:
+          path: .trivy-cache
+          key: trivy-${{ runner.os }}-${{ matrix.arch }}-${{ steps.epoch.outputs.day }}
+          restore-keys: trivy-${{ runner.os }}-${{ matrix.arch }}-
+      - name: Scan exactly the tested candidate without Docker socket
         run: |
-          command -v google-chrome
-          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
-      - name: Every published operation retains Try it out and Execute
-        env:
-          PETSTORE_UI_URL: http://127.0.0.1:8080
-        run: python -m pytest -q tests/system/test_swagger_ui.py
-      - name: Remove only the published-image CI container
+          mkdir -p .trivy-cache
+          docker save --output candidate-image.tar swagger-petstore:ci
+          docker run --rm --mount type=bind,source="$PWD/candidate-image.tar",target=/image.tar,readonly --mount type=bind,source="$PWD/.trivy-cache",target=/root/.cache/trivy aquasec/trivy:0.74.0 image --input /image.tar --timeout 10m --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --no-progress
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-digest-${{ matrix.arch }}
+          path: digest/${{ matrix.arch }}
+          retention-days: 3
+      - name: Remove own architecture test container
         if: always()
         run: |
-          docker logs petstore-published-ci || true
-          docker rm --force --volumes petstore-published-ci || true
+          docker logs --tail=40 petstore-ci || true
+          docker rm --force --volumes petstore-ci || true
+
+  python-verification:
+    needs: [changes, build]
+    if: needs.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
+    uses: ./.github/workflows/python.yml
+    with:
+      mode: regression
+      candidate: true
+
+  runtime:
+    needs: [changes, build]
+    if: needs.changes.outputs.build == 'true' && github.event_name != 'pull_request'
+    uses: ./.github/workflows/python.yml
+    with:
+      mode: runtime
+      candidate: true
+      backend: ${{ needs.changes.outputs.backend == 'true' }}
+
+  pull-request:
+    needs: changes
+    if: needs.changes.outputs.build == 'true' && github.event_name == 'pull_request'
+    uses: ./.github/workflows/python.yml
+    with:
+      mode: all
+      backend: true
+
+  publish:
+    needs: [changes, quality, build, python-verification, runtime]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.runtime == 'true' && needs.quality.result == 'success' && needs.build.result == 'success' && needs.runtime.result == 'success' && (needs.python-verification.result == 'success' || needs.python-verification.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-digest-*
+          merge-multiple: true
+          path: digest
+      - name: Verify this commit is still the current master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api repos/${{ github.repository }}/git/ref/heads/master --jq .object.sha)" = '${{ github.sha }}'
+      - name: Promote tested digests, without another build
+        env:
+          REPOSITORY: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore
+        run: |
+          docker buildx imagetools create --tag "$REPOSITORY:sha-${{ github.sha }}" --tag "$REPOSITORY:latest" "$(cat digest/amd64)" "$(cat digest/arm64)"
+          docker buildx imagetools inspect "$REPOSITORY:latest"
+          echo "Published the tested AMD64 and ARM64 digests without rebuilding" >> "$GITHUB_STEP_SUMMARY"

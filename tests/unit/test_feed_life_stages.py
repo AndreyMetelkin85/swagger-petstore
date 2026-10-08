@@ -38,7 +38,9 @@ def validation_client() -> Iterator[TestClient]:
         yield client
 
 
-@pytest.mark.parametrize("method,path", [("POST", "/products"), ("PUT", "/products/" + str(uuid4()))])
+@pytest.mark.parametrize(
+    "method,path", [("POST", "/products"), ("PUT", "/products/" + str(uuid4()))], ids=["create", "update"]
+)
 @pytest.mark.parametrize("stages", INVALID_STAGES)
 def test_catalog_request_validation_returns_safe_field_errors(validation_client, method, path, stages):
     response = validation_client.request(

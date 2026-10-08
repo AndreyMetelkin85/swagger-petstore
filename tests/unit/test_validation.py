@@ -158,7 +158,7 @@ def test_missing_profile_reports_every_required_checkout_field():
     assert V.missing_order_profile_fields(None)[0]["field"] == "user"
 
 
-@pytest.mark.parametrize("card", list(V.TEST_CARDS))
+@pytest.mark.parametrize("card", sorted(V.TEST_CARDS))
 def test_documented_test_cards_are_valid(card):
     request = PaymentRequest(
         cardNumber=card, expiryMonth=12, expiryYear=2099, cvv="123", cardholderName="Test User"

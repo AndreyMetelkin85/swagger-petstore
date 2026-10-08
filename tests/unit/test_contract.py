@@ -115,6 +115,7 @@ def test_empty_object_is_422_with_ordered_original_details(client):
         ("/store/order/bad", "Order id must be a valid UUID"),
         (f"/store/order/{uuid4()}/payments/bad", "Payment id must be a valid UUID"),
     ],
+    ids=["pet", "user", "order", "payment"],
 )
 def test_invalid_path_uuid_keeps_400(client, path, message):
     response = client.get("/api/v3" + path)
@@ -128,6 +129,7 @@ def test_invalid_path_uuid_keeps_400(client, path, message):
         ("/auth/confirm/" + str(uuid4()), "INVALID_CONFIRMATION_LINK"),
         ("/auth/password/reset", "INVALID_RESET_LINK"),
     ],
+    ids=["confirmation", "password-reset"],
 )
 def test_missing_confirmation_or_reset_code(client, path, code):
     response = (

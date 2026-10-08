@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID, uuid4
@@ -20,6 +21,11 @@ def integration_database():
         pytest.skip("Set PETSTORE_TEST_DB_URL for a dedicated migrated test database")
     if urlsplit(url).path != "/petstore_python_test":
         pytest.fail("Integration tests require the dedicated petstore_python_test database")
+    worker = os.getenv("PYTEST_XDIST_WORKER", "master")
+    if worker != "master":
+        if not re.fullmatch(r"gw[0-9]+", worker):
+            pytest.fail("Unexpected parallel worker identity")
+        url = urlsplit(url)._replace(path="/petstore_python_test_" + worker).geturl()
     settings = Settings(db_url=url, expire_interval=0, public_base_url="http://testserver/api/v3")
     database = Database(settings)
     yield settings, database
