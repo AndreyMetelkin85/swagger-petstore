@@ -10,9 +10,10 @@ pytestmark = pytest.mark.system
 
 
 def run_docker(*args: str) -> str:
-    """Run a bounded command against the explicitly selected isolated test container.
+    """Выполняет Docker-команду только для выбранных тестовых ресурсов.
 
-    :param args: Docker arguments without credentials or request payloads.
+    :param args: Аргументы Docker для собственных тестовых ресурсов.
+    :return: Результат описанной проверки или подготовки тестовых данных.
     """
     return subprocess.run(
         ["docker", *args], check=True, capture_output=True, text=True, timeout=60
@@ -21,6 +22,10 @@ def run_docker(*args: str) -> str:
 
 @pytest.fixture
 def restart_record():
+    """Создаёт аккаунт для проверки перезапуска и удаляет его по UUID.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     url = os.getenv("PETSTORE_UI_URL")
     container = os.getenv("PETSTORE_RESTART_CONTAINER")
     if not url or not container:

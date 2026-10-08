@@ -16,10 +16,11 @@ LEGACY_IMAGE = (
 
 
 def docker(*args: str, timeout: int = 180) -> str:
-    """Run a bounded Docker command for this test's uniquely named resources.
+    """Выполняет ограниченную по времени команду для собственных Docker-ресурсов.
 
-    :param args: Arguments without passwords or user request bodies.
-    :param timeout: Maximum execution time in seconds.
+    :param timeout: Ограничение времени выполнения в секундах.
+    :param args: Аргументы Docker для собственных тестовых ресурсов.
+    :return: Результат описанной проверки или подготовки тестовых данных.
     """
     return subprocess.run(
         ["docker", *args], check=True, capture_output=True, text=True, timeout=timeout
@@ -27,12 +28,14 @@ def docker(*args: str, timeout: int = 180) -> str:
 
 
 def start_image(image: str, container: str, volume: str, owner: str, network: str | None = None) -> str:
-    """Start a migration test image and wait for both API and PostgreSQL.
+    """Запускает изолированный образ; новый API использует отдельную базу.
 
-    :param image: Explicit legacy digest or the isolated candidate image.
-    :param container: Unique test container name.
-    :param volume: Unique test volume shared by the two runtimes.
-    :param owner: Resource ownership label checked during cleanup.
+    :param image: Изображение либо его метаданные.
+    :param container: Разрешённый контейнер изолированного тестового стенда.
+    :param volume: Собственный том миграционного теста.
+    :param owner: Идентификатор либо данные владельца ресурса.
+    :param network: Сеть отдельной тестовой базы; None для старого общего образа.
+    :return: Результат описанной проверки или подготовки тестовых данных.
     """
     args = [
         "run",
@@ -63,9 +66,10 @@ def start_image(image: str, container: str, volume: str, owner: str, network: st
 
 
 def admin_headers(client: httpx.Client) -> dict[str, str]:
-    """Authenticate the seeded administrator of the isolated test database.
+    """Авторизует администратора собственной миграционной базы.
 
-    :param client: HTTP client connected only to the migration test container.
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :return: Результат описанной проверки или подготовки тестовых данных.
     """
     response = client.post("/auth/login", json={"email": "admin@example.com", "password": "admin123"})
     assert response.status_code == 200

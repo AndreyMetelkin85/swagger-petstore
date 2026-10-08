@@ -14,6 +14,10 @@ pytestmark = pytest.mark.integration
 
 
 def jpeg():
+    """Создаёт JPEG в памяти для изолированной проверки загрузки.
+
+    :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+    """
     buffer = io.BytesIO()
     Image.new("RGB", (16, 12), "blue").save(buffer, format="JPEG")
     return buffer.getvalue()
@@ -30,13 +34,26 @@ class Commerce:
 
     @property
     def client(self):
+        """Предоставляет HTTP-клиент только текущего тестового стенда.
+
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         return self.scenario.client
 
     @property
     def admin(self):
+        """Возвращает заголовки администратора изолированного сценария.
+
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         return self.scenario.admin
 
     def category(self, kind="product"):
+        """Создаёт тестовую категорию выбранного вида.
+
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         response = self.client.post(
             "/admin/catalog/categories", headers=self.admin, json={"name": uuid4().hex, "kind": kind}
         )
@@ -46,6 +63,10 @@ class Commerce:
         return result
 
     def image(self):
+        """Создаёт и загружает собственное тестовое изображение.
+
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         response = self.client.post(
             "/media",
             headers=self.admin,
@@ -58,6 +79,12 @@ class Commerce:
         return result
 
     def product(self, stock=5, price=100):
+        """Создаёт тестовый товар с выбранным остатком и ценой.
+
+        :param stock: Значение текущего тестового сценария.
+        :param price: Цена в рублях с точностью до копейки.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         category, image = self.category(), self.image()
         request = {
             "sku": uuid4().hex,
@@ -85,6 +112,11 @@ class Commerce:
         return published.json(), request
 
     def pet(self, price=50):
+        """Создаёт собственного тестового питомца и записывает UUID для очистки.
+
+        :param price: Цена в рублях с точностью до копейки.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         image = self.image()
         category = self.category("pet")
         response = self.client.post(
@@ -108,6 +140,13 @@ class Commerce:
         return published.json()
 
     def cart(self, headers, lines, key=None):
+        """Сохраняет тестовую корзину по ожидаемой версии.
+
+        :param headers: Заголовки авторизации текущего тестового пользователя.
+        :param lines: Проверенные позиции корзины или заказа.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         current = self.client.get("/store/cart", headers=headers)
         assert current.status_code == 200, current.text
         response = self.client.put(
@@ -119,6 +158,12 @@ class Commerce:
         return response.json()
 
     def draft(self, headers, cart):
+        """Создаёт черновик тестового заказа без оформления.
+
+        :param headers: Заголовки авторизации текущего тестового пользователя.
+        :param cart: Серверная корзина с текущей версией.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         response = self.client.post(
             "/store/orders",
             headers=headers | {"Idempotency-Key": str(uuid4())},
@@ -130,6 +175,13 @@ class Commerce:
         return result
 
     def place(self, headers, order, token=None):
+        """Размещает собственный тестовый заказ.
+
+        :param headers: Заголовки авторизации текущего тестового пользователя.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :param token: Строка Bearer-токена для проверки.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         return self.client.post(
             f"/store/orders/{order['id']}/place",
             headers=headers | {"Idempotency-Key": str(token or uuid4())},
@@ -137,6 +189,14 @@ class Commerce:
         )
 
     def pay(self, headers, order, key=None, card="4242424242424242"):
+        """Отправляет тестовую оплату с выбранной картой и ключом повторного запроса.
+
+        :param headers: Заголовки авторизации текущего тестового пользователя.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :param card: Номер выбранной тестовой карты.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         return self.client.post(
             f"/store/orders/{order['id']}/payments",
             headers=headers | {"Idempotency-Key": str(key or uuid4())},
@@ -152,6 +212,11 @@ class Commerce:
 
 @pytest.fixture
 def commerce(scenario):
+    """Создаёт смешанный сценарий API с отслеживанием собственных записей.
+
+    :param scenario: Изолированный API-сценарий с учётом созданных UUID.
+    :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+    """
     result = Commerce(scenario)
     try:
         yield result
@@ -242,7 +307,7 @@ def test_publishing_filters_versions_sku_category_and_media_references(commerce)
         headers=commerce.admin,
         json=category | {"active": False, "archived": False},
     )
-    # DTO output-only fields are not an update command.
+    # Поля DTO только для ответа не являются командой обновления.
     assert updated.status_code == 422
     updated = commerce.client.put(
         "/admin/catalog/categories/" + category["id"],
@@ -427,7 +492,7 @@ def test_paid_delivery_consumes_inventory_once_and_retains_cover(commerce):
     )
     assert repeated.status_code == 409
     assert commerce.client.get("/products/" + product["id"]).json()["stock"] == 2
-    # Historic cover/name/price remains after unpublishing and replacing a live gallery.
+    # Снимки обложки, имени и цены сохраняются после снятия публикации и замены галереи.
     unpublish = commerce.client.post(
         "/products/" + product["id"] + "/unpublish",
         headers=commerce.admin,

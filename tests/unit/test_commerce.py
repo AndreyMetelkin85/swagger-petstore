@@ -14,6 +14,12 @@ from petstore.utils.responses import public_delivery
 
 
 def encoded(format="PNG", metadata=False):
+    """Создаёт изображение в памяти с выбранными метаданными.
+
+    :param format: Формат изображения.
+    :param metadata: Метаданные тестового изображения.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     image = Image.new("RGB", (32, 20), "red")
     data = io.BytesIO()
     arguments = {}

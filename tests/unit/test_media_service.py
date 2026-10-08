@@ -13,6 +13,11 @@ from petstore.service.media_service import MediaService, normalize_image
 
 
 def image_bytes(format="PNG"):
+    """Создаёт содержимое тестового изображения в памяти.
+
+    :param format: Формат изображения.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     data = io.BytesIO()
     Image.new("RGB", (8, 4)).save(data, format=format)
     return data.getvalue()
@@ -20,6 +25,11 @@ def image_bytes(format="PNG"):
 
 @pytest.fixture
 def media(tmp_path):
+    """Создаёт медиасервис с временным хранилищем и управляемыми зависимостями.
+
+    :param tmp_path: Временный каталог теста.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     database = MagicMock()
     connection = database.connect.return_value.__enter__.return_value
     identifier = uuid4()

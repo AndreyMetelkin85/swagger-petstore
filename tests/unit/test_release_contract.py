@@ -54,7 +54,14 @@ def test_publication_requires_python_tests_and_both_platform_scans():
 
 
 def publication_allowed(results, backend=True, event="push", ref="refs/heads/master"):
-    """Evaluate the actual repository's restricted GitHub gate expression in scenarios."""
+    """Проверяет действующее условие публикации на выбранных состояниях jobs.
+
+    :param results: Состояния jobs GitHub Actions.
+    :param backend: Изменялся ли исполняемый бэкенд.
+    :param event: Тип события GitHub Actions.
+    :param ref: Ссылка проверяемой ветки Git.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     workflow = yaml.safe_load((ROOT / ".github/workflows/docker-security.yml").read_text())
     expression = workflow["jobs"]["publish"]["if"]
     expression = expression.replace("always()", "True").replace("&&", " and ").replace("||", " or ")

@@ -31,7 +31,10 @@ def test_invalid_life_stages_report_the_age_field(stages):
 
 @pytest.fixture
 def validation_client() -> Iterator[TestClient]:
-    """Provide native request validation without connecting to PostgreSQL."""
+    """Предоставляет TestClient для проверки транспорта без PostgreSQL.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     app = create_app(database=Mock(spec=Database), start_database=False)
     app.state.auth.authorize = Mock(return_value={"id": uuid4(), "role": "ADMIN"})
     with TestClient(app) as client:

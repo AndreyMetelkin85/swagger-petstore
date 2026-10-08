@@ -15,14 +15,23 @@ pytestmark = pytest.mark.system
 
 
 def docker(*arguments):
-    """Run a bounded command only against the explicitly selected CI container."""
+    """Выполняет ограниченную по времени команду для собственных Docker-ресурсов.
+
+    :param arguments: Аргументы Docker для собственных тестовых ресурсов.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     return subprocess.run(
         ["docker", *arguments], capture_output=True, text=True, check=True, timeout=60
     ).stdout.strip()
 
 
 def wait_ready(client, container=None):
-    """Wait for the isolated candidate without changing real application data."""
+    """Ожидает готовность выбранного тестового API.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param container: Разрешённый контейнер изолированного тестового стенда.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     # Flyway/JRE startup under ARM emulation can exceed a native one-minute budget.
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
@@ -37,7 +46,17 @@ def wait_ready(client, container=None):
 
 
 def verify_recreation(client, container, media, order, email, password, digest):
-    """Replace only an isolated CI container while retaining its exact DB and media volumes."""
+    """Пересоздаёт тестовый API с сохранением отдельной базы и медиатома.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param container: Разрешённый контейнер изолированного тестового стенда.
+    :param media: Изображение, созданное текущим тестом.
+    :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+    :param email: Email аккаунта; не включается в диагностические логи.
+    :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+    :param digest: Ожидаемая контрольная сумма изображения.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     original = json.loads(docker("inspect", container))[0]
     mounts = {mount["Destination"]: mount for mount in original["Mounts"]}
     destinations = ["/var/lib/petstore/media"]
@@ -89,7 +108,13 @@ def verify_recreation(client, container, media, order, email, password, digest):
 
 
 def login(client, email, password):
-    """Authenticate a seeded admin or this fixture's own buyer."""
+    """Авторизует начальный либо созданный тестом аккаунт.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param email: Email аккаунта; не включается в диагностические логи.
+    :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     response = client.post("/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200, response.text
     return {"Authorization": "Bearer " + response.json()["access_token"]}
@@ -97,6 +122,10 @@ def login(client, email, password):
 
 @pytest.fixture
 def shop():
+    """Создаёт полный сценарий магазина с очисткой собственных записей.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     container = os.getenv("PETSTORE_COMMERCE_CONTAINER")
     base = os.getenv("BASE_URL")
     if not container or not base:
@@ -112,6 +141,12 @@ def shop():
         admin = login(client, "admin@example.com", "admin123")
 
         def created(response, kind):
+            """Проверяет создание и сохраняет точный UUID для очистки.
+
+            :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+            :param kind: Тип позиции или категории: товар либо питомец.
+            :return: Результат описанной проверки или подготовки тестовых данных.
+            """
             assert response.status_code == 201, response.text
             data = response.json()
             identifier = data["user"]["id"] if kind == "users" else data["id"]

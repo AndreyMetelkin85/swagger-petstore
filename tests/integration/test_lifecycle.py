@@ -8,6 +8,11 @@ pytestmark = pytest.mark.integration
 
 
 def code_from(url):
+    """Извлекает одноразовый код из ссылки тестового ответа.
+
+    :param url: URL ресурса, предоставленный вызывающим кодом.
+    :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+    """
     return parse_qs(urlsplit(url).query)["code"][0]
 
 
@@ -142,7 +147,7 @@ def test_draft_has_no_reservation_or_checkout_data_and_can_be_replaced(scenario)
     assert all(
         draft[field] is None for field in ("unitPrice", "totalAmount", "deliveryDetails", "paymentExpiresAt")
     )
-    assert "shipDate" not in draft  # The Java API omitted this optional null field.
+    assert "shipDate" not in draft  # Прежний API пропускал это необязательное поле null.
     assert scenario.client.get(f"/pet/{pet['id']}").json()["status"] == "available"
     updated = scenario.client.put(
         f"/store/order/{draft['id']}", headers=headers, json={"petId": other_pet["id"], "quantity": 1}
