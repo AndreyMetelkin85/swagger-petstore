@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -64,7 +65,12 @@ def main() -> None:
         if job["name"].startswith("build-") and job["conclusion"] == "success":
             try:
                 cache = cache_export_seconds(
-                    get(f"/repos/{repository}/actions/jobs/{job['id']}/logs").decode()
+                    subprocess.run(
+                        ["gh", "api", f"/repos/{repository}/actions/jobs/{job['id']}/logs"],
+                        capture_output=True,
+                        check=True,
+                        timeout=30,
+                    ).stdout.decode()
                 )
             except Exception:
                 pass
