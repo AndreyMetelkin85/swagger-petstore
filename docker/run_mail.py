@@ -1,4 +1,4 @@
-"""Supervise embedded SMTP without writing recipients or message content to container logs."""
+"""Запуск тестовой почты без получателей и содержимого писем в логах контейнера."""
 
 import signal
 import subprocess
@@ -13,7 +13,12 @@ process = subprocess.Popen(
 
 
 def stop(_signal: int, _frame: object) -> None:
-    """Forward shutdown to this wrapper's own child."""
+    """Передаёт сигнал остановки только дочернему процессу smtp4dev.
+
+    :param _signal: Номер полученного сигнала ОС.
+    :param _frame: Кадр исполнения, переданный обработчику сигнала.
+    :return: None после отправки сигнала дочернему процессу.
+    """
     if process.poll() is None:
         process.terminate()
 
@@ -23,9 +28,9 @@ signal.signal(signal.SIGINT, stop)
 assert process.stdout is not None
 for line in process.stdout:
     if line.startswith(("[ERR]", "[FTL]", "fail:", "crit:")):
-        print("embedded_mail_error", flush=True)
+        print("mail_error", flush=True)
     elif "SMTP Server is listening" in line:
-        print("embedded_mail_ready", flush=True)
+        print("mail_ready", flush=True)
 status = process.wait()
-print(f"embedded_mail_stopped status={status}", flush=True)
+print(f"mail_stopped status={status}", flush=True)
 raise SystemExit(status if status >= 0 else 128 - status)

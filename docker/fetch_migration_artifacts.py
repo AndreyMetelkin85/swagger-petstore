@@ -1,4 +1,4 @@
-"""Fetch pinned Flyway parser libraries; reject bad CDN responses instead of caching them."""
+"""Инфраструктурные проверки сборки, миграций и публикации."""
 
 import hashlib
 import time
@@ -16,10 +16,11 @@ MAX_BYTES = 10 * 1024 * 1024
 
 
 def fetch_verified(relative: str, expected: str) -> bytes:
-    """Retry official Central mirrors without accepting HTTP errors or altered content.
+    """Загружает библиотеку с зеркал Maven Central, проверяя HTTP и закреплённый SHA-256.
 
-    :param relative: Pinned artifact path from the build manifest.
-    :param expected: Independently pinned SHA-256, unchanged from the released Dockerfile.
+    :param relative: Закреплённый путь библиотеки относительно зеркала Maven Central.
+    :param expected: Ожидаемый SHA-256 загружаемой библиотеки.
+    :return: Результат описанной проверки или запроса.
     """
     for attempt in range(6):
         try:
@@ -33,7 +34,7 @@ def fetch_verified(relative: str, expected: str) -> bytes:
                 raise RuntimeError(
                     "Verified migration artifact is unavailable: " + Path(relative).name
                 ) from exc
-            # Public artifact name and attempt only; never print response bodies.
+            # Только имя библиотеки и номер попытки; содержимое ответа не выводится.
             print(
                 "artifact_fetch_retry name=" + Path(relative).name + " attempt=" + str(attempt + 1),
                 flush=True,
@@ -43,9 +44,10 @@ def fetch_verified(relative: str, expected: str) -> bytes:
 
 
 def main(destination: Path = Path("/migration-artifacts")) -> None:
-    """Write only verified libraries into this isolated build stage.
+    """Сохраняет только проверенные библиотеки в каталог стадии сборки.
 
-    :param destination: Build-owned output directory, never a runtime data volume.
+    :param destination: Каталог стадии сборки; не является пользовательским томом данных.
+    :return: Ничего не возвращает.
     """
     destination.mkdir(parents=True, exist_ok=True)
     for relative, expected in ARTIFACTS.items():

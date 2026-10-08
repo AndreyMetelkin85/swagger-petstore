@@ -1,20 +1,21 @@
-"""Business exceptions translated to the unchanged public error envelope."""
+"""Бизнес-правила и согласование операций приложения."""
 
 from typing import Any
 
 
 class ApiException(Exception):
-    """A safe public error, independent of transport and database exceptions."""
+    """Публичная бизнес-ошибка, независимая от HTTP и исключений базы."""
 
     def __init__(
         self, status: int, code: str, message: str, details: list[dict[str, Any]] | None = None
     ) -> None:
-        """Store the public status and error details without request values.
+        """Сохраняет публичный статус, код и детали ошибки без исходных значений запроса.
 
-        :param status: HTTP response status.
-        :param code: Stable machine-readable error code.
-        :param message: Public error description.
-        :param details: Field-level validation errors.
+        :param status: Статус ресурса либо HTTP-ответа согласно операции.
+        :param code: Стабильный машинный код публичной ошибки.
+        :param message: Публичное описание ошибки без исходных значений запроса.
+        :param details: Безопасные детали ошибок отдельных полей.
+        :return: Ничего не возвращает.
         """
         super().__init__(message)
         self.status = status
@@ -24,16 +25,16 @@ class ApiException(Exception):
 
 
 class AccountException(ApiException):
-    """Account authentication, recovery or administration failure."""
+    """Ошибка входа, восстановления или управления аккаунтом."""
 
 
 class OrderException(ApiException):
-    """Order access or lifecycle failure."""
+    """Ошибка доступа либо жизненного цикла заказа."""
 
 
 class PaymentException(ApiException):
-    """Payment access, idempotency or simulator failure."""
+    """Ошибка доступа, идемпотентности либо симуляции оплаты."""
 
 
 class PetException(ApiException):
-    """Pet availability or optimistic version conflict."""
+    """Ошибка доступности питомца или конфликта версии."""

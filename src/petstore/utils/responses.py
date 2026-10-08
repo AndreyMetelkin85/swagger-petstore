@@ -1,4 +1,4 @@
-"""Serialize exact Decimal numbers and prevent security fields from leaking."""
+"""Сериализация публичных ответов без утечки приватных данных."""
 
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -11,9 +11,10 @@ from petstore.data.database import Row
 
 
 def json_default(value: Any) -> str:
-    """Serialize identifiers and UTC timestamps without changing monetary precision.
+    """Сериализует UUID и время UTC без изменения точности денежных сумм.
 
-    :param value: A UUID or timezone-aware timestamp.
+    :param value: Значение, проверяемое или преобразуемое текущей операцией.
+    :return: Строковый результат описанной операции.
     """
     if isinstance(value, UUID):
         return str(value)
@@ -23,14 +24,15 @@ def json_default(value: Any) -> str:
 
 
 class Responses(Response):
-    """Original JSON wire format, including numeric Decimal values and UTF-8 text."""
+    """Действующий JSON-формат с точными Decimal и UTF-8."""
 
     media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
-        """Render safe response data without floating-point money conversion.
+        """Сериализует безопасный ответ без преобразования денежных сумм во float.
 
-        :param content: Public response payload.
+        :param content: Данные для сериализации в публичный ответ.
+        :return: Содержимое результата в байтах.
         """
         return simplejson.dumps(
             content,
@@ -43,9 +45,10 @@ class Responses(Response):
 
 
 def public_user(row: Row) -> Row:
-    """Expose only the original User fields, never passwords or link hashes.
+    """Возвращает только публичные поля User без пароля и хешей ссылок.
 
-    :param row: Private persisted user row.
+    :param row: Строка базы данных для обработки или преобразования.
+    :return: Результат операции типа Row.
     """
     address = None
     if row.get("address_city") is not None:
@@ -69,7 +72,7 @@ def public_user(row: Row) -> Row:
         "userStatus": row["user_status"],
         "role": row["role"],
     }
-    # Jackson omitted optional null contact fields, but explicitly kept address: null.
+    # Jackson пропускал необязательные контакты null, но сохранял явный address: null.
     return {
         key: value
         for key, value in result.items()
@@ -78,9 +81,10 @@ def public_user(row: Row) -> Row:
 
 
 def public_delivery(snapshot: Row | None) -> Row | None:
-    """Preserve the legacy wire format without rewriting immutable delivery snapshots.
+    """Сохраняет действующий формат неизменяемого снимка доставки.
 
-    :param snapshot: Stored delivery JSON; Jackson omitted a null optional apartment.
+    :param snapshot: Сохранённый неизменяемый снимок данных оформления.
+    :return: Результат операции типа Row | None.
     """
     if snapshot is None:
         return None
@@ -92,9 +96,10 @@ def public_delivery(snapshot: Row | None) -> Row | None:
 
 
 def public_order(row: Row) -> Row:
-    """Map SQL snapshot columns to the existing order contract.
+    """Преобразует SQL-столбцы снимка в действующий контракт заказа.
 
-    :param row: Persisted order row.
+    :param row: Строка базы данных для обработки или преобразования.
+    :return: Результат операции типа Row.
     """
     mapping = {
         "id": "id",
@@ -120,9 +125,10 @@ def public_order(row: Row) -> Row:
 
 
 def public_payment(row: Row) -> Row:
-    """Expose only payment summary fields; hide request hashes and idempotency keys.
+    """Возвращает сводку платежа без хешей запросов и ключей идемпотентности.
 
-    :param row: Persisted payment attempt.
+    :param row: Строка базы данных для обработки или преобразования.
+    :return: Результат операции типа Row.
     """
     mapping = {
         "id": "id",

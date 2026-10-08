@@ -1,4 +1,4 @@
-"""Read the same PETSTORE_* environment variables as the existing container."""
+"""Настройки окружения без раскрытия секретов подключения."""
 
 import os
 from dataclasses import dataclass, field
@@ -8,10 +8,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def environment(name: str, fallback: str) -> str:
-    """Use the fallback for missing or whitespace-only environment variables.
+    """Возвращает значение окружения или значение по умолчанию для пустой переменной.
 
-    :param name: Environment variable name.
-    :param fallback: Default value from the existing application.
+    :param name: Имя поля, параметра или ресурса текущей операции.
+    :param fallback: Значение по умолчанию для отсутствующей или пустой настройки.
+    :return: Строковый результат описанной операции.
     """
     value = os.getenv(name)
     return value if value is not None and value.strip() else fallback
@@ -19,7 +20,7 @@ def environment(name: str, fallback: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    """Runtime configuration without exposing database credentials in repr."""
+    """Настройки приложения; секреты базы и токенов исключены из repr."""
 
     db_url: str = field(default="postgresql://localhost:5432/petstore", repr=False)
     db_user: str = "petstore"
@@ -41,7 +42,10 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        """Load compatible environment variables; accept JDBC URLs during transition."""
+        """Читает настройки окружения; сохраняет совместимость с URL формата JDBC.
+
+        :return: Результат операции типа 'Settings'.
+        """
         secret = os.getenv("PETSTORE_TOKEN_SECRET")
         return cls(
             db_url=environment("PETSTORE_DB_URL", "postgresql://localhost:5432/petstore").removeprefix(

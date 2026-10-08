@@ -1,4 +1,4 @@
-"""Bounded, allowlisted operational telemetry; no request payload logging."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 import logging
 import re
@@ -20,12 +20,14 @@ logger = logging.getLogger("petstore.telemetry")
 
 
 class TelemetryController:
-    """Own rate-limit state for one application instance, not global module state."""
+    """Ограничение телеметрии в рамках экземпляра приложения, без глобального состояния."""
 
     def __init__(self, clock: Callable[[], float] = time.monotonic, settings: Settings | None = None) -> None:
-        """Initialize a thread-safe 100-batch-per-minute window.
+        """Создаёт потокобезопасное окно ограничения до 100 пачек событий в минуту.
 
-        :param clock: Monotonic clock; tests inject time without changing asyncio timers.
+        :param clock: Источник времени для ограничения запросов и управляемых тестов.
+        :param settings: Настройки приложения и его инфраструктурных подключений.
+        :return: Ничего не возвращает.
         """
         self.clock = clock
         settings = settings or Settings.from_env()
@@ -90,7 +92,11 @@ class TelemetryController:
         self.count = 0
 
     def client_events(self, context: RequestContext) -> Response:
-        """Accept only known event names and safe numeric/enumerated metadata."""
+        """Принимает только разрешённые события и безопасные числовые или перечислимые метаданные.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         command = context.body
         assert isinstance(command, TelemetryCommand)
         allowed = {

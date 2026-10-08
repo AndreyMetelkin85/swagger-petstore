@@ -1,4 +1,4 @@
-"""Bounded psycopg pool; Flyway SQL migrations run separately before startup."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -15,12 +15,13 @@ DbConnection = psycopg.Connection[Row]
 
 
 class Database:
-    """Connection factory with explicit transaction boundaries and safe shutdown."""
+    """Общий пул PostgreSQL с явными транзакциями и безопасным завершением."""
 
     def __init__(self, settings: Settings) -> None:
-        """Configure the pool without connecting or migrating user data.
+        """Настраивает пул без подключения к базе и без изменения пользовательских данных.
 
-        :param settings: Compatible PostgreSQL connection settings.
+        :param settings: Настройки приложения и его инфраструктурных подключений.
+        :return: Ничего не возвращает.
         """
         self.pool: ConnectionPool[DbConnection] = ConnectionPool(
             settings.db_url,
@@ -37,21 +38,36 @@ class Database:
         )
 
     def start(self) -> None:
-        """Open connections after Flyway has validated and migrated the database."""
+        """Открывает пул соединений после успешного применения миграций Flyway.
+
+        :return: Ничего не возвращает.
+        """
         self.pool.open(wait=True, timeout=15)
 
     def close(self) -> None:
-        """Close pool threads and connections during application shutdown."""
+        """Закрывает соединения и потоки пула при остановке приложения.
+
+        :return: Ничего не возвращает.
+        """
         self.pool.close()
 
     @contextmanager
     def connect(self) -> Generator[DbConnection, None, None]:
-        """Commit successful operations and roll back exceptions before returning the connection."""
+        """Предоставляет соединение; фиксирует успешную транзакцию и откатывает её при исключении.
+
+        При нормальном завершении блока соединение фиксирует транзакцию. Исключение вызывает
+        rollback; соединение возвращается в пул. Вызывающий код работает внутри with.
+
+        :yield: Значение текущего шага управляемого контекстом жизненного цикла.
+        """
         with self.pool.connection() as connection:
             yield connection
 
     def is_healthy(self) -> bool:
-        """Check PostgreSQL availability without disclosing connection failures."""
+        """Проверяет доступность PostgreSQL, не раскрывая детали соединения.
+
+        :return: True при выполнении проверяемого условия, иначе False.
+        """
         try:
             with self.connect() as connection:
                 return connection.execute("SELECT 1 AS healthy").fetchone() == {"healthy": 1}

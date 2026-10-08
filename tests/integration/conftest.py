@@ -16,6 +16,10 @@ ADDRESS = {"city": "Москва", "street": "Тестовая", "house": "1", "
 
 @pytest.fixture
 def integration_database():
+    """Открывает только выделенную тестовую базу, отдельно для каждого worker.
+
+    :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+    """
     url = os.getenv("PETSTORE_TEST_DB_URL")
     if not url:
         pytest.skip("Set PETSTORE_TEST_DB_URL for a dedicated migrated test database")
@@ -41,6 +45,12 @@ class Scenario:
     orders: list[UUID] = field(default_factory=list)
 
     def user(self, active=True, profile=True):
+        """Регистрирует собственного тестового пользователя и при необходимости подтверждает его.
+
+        :param active: Подтверждать ли созданный тестовый аккаунт.
+        :param profile: Заполнять ли доставку тестового пользователя.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         request = {
             "username": "py-" + uuid4().hex[:20],
             "email": uuid4().hex + "@example.com",
@@ -73,6 +83,11 @@ class Scenario:
         return request, data, headers
 
     def pet(self, price="10.25"):
+        """Создаёт собственного тестового питомца и записывает UUID для очистки.
+
+        :param price: Цена в рублях с точностью до копейки.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         response = self.client.post(
             "/pet",
             headers=self.admin,
@@ -90,6 +105,12 @@ class Scenario:
         return data
 
     def draft(self, pet, headers):
+        """Создаёт черновик тестового заказа без оформления.
+
+        :param pet: Значение текущего тестового сценария.
+        :param headers: Заголовки авторизации текущего тестового пользователя.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         response = self.client.post("/store/order", headers=headers, json={"petId": pet["id"], "quantity": 1})
         assert response.status_code == 201, response.text
         data = response.json()
@@ -97,11 +118,25 @@ class Scenario:
         return data
 
     def place(self, order, headers):
+        """Размещает собственный тестовый заказ.
+
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :param headers: Заголовки авторизации текущего тестового пользователя.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         response = self.client.post(f"/store/order/{order['id']}/place", headers=headers)
         assert response.status_code == 200, response.text
         return response.json()
 
     def pay(self, order, headers, card="4242424242424242", key=None):
+        """Отправляет тестовую оплату с выбранной картой и ключом повторного запроса.
+
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :param headers: Заголовки авторизации текущего тестового пользователя.
+        :param card: Номер выбранной тестовой карты.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+        """
         return self.client.post(
             f"/store/order/{order['id']}/payments",
             headers=headers | {"Idempotency-Key": str(key or uuid4())},
@@ -117,6 +152,11 @@ class Scenario:
 
 @pytest.fixture
 def scenario(integration_database):
+    """Создаёт API-сценарий с администратором и удалением только записанных UUID.
+
+    :param integration_database: Настройки и соединение только выделенной тестовой базы.
+    :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+    """
     settings, database = integration_database
     app = create_app(settings=settings, database=database)
     with TestClient(app, base_url="http://testserver/api/v3") as client:
@@ -126,7 +166,7 @@ def scenario(integration_database):
         try:
             yield scenario
         finally:
-            # Exact UUIDs created by this fixture only; no email/username guesses or broad deletes.
+            # Удаляем только UUID этой фикстуры; без поиска по email/имени и массового удаления.
             with database.connect() as connection:
                 for order_id in scenario.orders:
                     connection.execute("DELETE FROM payments WHERE order_id = %s", (order_id,))

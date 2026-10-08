@@ -1,4 +1,4 @@
-"""Registration, confirmation, password recovery and role-based authorization."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import math
 from dataclasses import dataclass
@@ -19,7 +19,7 @@ from petstore.utils.responses import public_user
 
 @dataclass
 class LoginAttempts:
-    """Per-identifier failure window, matching the existing five-minute policy."""
+    """Окно неуспешных входов для идентификатора по действующему правилу пяти минут."""
 
     window_start: datetime
     count: int
@@ -27,16 +27,17 @@ class LoginAttempts:
 
 
 class AuthService:
-    """Account business rules shared by the original controller responsibilities."""
+    """Бизнес-правила регистрации, подтверждения, входа и восстановления."""
 
     CONFIRMATION_TTL_HOURS = 24
     PASSWORD_RESET_TTL_MINUTES = 30
 
     def __init__(self, user_data: UserData, settings: Settings) -> None:
-        """Configure compatible security services and an instance-scoped login limiter.
+        """Настраивает безопасность и отдельный для приложения ограничитель попыток входа.
 
-        :param user_data: PostgreSQL user repository.
-        :param settings: URL, link-exposure and token configuration.
+        :param user_data: Репозиторий пользователей с общим пулом соединений.
+        :param settings: Настройки приложения и его инфраструктурных подключений.
+        :return: Ничего не возвращает.
         """
         self.user_data = user_data
         self.settings = settings
@@ -47,9 +48,10 @@ class AuthService:
         self.attempts_lock = RLock()
 
     def register(self, request: RegisterRequest) -> Row:
-        """Create a pending user and a 24-hour confirmation link.
+        """Создаёт неподтверждённого пользователя и ссылку подтверждения на 24 часа.
 
-        :param request: Validated account data.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Row.
         """
         assert request.password is not None
         code = self.credentials.new_one_time_code()
@@ -68,9 +70,10 @@ class AuthService:
         }
 
     def required_user(self, user_id: UUID) -> Row:
-        """Find an account or emit the existing account-specific 404.
+        """Возвращает аккаунт либо действующую ошибку отсутствующего пользователя.
 
-        :param user_id: Account UUID.
+        :param user_id: UUID целевого пользователя.
+        :return: Результат операции типа Row.
         """
         user = self.user_data.find_user_by_id(user_id)
         if user is None:
@@ -78,23 +81,25 @@ class AuthService:
         return user
 
     def confirmation_url(self, user_id: UUID, code: str) -> str:
-        """Build a confirmation URL using the configured external API address.
+        """Строит ссылку подтверждения на основе внешнего адреса API.
 
-        :param user_id: Account UUID.
-        :param code: Raw confirmation code.
+        :param user_id: UUID целевого пользователя.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :return: Строковый результат описанной операции.
         """
         return f"{self.settings.public_base_url}/auth/confirm/{user_id}?code={code}"
 
     def validate_code(
         self, code: str, stored: str | None, expires: datetime | None, invalid: str, expired: str
     ) -> None:
-        """Distinguish an invalid link from an expired valid code.
+        """Различает неверную ссылку и корректный код с истёкшим сроком.
 
-        :param code: Supplied code.
-        :param stored: Persisted SHA-256 code hash.
-        :param expires: Persisted deadline.
-        :param invalid: Operation-specific invalid-link error.
-        :param expired: Operation-specific expired-link error.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :param stored: Сохранённое значение для сравнения.
+        :param expires: Время окончания действия ссылки или резерва.
+        :param invalid: Код ошибки для неверной ссылки.
+        :param expired: Код ошибки для истёкшей ссылки.
+        :return: Ничего не возвращает.
         """
         if not self.credentials.code_matches(code, stored):
             raise AccountException(400, invalid, "The one-time link is invalid")
@@ -102,16 +107,18 @@ class AuthService:
             raise AccountException(410, expired, "The one-time link has expired")
 
     def confirm(self, user_id: UUID, code: str) -> Row:
-        """Consume a matching unexpired confirmation code, preserving a blocked status.
+        """Однократно применяет неистёкший код, сохраняя блокировку аккаунта.
 
-        :param user_id: Account UUID from the path.
-        :param code: One-time query parameter.
+        :param user_id: UUID целевого пользователя.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :return: Результат операции типа Row.
         """
 
         def validate(current: Row) -> None:
-            """Check the current state and code after the repository acquires its lock.
+            """Проверяет состояние и код после получения репозиторием блокировки строки.
 
-            :param current: Locked account row.
+            :param current: Текущее состояние или версия записи.
+            :return: Ничего не возвращает.
             """
             self.require_unconfirmed_user(current)
             self.validate_code(
@@ -126,18 +133,20 @@ class AuthService:
 
     @staticmethod
     def require_unconfirmed_user(user: Row) -> None:
-        """Reject an already-confirmed current row; missing rows are handled by the repository.
+        """Отклоняет уже подтверждённую строку; отсутствие пользователя обрабатывает репозиторий.
 
-        :param user: Account row read under the confirmation transaction lock.
+        :param user: Строка пользователя, полученная из базы данных.
+        :return: Ничего не возвращает.
         """
         if user["confirmed_at"] is not None:
             raise AccountException(409, "ACCOUNT_ALREADY_CONFIRMED", "The account has already been confirmed")
 
     def authenticated_user(self, email: str, password: str) -> Row:
-        """Authenticate credentials and enforce the existing failure-window policy.
+        """Проверяет учётные данные и применяет ограничение неуспешных попыток входа.
 
-        :param email: Submitted email, normalized only for rate-limit bookkeeping.
-        :param password: Submitted password, never logged.
+        :param email: Email аккаунта; не включается в диагностические логи.
+        :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+        :return: Результат операции типа Row.
         """
         identifier = email.strip().lower()
         now = datetime.now(UTC)
@@ -178,10 +187,11 @@ class AuthService:
 
     @staticmethod
     def raise_rate_limited(blocked_until: datetime, now: datetime) -> None:
-        """Report the remaining lockout in whole minutes.
+        """Формирует ошибку ограничения с оставшимся временем блокировки в целых минутах.
 
-        :param blocked_until: Current lockout deadline.
-        :param now: Current UTC time.
+        :param blocked_until: Время окончания ограничения входа.
+        :param now: Текущее время для проверки срока действия.
+        :return: Ничего не возвращает.
         """
         minutes = max(1, math.ceil((blocked_until - now).total_seconds() / 60))
         raise AccountException(
@@ -189,10 +199,11 @@ class AuthService:
         )
 
     def login(self, email: str, password: str) -> Row:
-        """Issue a token only for an active, unblocked account.
+        """Выдаёт токен только активному незаблокированному аккаунту.
 
-        :param email: Submitted email.
-        :param password: Submitted password.
+        :param email: Email аккаунта; не включается в диагностические логи.
+        :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+        :return: Результат операции типа Row.
         """
         user = self.authenticated_user(email, password)
         self.ensure_account_can_authenticate(user)
@@ -205,9 +216,10 @@ class AuthService:
 
     @staticmethod
     def ensure_account_can_authenticate(user: Row) -> None:
-        """Reject pending or blocked accounts with their original errors.
+        """Отклоняет неподтверждённые и заблокированные аккаунты с действующими кодами ошибок.
 
-        :param user: Persisted account row.
+        :param user: Строка пользователя, полученная из базы данных.
+        :return: Ничего не возвращает.
         """
         if user["user_status"] == "PENDING":
             raise AccountException(403, "ACCOUNT_NOT_VERIFIED", "The account has not been confirmed")
@@ -215,10 +227,11 @@ class AuthService:
             raise AccountException(403, "ACCOUNT_BLOCKED", "The account is blocked")
 
     def authorize(self, authorization: str | None, *roles: str) -> Row:
-        """Validate Bearer syntax, signature, current account state, role and token version.
+        """Проверяет Bearer, подпись, состояние аккаунта, роль и версию токена.
 
-        :param authorization: Incoming Authorization header.
-        :param roles: Allowed role names; empty means any authenticated role.
+        :param authorization: Значение заголовка Authorization входящего запроса.
+        :param roles: Роли, которым разрешена операция; пустой список разрешает любой авторизованный аккаунт.
+        :return: Результат операции типа Row.
         """
         if authorization is None or not authorization.strip():
             raise AccountException(401, "UNAUTHORIZED", "Bearer token is required")
@@ -238,10 +251,11 @@ class AuthService:
         return user
 
     def resend_confirmation(self, email: str, password: str) -> Row:
-        """Replace the code so every earlier confirmation link becomes invalid.
+        """Заменяет код подтверждения; все прежние ссылки становятся недействительными.
 
-        :param email: Account email.
-        :param password: Credentials required to regenerate the link.
+        :param email: Email аккаунта; не включается в диагностические логи.
+        :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+        :return: Результат операции типа Row.
         """
         user = self.authenticated_user(email, password)
         if user["confirmed_at"] is not None:
@@ -255,9 +269,10 @@ class AuthService:
         return {"confirmationUrl": self.confirmation_url(user["id"], code), "expiresAt": expires}
 
     def forgot_password(self, email: str) -> Row:
-        """Issue a thirty-minute reset code and honor PETSTORE_EXPOSE_TEST_LINKS.
+        """Выдаёт код восстановления на 30 минут с учётом PETSTORE_EXPOSE_TEST_LINKS.
 
-        :param email: Account email.
+        :param email: Email аккаунта; не включается в диагностические логи.
+        :return: Результат операции типа Row.
         """
         user = self.user_data.find_user_by_email(email)
         if user is None:
@@ -278,10 +293,11 @@ class AuthService:
         return {"resetUrl": url, "expiresAt": expires}
 
     def reset_password(self, code: str, new_password: str) -> None:
-        """Consume a reset code once and invalidate every earlier access token.
+        """Однократно применяет код восстановления и отзывает все прежние токены доступа.
 
-        :param code: Query parameter from the reset link.
-        :param new_password: Validated replacement password.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :param new_password: Новый пароль, проверенный правилами операции.
+        :return: Ничего не возвращает.
         """
         hashed = self.credentials.hash_one_time_code(code)
         with self.user_data.database.connect() as connection:
@@ -327,11 +343,12 @@ class AuthService:
             self.login_attempts.pop(row["email"].strip().lower(), None)
 
     def set_blocked(self, actor: Row, user_id: UUID, blocked: bool) -> Row:
-        """Block or restore a non-administrator account without allowing self-management.
+        """Блокирует или восстанавливает обычный аккаунт, запрещая управление собственным доступом.
 
-        :param actor: Authorized administrator.
-        :param user_id: Target UUID.
-        :param blocked: True to block, false to unblock.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param user_id: UUID целевого пользователя.
+        :param blocked: Новое состояние блокировки аккаунта.
+        :return: Результат операции типа Row.
         """
         target = self.required_user(user_id)
         if actor["id"] == user_id or target["role"] == "ADMIN":

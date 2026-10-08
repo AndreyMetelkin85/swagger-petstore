@@ -11,6 +11,8 @@ on:
     outputs:
       candidate_digest:
         value: ${{ jobs.build.outputs.candidate_digest }}
+      mail_digest:
+        value: ${{ jobs.build.outputs.mail_digest }}
 permissions:
   contents: read
 jobs:
@@ -19,6 +21,7 @@ jobs:
     timeout-minutes: 12
     outputs:
       candidate_digest: ${{ steps.image.outputs.digest }}
+      mail_digest: ${{ steps.mail.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v4
@@ -63,3 +66,19 @@ jobs:
         run: |
           docker pull "$CANDIDATE"
           test "$(docker image inspect --format '{{.Architecture}}' "$CANDIDATE")" = "$ARCH"
+      - name: Build the separate mail candidate
+        id: mail
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.mail
+          pull: true
+          push: true
+          platforms: linux/${{ inputs.arch }}
+          tags: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore-mail:candidate-${{ github.sha }}-${{ github.run_id }}-${{ inputs.arch }}
+          build-args: SECURITY_UPDATE_EPOCH=${{ steps.cache.outputs.day }}
+          cache-from: type=registry,ref=${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore-mail:buildcache-${{ steps.cache.outputs.branch }}-${{ inputs.arch }}
+          cache-to: type=registry,ref=${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore-mail:buildcache-${{ steps.cache.outputs.branch }}-${{ inputs.arch }},mode=max
+          sbom: true
+          provenance: mode=max
+          labels: org.opencontainers.image.revision=${{ github.sha }}

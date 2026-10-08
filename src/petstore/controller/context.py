@@ -1,4 +1,4 @@
-"""Typed request context independent of FastAPI's automatic validation response."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,7 +17,7 @@ Model = TypeVar("Model", bound=RequestModel)
 
 @dataclass
 class RequestContext:
-    """Parsed transport values passed to the unchanged controller responsibilities."""
+    """Контекст HTTP-запроса с авторизацией, параметрами и моделью тела."""
 
     request: Request
     auth: AuthService
@@ -26,24 +26,27 @@ class RequestContext:
     upload: tuple[bytes, str, str] | None = None
 
     def authorize(self, *roles: str) -> Row:
-        """Authorize the incoming Bearer token with operation-specific roles.
+        """Проверяет Bearer-токен и разрешённые роли для текущей операции.
 
-        :param roles: Allowed roles.
+        :param roles: Роли, которым разрешена операция; пустой список разрешает любой авторизованный аккаунт.
+        :return: Результат операции типа Row.
         """
         return self.auth.authorize(self.request.headers.get("Authorization"), *roles)
 
     def identifier(self, name: str) -> UUID:
-        """Return a UUID already checked by the shared transport adapter.
+        """Возвращает UUID, уже проверенный HTTP-адаптером.
 
-        :param name: Public parameter name.
+        :param name: Имя UUID-параметра, проверенного HTTP-адаптером.
+        :return: Результат операции типа UUID.
         """
         return cast(UUID, self.parameters[name])
 
     def validated(self, model: type[Model], validator: Callable[[Model], Details]) -> Model:
-        """Apply the original business validator to a parsed request model.
+        """Проверяет тип тела и применяет бизнес-валидацию модели запроса.
 
-        :param model: Expected request class.
-        :param validator: Operation-specific validation function.
+        :param model: Ожидаемая модель разобранного запроса.
+        :param validator: Функция бизнес-валидации, возвращающая ошибки полей.
+        :return: Результат операции типа Model.
         """
         assert isinstance(self.body, model)
         ValidationService.ensure(validator(self.body))

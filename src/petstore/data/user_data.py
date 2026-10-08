@@ -1,4 +1,4 @@
-"""User persistence retaining the original lifecycle and protected-account rules."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 from collections.abc import Callable
 from datetime import datetime
@@ -14,35 +14,39 @@ from petstore.service.exceptions import AccountException
 
 
 class UserData:
-    """PostgreSQL-backed user repository, with no password fields in public responses."""
+    """Аккаунты PostgreSQL; публичные ответы не содержат паролей."""
 
     def __init__(self, database: Database) -> None:
-        """Use the application's bounded connection pool.
+        """Сохраняет общий пул соединений для операций репозитория.
 
-        :param database: PostgreSQL connection factory.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.database = database
 
     def find_user_by_id(self, user_id: UUID) -> Row | None:
-        """Find an account by its existing UUID.
+        """Ищет аккаунт по существующему UUID.
 
-        :param user_id: Persisted account identifier.
+        :param user_id: UUID целевого пользователя.
+        :return: Результат операции типа Row | None.
         """
         with self.database.connect() as connection:
             return connection.execute("SELECT * FROM users WHERE id = %s", (user_id,)).fetchone()
 
     def find_user_by_name(self, username: str) -> Row | None:
-        """Find a case-sensitive username, matching the original unique constraint.
+        """Ищет имя пользователя с учётом регистра, как в уникальном ограничении базы.
 
-        :param username: Account username.
+        :param username: Имя пользователя.
+        :return: Результат операции типа Row | None.
         """
         with self.database.connect() as connection:
             return connection.execute("SELECT * FROM users WHERE username = %s", (username,)).fetchone()
 
     def find_user_by_email(self, email: str) -> Row | None:
-        """Find a case-insensitive email without silently changing stored values.
+        """Ищет email без учёта регистра, не меняя сохранённое значение.
 
-        :param email: Submitted email.
+        :param email: Email аккаунта; не включается в диагностические логи.
+        :return: Результат операции типа Row | None.
         """
         with self.database.connect() as connection:
             return connection.execute(
@@ -51,10 +55,11 @@ class UserData:
 
     @staticmethod
     def locked_user(connection: DbConnection, user_id: UUID) -> Row:
-        """Acquire a user row lock inside the caller's transaction.
+        """Блокирует пользователя внутри транзакции вызывающего сервиса.
 
-        :param connection: Current transaction connection.
-        :param user_id: Target UUID.
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param user_id: UUID целевого пользователя.
+        :return: Результат операции типа Row.
         """
         user = connection.execute(
             "SELECT * FROM users WHERE id = %s FOR NO KEY UPDATE", (user_id,)
@@ -66,12 +71,13 @@ class UserData:
     def add_pending_user(
         self, request: RegisterRequest, password_hash: str, code_hash: str, expires: datetime
     ) -> Row:
-        """Create a pending account without granting client-supplied privileges.
+        """Создаёт неподтверждённый аккаунт без прав, переданных клиентом.
 
-        :param request: Validated registration data.
-        :param password_hash: Bcrypt hash.
-        :param code_hash: Confirmation code hash.
-        :param expires: Confirmation deadline.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param password_hash: Сохранённый хеш пароля.
+        :param code_hash: Сохранённый хеш одноразового кода.
+        :param expires: Время окончания действия ссылки или резерва.
+        :return: Результат операции типа Row.
         """
         address = request.address
         try:
@@ -109,10 +115,11 @@ class UserData:
             ) from exc
 
     def registration_conflicts(self, username: str | None, email: str | None) -> list[Row]:
-        """Read both conflicting fields in one snapshot after a failed insertion.
+        """Читает оба конфликтующих поля из одного снимка после неуспешной вставки.
 
-        :param username: Submitted username, not echoed in the response.
-        :param email: Submitted email, compared case-insensitively and not echoed.
+        :param username: Имя пользователя.
+        :param email: Email аккаунта; не включается в диагностические логи.
+        :return: Результат операции типа list[Row].
         """
         with self.database.connect() as connection:
             conflicts = connection.execute(
@@ -134,12 +141,13 @@ class UserData:
         query: LiteralString,
         parameters: tuple[Any, ...],
     ) -> Row:
-        """Validate and mutate the same locked row, serializing confirm/resend/deletion.
+        """Проверяет и меняет одну заблокированную строку для согласования confirm, resend и удаления.
 
-        :param user_id: Account UUID.
-        :param validate: Business checks performed after acquiring the row lock.
-        :param query: Static update statement.
-        :param parameters: Bound update values.
+        :param user_id: UUID целевого пользователя.
+        :param validate: Проверка состояния строки, вызываемая после получения блокировки.
+        :param query: Текст запроса или разобранные фильтры текущей операции.
+        :param parameters: Проверенные параметры запроса.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             validate(self.locked_user(connection, user_id))
@@ -149,10 +157,11 @@ class UserData:
             return updated
 
     def confirm_user(self, user_id: UUID, validate: Callable[[Row], None]) -> Row:
-        """Consume a confirmation link after validating its current locked state.
+        """Потребляет ссылку после проверки текущего заблокированного состояния аккаунта.
 
-        :param user_id: Account UUID.
-        :param validate: Confirmation-code, expiry and state checks.
+        :param user_id: UUID целевого пользователя.
+        :param validate: Проверка состояния строки, вызываемая после получения блокировки.
+        :return: Результат операции типа Row.
         """
         return self._update_confirmation(
             user_id,
@@ -166,12 +175,13 @@ class UserData:
     def set_confirmation_link(
         self, user_id: UUID, code_hash: str, expires: datetime, validate: Callable[[Row], None]
     ) -> Row:
-        """Replace a link only while the current locked account is still unconfirmed.
+        """Заменяет ссылку, только пока заблокированный аккаунт остаётся неподтверждённым.
 
-        :param user_id: Account UUID.
-        :param code_hash: New SHA-256 code hash.
-        :param expires: New deadline.
-        :param validate: Current account-state check under the row lock.
+        :param user_id: UUID целевого пользователя.
+        :param code_hash: Сохранённый хеш одноразового кода.
+        :param expires: Время окончания действия ссылки или резерва.
+        :param validate: Проверка состояния строки, вызываемая после получения блокировки.
+        :return: Результат операции типа Row.
         """
         return self._update_confirmation(
             user_id,
@@ -181,10 +191,11 @@ class UserData:
         )
 
     def update_user(self, user: Row, request: UserUpdateRequest) -> Row:
-        """Apply a partial update and distinguish missing address from explicit null.
+        """Частично обновляет профиль, различая отсутствие адреса и явный null.
 
-        :param user: Authorized account row.
-        :param request: Validated profile changes.
+        :param user: Строка пользователя, полученная из базы данных.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Row.
         """
         present = "address" in request.model_fields_set
         address = request.address
@@ -220,10 +231,11 @@ class UserData:
             return row
 
     def update_user_as_admin(self, user_id: UUID, request: AdminUserUpdateRequest) -> Row:
-        """Serialize administrator changes, protect the last admin and invalidate old tokens.
+        """Согласует изменения ADMIN, защищает последнего администратора и отзывает старые токены.
 
-        :param user_id: Target account UUID.
-        :param request: Validated full profile.
+        :param user_id: UUID целевого пользователя.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Row.
         """
         assert request.email is not None
         email = request.email.strip().lower()
@@ -300,15 +312,19 @@ class UserData:
             ) from exc
 
     def find_all(self) -> list[Row]:
-        """List accounts in the same deterministic UUID order."""
+        """Возвращает аккаунты в детерминированном порядке UUID.
+
+        :return: Результат операции типа list[Row].
+        """
         with self.database.connect() as connection:
             return connection.execute("SELECT * FROM users ORDER BY id").fetchall()
 
     def delete_user(self, actor: Row, user_id: UUID) -> None:
-        """Delete only an unprotected account without order history.
+        """Удаляет только незащищённый аккаунт без истории заказов.
 
-        :param actor: Authorized administrator.
-        :param user_id: Target account UUID.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param user_id: UUID целевого пользователя.
+        :return: Ничего не возвращает.
         """
         with self.database.connect() as connection:
             user = self.locked_user(connection, user_id)

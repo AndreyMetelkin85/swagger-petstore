@@ -1,1 +1,1 @@
-"""Explicit native FastAPI routers, transport dependencies and public DTO boundaries."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""

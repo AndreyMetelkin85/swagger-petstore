@@ -1,4 +1,4 @@
-"""Administration routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -14,7 +14,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> AdminUserController:
-    """Inject this application's administration controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа AdminUserController.
+    """
     return cast(AdminUserController, context.request.app.state.controllers.administration)
 
 
@@ -36,7 +40,14 @@ def block_user(
     response: Response,
     user_id: Annotated[UUID, Path(alias="userId")],
 ) -> User:
-    """Блокировка пользователя."""
+    """Блокировка пользователя.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param user_id: UUID целевого пользователя.
+    :return: Результат операции типа User.
+    """
     context.parameters = {"userId": user_id}
     result = controller.block_user(context)
     return decode_response(result, response)
@@ -57,7 +68,14 @@ def unblock_user(
     response: Response,
     user_id: Annotated[UUID, Path(alias="userId")],
 ) -> User:
-    """Разблокировка пользователя."""
+    """Разблокировка пользователя.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param user_id: UUID целевого пользователя.
+    :return: Результат операции типа User.
+    """
     context.parameters = {"userId": user_id}
     result = controller.unblock_user(context)
     return decode_response(result, response)

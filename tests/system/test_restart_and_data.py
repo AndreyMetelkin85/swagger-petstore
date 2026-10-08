@@ -10,9 +10,10 @@ pytestmark = pytest.mark.system
 
 
 def run_docker(*args: str) -> str:
-    """Run a bounded command against the explicitly selected isolated test container.
+    """Выполняет Docker-команду только для выбранных тестовых ресурсов.
 
-    :param args: Docker arguments without credentials or request payloads.
+    :param args: Аргументы Docker для собственных тестовых ресурсов.
+    :return: Результат описанной проверки или подготовки тестовых данных.
     """
     return subprocess.run(
         ["docker", *args], check=True, capture_output=True, text=True, timeout=60
@@ -21,6 +22,10 @@ def run_docker(*args: str) -> str:
 
 @pytest.fixture
 def restart_record():
+    """Создаёт аккаунт для проверки перезапуска и удаляет его по UUID.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     url = os.getenv("PETSTORE_UI_URL")
     container = os.getenv("PETSTORE_RESTART_CONTAINER")
     if not url or not container:
@@ -52,7 +57,10 @@ def restart_record():
 def test_existing_user_and_flyway_history_survive_restart(restart_record):
     client, container, before = restart_record
     query = "SELECT string_agg(version || ':' || checksum::text, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success AND type = 'SQL'"
-    history_before = run_docker("exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", query)
+    database_container = "petstore-python-db"
+    history_before = run_docker(
+        "exec", database_container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", query
+    )
     run_docker("restart", container)
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
@@ -71,6 +79,8 @@ def test_existing_user_and_flyway_history_survive_restart(restart_record):
     )
     assert response.status_code == 200
     assert response.json() == before
-    history_after = run_docker("exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", query)
+    history_after = run_docker(
+        "exec", database_container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", query
+    )
     assert history_after == history_before
     assert len(history_after.split(",")) == 12

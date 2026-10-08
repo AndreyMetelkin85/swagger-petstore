@@ -1,340 +1,137 @@
-# Лапки — полный учебный зоомагазин
+# Swagger Petstore — бэкенд учебного магазина «Лапки»
 
-React-фронт, Python/FastAPI, PostgreSQL и тестовая почта smtp4dev работают **в одном контейнере** из общего образа `andymentor/swagger-petstore`. Данные настоящие и сохраняются сервером; каталог, пользователи и платежи используются для обучения тестированию. Оплата — серверный симулятор с тестовыми картами.
+Python/FastAPI API для обучения ручному и автоматизированному тестированию. Реальные HTTP-запросы, PostgreSQL, тестовые письма и платёжный симулятор. Банковских списаний нет.
 
-## Сборка и запуск
+## Границы проектов
 
-Из корня этого репозитория:
+- **Этот репозиторий:** API, бизнес-правила, SQL-миграции, Swagger, серверные тесты и инфраструктура общего стенда.
+- **[lapki-frontend](https://github.com/AndreyMetelkin85/lapki-frontend):** React, UI, DTO-адаптеры, браузерные тесты, сборка и отдельный образ фронтенда.
 
-```powershell
-docker compose build
-docker compose up -d --wait
-```
+Исходники фронтенда не копируются в бэкенд. Каждый проект имеет собственный Dockerfile и CI. Общий `docker-compose.yml` запускает готовые образы обоих проектов; клонировать фронтенд для запуска не нужно.
 
-Или собрать и запустить одной командой:
+## Запуск опубликованного стенда
 
-```powershell
-docker compose up -d --build --wait --wait-timeout 300
-```
-
-Compose содержит один сервис `petstore`. Отдельные контейнеры фронта, БД и почты не требуются. Dockerfile сам собирает React из `ui/`, устанавливает API и включает Nginx, PostgreSQL и smtp4dev. Node нужен только на стадии сборки. Встроенный .NET runtime почты закреплён на исправленной версии; SMTP-релей во внешний мир выключен.
-
-| Назначение | Адрес |
-| --- | --- |
-| Магазин | http://localhost:8090/ |
-| Swagger | http://localhost:8080/ |
-| API | http://localhost:8080/api/v3 |
-| Почта | http://localhost:8025/ — ящик Tests для произвольных тестовых адресов |
-| SMTP / IMAP | localhost:2525 / localhost:1143 |
-| PostgreSQL | localhost:5432 |
-
-Первоначальные аккаунты: `admin@example.com / admin123` и `test@example.com / password123`. Пользователь может зарегистрироваться и подтвердить настоящее письмо в smtp4dev. Учётные записи и их изменения сохраняются в PostgreSQL.
-
-При первом запуске добавляется небольшой каталог с настоящими фотографиями: четыре товара (корма для кошек и собак, набор мисок, лежанка) и четыре питомца (Барсик, Луна, Бим, Ричи). Изображения и лицензии входят в образ: доступ к внешним фотосайтам при запуске не требуется. Источники перечислены в `resources/demo-catalog/sources.json`; атрибуция сохранена в карточках и метаданных фотографий. Цены, имена и сведения о товарах учебные.
-
-Наполнение сохраняет прежние записи и заказы; последующие запуски не возвращают начальные цены, остатки или статусы. Идентификаторы добавленных карточек хранятся в `.demo-catalog-v1.json` внутри медиатома. `PETSTORE_DEMO_CATALOG=false` отключает автоматическое наполнение. В изолированном стенде старых контрактных тестов оно отключено по умолчанию.
-
-База, фотографии и письма хранятся в отдельных постоянных volumes. Пересоздание одного контейнера сохраняет данные. В `.env` сохраните прежние имена томов и JWT secret. Пример для нового учебного окружения находится в `.env.example`; существующую `.env` заменять не требуется. Если в старой `.env` перечислялись overlay-файлы почты/фронта, используйте `COMPOSE_FILE=docker-compose.yml`.
-
-Для скачивания уже опубликованного общего образа вместо локальной сборки:
+Нужны Git, Docker Desktop с Linux-контейнерами и Docker Compose.
 
 ```powershell
+git clone https://github.com/AndreyMetelkin85/swagger-petstore.git
+cd swagger-petstore
+Copy-Item .env.example .env
 docker compose pull
-docker compose up -d --no-build --wait
+docker compose up -d --wait --wait-timeout 180
 ```
-## Быстрая доставка изменений
 
-CI сравнивает изменения с последним успешно опубликованным `master`. Документация и перенос уже выпущенного кода в `dev` не запускают Docker-сборку. Изменения UI и фотографий проходят unit/TypeScript, обе архитектуры, сканирование и настоящий API/SMTP без повторного прогона неизменённого backend. Изменения API, зависимостей, миграций, тестов и pipeline проходят полную регрессию.
+Перед первым запуском задайте собственный `PETSTORE_TOKEN_SECRET` в `.env`.
+Если стенд уже существует, используйте его прежний `.env`: не меняйте секрет, пароль БД и имена томов.
 
-Образ собирается один раз на каждой нативной архитектуре и сохраняется под `candidate-*`. Все проверки используют его неизменяемый digest. `latest` и `sha-*` создаются из проверенных digests после успешных проверок, без повторной сборки. Теги `candidate-*` предназначены только для CI. Подробности и команды: `docs/DELIVERY.md`.
+| Приложение | Адрес по умолчанию |
+| --- | --- |
+| Магазин | http://localhost:8090 |
+| Swagger и API | http://localhost:8080 |
+| Тестовая почта | http://localhost:8025 |
+| PostgreSQL | localhost:5432 |
+| SMTP / IMAP | localhost:2525 / localhost:1143 |
 
-Обновить локальный стенд опубликованным релизом:
+Начальные учебные аккаунты: `admin@example.com / admin123` и `test@example.com / password123`. Они создаются в новой базе; изменения существующих аккаунтов сохраняются.
+
+## Сервисы и данные
+
+| Сервис Compose | Ответственность |
+| --- | --- |
+| `frontend` | React и проксирование `/api/v3` в API |
+| `backend` | FastAPI, без встроенных PostgreSQL, React и SMTP |
+| `postgres` | Постоянная база данных |
+| `mail` | smtp4dev: просмотр писем, SMTP и IMAP |
+| `migrations` | Однократный Flyway перед запуском API |
+
+Миграции используют тот же образ, что и API: версии приложения и миграций согласованы. Java-исходников, Maven и Tomcat нет; JRE нужен только CLI Flyway.
+
+База, изображения и письма находятся в **трёх отдельных постоянных томах**. Имена задаются через `PETSTORE_DB_VOLUME`, `PETSTORE_MEDIA_VOLUME` и `PETSTORE_MAIL_VOLUME`.
+
+### Обновление и переход со старого общего контейнера
 
 ```powershell
-.\docker\update-store.ps1
+git pull --ff-only
+docker compose pull
+docker compose up -d --wait --wait-timeout 180
 ```
 
-Скрипт сохраняет `.env` и volumes и не пересоздаёт уже здоровый контейнер с той же версией.
+Если раньше магазин запускался одним контейнером `swagger-petstore`, сначала остановите его: он занимает прежние порты и держит базу. Сохраните его для отката. Новый PostgreSQL должен использовать **тот же том БД**; у старых установок он мог называться `swagger-petstore-data`, а не `swagger-petstore-db-data`.
 
-## Структура проекта
+Не запускайте два PostgreSQL на одном томе. Не используйте `down -v` для рабочего стенда. Перед переходом сохраните резервную копию БД. Первые 12 SQL-миграций не изменены, их история и контрольные суммы сохраняются.
+
+Для воспроизводимого запуска задайте проверенные теги `sha-...` в `PETSTORE_IMAGE_TAG`, `FRONTEND_IMAGE` и `PETSTORE_MAIL_IMAGE`. `latest` предназначен для обновления учебного стенда; зафиксированные версии подходят для CI и отката.
+
+## Возможности API
+
+Все бизнес-маршруты находятся под `/api/v3`; точные DTO и ошибки — в Swagger.
+
+- Регистрация, подтверждение и повторная отправка ссылки; вход, JWT, роли USER/ADMIN, восстановление пароля.
+- Профиль, адрес доставки, административное управление и защита аккаунтов.
+- Товары и корма, категории, расширенные питомцы, черновики, публикация, архив, поиск и остатки.
+- Проверенная загрузка JPEG, PNG и статичного WebP; удаление EXIF, миниатюры и защищённые обложки заказов.
+- Гостевая/серверная корзина, общий заказ товаров и питомцев, резерв на 15 минут.
+- Оплата, повторы по Idempotency-Key, отмена, возврат и состояния доставки.
+- Совместимые маршруты прежнего Petstore для пользователей, питомцев и одиночных заказов.
+- Health, X-Request-ID и ограниченная безопасная телеметрия.
+
+Симулятор карт: `4242424242424242` — успех; `4000000000000002` — отказ; `4000000000009995` — недостаточно средств. Только тестовые реквизиты, например срок `12/2099`, CVV `123`.
+
+Почтовый relay во внешний мир выключен. IMAP-пользователи: `user1`, `user2`, `tests`; учебный пароль `mail-test-only`. Ящики User1/User2 соответствуют `user1@petstore.test` / `user2@petstore.test`; остальные учебные письма доступны в Tests.
+
+## Структура бэкенда
 
 ```text
 src/petstore/
-  app.py          Lifecycle, обработчики ошибок и безопасные request-логи
-  api/            APIRouter, Depends, типизированные параметры и проверка ответов
-  config.py       Настройки окружения
-  controller/     Endpoint-обработчики и права доступа
-  service/        Бизнес-правила и границы транзакций: аккаунты, каталог, корзина, checkout
-  data/           SQL-репозитории, pool и общие блокировки строк
-  model/          DTO и перечисления
-  notification/   SMTP и шаблоны писем
-  utils/          Формат публичных ответов
-
+  api/            маршруты FastAPI, зависимости, транспортные ограничения
+  controller/     авторизация и адаптация HTTP-команд
+  service/        бизнес-правила и согласование транзакций
+  data/           пул PostgreSQL и SQL-операции
+  model/          запросы, ответы и перечисления
+  notification/   шаблоны писем и SMTP
+  utils/          безопасная сериализация
 resources/
-  openapi.yaml    Контракт API
-  db/migration/   SQL-миграции V1–V12; прежние checksums не изменяются
-  web/            Swagger-страница и резервная форма сброса пароля
-
+  openapi.yaml    опубликованный контракт
+  db/migration/   неизменённая история Flyway
+  web/            Swagger и служебные страницы API
 tests/
-  unit/           Проверки компонентов без живой БД
-  integration/    Операции и конкуренция на отдельном PostgreSQL
-  system/         Swagger, почта, рестарт и обновление старой установки
-  smoke/          HTTP-сценарии запущенного сервера
-  docker-compose.yml  Изолированный тестовый стенд
-
-docker/           Запуск PostgreSQL, API, Nginx и встроенной почты
-docs/history.md   Архив исправлений
-.github/workflows/ Проверки и публикация
+  unit/           изолированные проверки
+  integration/    API с выделенной PostgreSQL
+  system/         контейнеры, Swagger, SMTP/IMAP и сохранность данных
+  smoke/          проверки контракта выпущенного образа
+docker/           инфраструктура, CI и безопасные проверки готовности
 ```
 
-Поток запроса: api → controller → service → data → PostgreSQL → проверенный DTO ответа.
+JavaScript служебных страниц Swagger остаётся в бэкенде: это документация API, а не исходники магазина.
 
-| Компонент | Ответственность |
-|---|---|
-| app | Жизненный цикл pool/expiry, единый формат ошибок и безопасные request-логи |
-| api | Явные нативные маршруты FastAPI, Depends, Body/Path/Query/Header и response_model |
-| controller | Проверяет роль и адаптирует HTTP-команду к доменному действию; общего dispatch по именам операций нет |
-| service | Правила аккаунта, каталога, корзины и checkout; один transaction context на команду |
-| data | SQL с bound parameters и детерминированные блокировки; не решает бизнес-переходы mixed checkout |
-| model | Формат данных и именованные статусы, без сетевых вызовов |
-| notification | Отправка писем после сохранения операции; без изменения HTTP-контракта |
-| utils | Сериализация UUID/UTC/Decimal и исключение приватных полей из ответа |
+## Разработка и проверки
 
-Сервис mixed checkout управляет переходами, резервом и refund в одной транзакции,
-используя тот же lock заказа, что и существующий платёжный симулятор.
-Разделять их на независимые запросы нельзя. Database владеет pool;
-успешная операция фиксируется, исключение откатывает транзакцию.
-
-OpenAPI — опубликованный контракт путей, operationId, ролей, схем и примеров ошибок.
-Маршруты объявлены в `api/`, а не создаются из YAML во время запуска;
-тест проверяет совпадение всех 78 операций с контрактом.
-FastAPI проверяет DTO каждого JSON-ответа, включая вложенные объекты:
-несовместимые и приватные поля приводят к безопасному 500, а не выдаются клиенту.
-Внутренние имена Python — snake_case; внешние operationId и JSON aliases сохранены.
-Денежные расчёты выполняются в Decimal, timestamps остаются UTC с миллисекундами.
-Бизнес-логика и HTTP-сервер работают на Python. Java-исходников и Maven нет.
-JRE нужен только Flyway: он проверяет и применяет SQL до запуска API.
-Перенос файлов не меняет SQL/checksums и не пересоздаёт существующую БД.
-
-## Возможности и ограничения API
-
-- Регистрация, одноразовое подтверждение, resend, вход и восстановление пароля.
-- Профиль и управление пользователями; статусы PENDING, ACTIVE, BLOCKED.
-- Поиск питомцев, административный CRUD и версия записи для защиты от устаревшего PUT.
-- Заказы, резервирование, платежи, idempotency, отмена и безопасное удаление.
-- Каталог товаров/кормов, категории, фильтры, поиск, сортировка и пагинация.
-- Расширенные карточки питомцев; публикация независима от доступности.
-- Галереи до 20 фотографий, загрузка, нормализация и миниатюры.
-- Общая корзина и заказ с товарами и питомцами; единая оплата симулятором.
-- Ограниченная техническая телеметрия без произвольных полей и персональных данных.
-
-Login возвращает `access_token,token_type,expires_in,user`.
-Приватные операции требуют `Authorization: Bearer <access_token>`.
-USER работает со своим; ADMIN управляет пользователями/питомцами и обработкой заказов.
-Сброс пароля и административные изменения отзывают старые токены.
-
-Ошибки: `status,error,message,details`. Details содержит нарушения полей либо пуст
-для общей ошибки. Ограничения полей — 422, отсутствующее/непригодное тело — 400;
-успех без тела — 204. Подробности каждого endpoint находятся в Swagger.
-
-### Каталог и фотографии
-
-Публичные каталоги: `/products`, `/catalog/pets`, `/catalog/categories`.
-Административные карточки: `/admin/products`, `/admin/pets`.
-POST/PUT товаров и действия публикации/остатков находятся под `/products`;
-все изменения доступны только ADMIN. У карточек состояния DRAFT/PUBLISHED/ARCHIVED,
-обновления и действия требуют текущую `version`. Деактивация категории сохраняет товары.
-Для DRAFT достаточно названия; незаполненные цена/SKU/тип явно возвращаются как null.
-Публикация и изменение PUBLISHED проверяют категорию, положительную цену, животных,
-фотографию и SKU/тип товара. Корм также требует бренд, форму, возраст и массу;
-состав необязателен. `ALL` нельзя совмещать с другими возрастными группами.
-
-`POST /media` принимает multipart `file`, `sourceType` (OWN/SUPPLIER/DEMO),
-необязательный `sourceNote`. Поддерживаются JPEG, PNG и статичный WebP:
-до 10 MiB и 40 MP. Содержимое проверяется, EXIF удаляется, ориентация исправляется;
-image — JPEG до 1600 px, thumb — JPEG до 400 px, без увеличения малых фото.
-Прозрачность заменяется белым фоном. Неиспользованные загрузки очищаются через 24 часа;
-фото любых сохранённых карточек и истории заказов защищены от очистки.
-UUID файла используется в `images` карточки; порядок задаётся списком,
-обложка — `isCover`, описание — `alt`. Без явной обложки выбирается первое фото.
-Непубликованные изображения видит ADMIN, исторические обложки — также владелец заказа.
-Используемые карточкой или снимком заказа изображения удалить нельзя.
-
-Файлы сохраняются в `swagger-petstore-media-data`, отдельно от PostgreSQL.
-S3/MinIO не требуется; отсутствуют публичная раздача файлов каталога и пути из клиентских имён.
-
-### Корзина и заказ
-
-`GET/PUT /store/cart` работает с собственным аккаунтом. Строка: `kind,id,quantity`;
-для питомца quantity=1. Ответ содержит актуальную и сохранённую цену,
-доступность и причину недоступности. PUT полностью заменяет состав по `version`.
-Для повторного объединения гостевой корзины используется один UUID `Idempotency-Key`:
-повтор того же запроса не добавляет количество второй раз.
-
-`POST /store/orders` создаёт черновик по `cartVersion`. Place атомарно проверяет
-все цены/профиль/остатки и резервирует весь состав; при ошибке не резервируется ничего.
-Draft содержит снимки позиций, но общая сумма, доставка и дедлайн ещё null.
-Создание, place и единая оплата требуют UUID `Idempotency-Key`.
-Сумму вычисляет сервер; подмена суммы и неопознанные поля команд отклоняются.
-Place проверяет исходную версию корзины и очищает её атомарно с резервами.
-Повтор по ключу не очищает позиции, добавленные позже. Оплата списывает товарный
-остаток и снимает товарный резерв; refund восстанавливает остаток однократно.
-Неоплаченный резерв снимается при истечении/отмене. Питомец остаётся reserved
-после оплаты и становится sold при доставке. Доставка товар повторно не списывает.
-Снимки названий, цен, обложек и доставки сохраняются после редактирования каталога.
-
-Старые `/pet`, `/store/order` и их DTO сохранены для существующих автотестов.
-История `/store/orders` также показывает прежние одно-питомцевые заказы.
-
-| Статус | Назначение |
-|---|---|
-| draft | Обновляемый черновик без резерва, цены и доставки |
-| placed | Оформлен: резерв и снимок цены/доставки; 15 минут на оплату |
-| approved | Оплачен и принят администратором в обработку |
-| shipped | Отправлен; отмена запрещена |
-| delivered | Доставлен |
-| cancelled | Отменён; оплаченная отмена выполняет refund и снимает резерв |
-| expired | Время оплаты истекло, резерв снят |
-
-Create создаёт draft; отдельный place требует заполненного профиля.
-Для draft `paymentStatus=NOT_STARTED`; сумма/доставка/дедлайн — null.
-Оплата разрешена только в placed. Повтор той же попытки использует тот же UUID
-в `Idempotency-Key`.
-
-USER отменяет свой placed/approved и удаляет свой draft.
-ADMIN принимает оплаченный заказ в обработку, отправляет/доставляет и удаляет draft/терминальные заказы.
-Удалять placed/approved/shipped нельзя. Платежи удаляются вместе с терминальным заказом;
-отдельно ADMIN удаляет только DECLINED.
-ADMIN и демонстрационный USER защищены. Пользователь с заказами не удаляется.
-
-## Почта
+Python 3.12. Установка и инструменты:
 
 ```powershell
-docker compose up -d --wait
+python -m venv .venv
+.venv\Scripts\python -m pip install --constraint requirements-runtime.txt -e ".[test,quality]"
+.venv\Scripts\ruff check src tests docker
+.venv\Scripts\ruff format --check src tests docker
+.venv\Scripts\pyright --pythonpath .venv\Scripts\python.exe
+.venv\Scripts\python -m pytest tests/unit -q
 ```
 
-smtp4dev принимает письма, хранит их в отдельном volume и предоставляет SMTP/IMAP.
-Внешняя пересылка выключена. Почта запускается внутри общего контейнера; отдельный overlay не нужен.
+`pyproject.toml` содержит метаданные пакета и настройки инструментов; `requirements-runtime.txt` закрепляет полный набор runtime-зависимостей для Docker. JS-зависимостей здесь нет.
 
-| Назначение | Адрес |
-|---|---|
-| Интерфейс / Swagger почты | http://localhost:8025/ / http://localhost:8025/api/ |
-| SMTP с хоста / внутри Compose | localhost:2525 / 127.0.0.1:2525 |
-| IMAP | localhost:1143 |
-
-Логины `user1,user2,tests`, пароль `mail-test-only` — публичные учебные данные.
-Адреса user1@petstore.test и user2@petstore.test попадают в соответствующие ящики,
-остальные — в Tests.
-
-Письма содержат HTML и plain text, без паролей. Confirm/resend действуют 24 часа,
-reset — 30 минут; новая ссылка заменяет старую.
-Если SMTP недоступен, сохранённая операция не отменяется; пишется безопасный лог.
-Автоматического retry/outbox пока нет. Транспорт предназначен для локального SMTP без auth/TLS.
-
-## Конфигурация и данные
-
-Переменные задаются окружением или локальным `.env`, который не коммитится.
-
-| Переменная | Назначение |
-|---|---|
-| POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD | Инициализация БД |
-| PETSTORE_DB_URL / PETSTORE_DB_USER / PETSTORE_DB_PASSWORD | Подключение приложения |
-| POSTGRES_PORT | Порт БД на хосте |
-| PETSTORE_DB_VOLUME | Существующий volume; default swagger-petstore-db-data |
-| PETSTORE_MEDIA_VOLUME | Volume изображений; default swagger-petstore-media-data |
-| PETSTORE_MEDIA_ROOT | Директория изображений; контейнер /var/lib/petstore/media |
-| PETSTORE_TOKEN_SECRET | Стабильный JWT secret, минимум 32 UTF-8 байта |
-| PETSTORE_PUBLIC_BASE_URL | Адрес API для одноразовых ссылок |
-| PETSTORE_EXPOSE_TEST_LINKS | Учебный resetUrl в JSON; default true |
-| PETSTORE_SMTP_HOST / PETSTORE_SMTP_PORT / PETSTORE_SMTP_FROM / PETSTORE_SMTP_TIMEOUT | Локальный SMTP; default port 25, timeout 5 секунд |
-| PETSTORE_MAIL_FRONTEND_URL | Необязательный адрес веб-приложения для ссылок в письмах |
-| PETSTORE_RESOURCE_ROOT / PETSTORE_STATIC_ROOT | Переопределение директорий ресурсов и web |
-
-Без JWT secret создаётся ключ процесса: после рестарта старые токены недействительны.
-`PETSTORE_EXPOSE_TEST_LINKS=false` скрывает resetUrl в JSON, но не отключает письмо.
-Учебные пароли и выдача ссылок не предназначены для публичного сервера.
-
-Обновление:
-
-```powershell
-docker compose pull
-docker compose up -d --wait
-```
-
-Перед обновлением сделать backup и сохранить фактический volume, DB credentials и secret.
-Compose по умолчанию использует `swagger-petstore-db-data`; прежний запуск через
-docker run мог использовать `swagger-petstore-data`. Не заменяйте его пустой БД:
-передайте прежнее имя через PETSTORE_DB_VOLUME. Не запускайте два PostgreSQL на одном volume.
-
-`down` сохраняет данные; `down -v` удаляет их.
-
-## Проверки и разработка
-
-```powershell
-py -3.12 -m venv .venv-python
-.\.venv-python\Scripts\python.exe -m pip install --constraint requirements-runtime.txt -e ".[test,quality]"
-.\.venv-python\Scripts\ruff.exe check src tests
-.\.venv-python\Scripts\pyright.exe --pythonpath .venv-python/Scripts/python.exe
-.\.venv-python\Scripts\python.exe -m pytest tests/unit -q
-```
-
-`pyproject.toml` описывает пакет и инструменты.
-`requirements-runtime.txt` фиксирует runtime-зависимости вместе с транзитивными
-для воспроизводимых сборок. `.dockerignore` исключает секреты и локальные артефакты.
-
-Изолированный стенд:
+Изолированный тестовый стенд:
 
 ```powershell
 docker compose -f tests/docker-compose.yml up -d --build --wait
-docker exec petstore-python-preview psql -U petstore -d petstore -c "CREATE DATABASE petstore_python_test"
-docker exec -e FLYWAY_URL=jdbc:postgresql://127.0.0.1:5432/petstore_python_test -e FLYWAY_USER=petstore -e FLYWAY_PASSWORD=petstore petstore-python-preview /opt/flyway/flyway -locations=filesystem:/app/resources/db/migration migrate
-$env:PETSTORE_TEST_DB_URL="postgresql://127.0.0.1:5433/petstore_python_test"
-.\.venv-python\Scripts\python.exe -m pytest tests/unit tests/integration --cov=petstore --cov-fail-under=90
+.venv\Scripts\python docker/ci_databases.py --container petstore-python-preview --workers 4
+$env:PETSTORE_TEST_DB_URL = "postgresql://127.0.0.1:5433/petstore_python_test"
+.venv\Scripts\python -m pytest tests/unit tests/integration -n 4 --dist loadscope -q --cov=petstore --cov-fail-under=90
 ```
 
-CREATE DATABASE выполняется только один раз. Стенд: API :8081, БД :5433,
-отдельный volume petstore-python-preview-data. Интеграционные тесты защищены
-проверкой имени petstore_python_test. Очистка затрагивает только записи, созданные тестом.
+Порты и переменные системных тестов описаны в [документации разработки](docs/DEVELOPMENT.md). Не подключайте тесты очистки к рабочей БД.
 
-Smoke: задать BASE_URL=http://localhost:8081/api/v3 и запустить tests/smoke.
-System: задать PETSTORE_UI_URL, BASE_URL, PETSTORE_MAIL_UI_URL и установить
-`python -m playwright install chromium`. Опциональные restart/upgrade-проверки
-включаются через PETSTORE_RESTART_CONTAINER, PETSTORE_MAIL_RESTART_CONTAINER,
-PETSTORE_TEST_UPGRADE_IMAGE. CI задаёт все значения и не пропускает эти проверки.
+CI проверяет Ruff, строгие типы, unit/integration, Swagger Try it out, SMTP/IMAP, оплату и сохранность данных. AMD64 и ARM64 собираются и проверяются отдельно. Публикация продвигает проверенные digest без повторной сборки. UI-сценарии выполняются в CI фронтенда против закреплённых API и почты.
 
-## Повторяемая учебная база
+Комментарии и докстринги собственного кода — на русском. Докстринга объясняет действие, параметры, результат и существенные побочные эффекты. Тестовые функции остаются без докстрингов; SQL-история Flyway, сгенерированные файлы и машинные директивы не переводятся.
 
-CLI поддержки выключена по умолчанию и не является HTTP endpoint.
-Нужны одновременно `PETSTORE_TEST_SUPPORT=true` и отдельная БД
-`petstore_training` или `petstore_python_test`; фактическое имя соединения проверяется.
-Обычная `petstore` не допускается даже при включённом флаге.
-Сначала создайте отдельную БД и примените к ней Flyway, как показано выше.
-
-```powershell
-docker exec -e PETSTORE_TEST_SUPPORT=true -e PETSTORE_DB_URL=postgresql://127.0.0.1:5432/petstore_training petstore-python-preview python -m petstore.testing reset --confirm-test-reset
-docker exec -e PETSTORE_TEST_SUPPORT=true -e PETSTORE_DB_URL=postgresql://127.0.0.1:5432/petstore_training petstore-python-preview python -m petstore.testing expire-order <order-uuid>
-```
-
-Reset удаляет только бизнес-данные выбранной учебной БД, не историю миграций.
-Восстанавливаются демо-аккаунты, категории, корм (100 ₽/5 шт.), питомец (50 ₽), фото
-и нулевые резервы; старые сессии отзываются. Expire разрешён только для placed/UNPAID
-и вызывает настоящее снятие резервов, не ожидание 15 минут. Рабочие тома не удаляются.
-
-Телеметрия принимает проверенные `requestId`, `errorCode`, `resourceId`, route/endpoint
-templates и timestamp. Actor определяется по Bearer token, не по присланному actorId.
-Пароли, токены, коды ссылок, адреса и PAN/CVV не записываются в логи.
-
-## CI и выпуск
-
-Ruff, строгий Pyright, unit/integration с покрытием >=90%, smoke, почта,
-рестарт/upgrade и браузерный Swagger блокируют выпуск при ошибках.
-UI-тест раскрывает все операции и проверяет Try it out, Execute и реальные параметры.
-
-После dev изменения проходят master. CI собирает/тестирует amd64 и arm64,
-проверяет исправляемые HIGH/CRITICAL уязвимости Trivy и публикует
-`latest` / `sha-<commit>` с SBOM и provenance.
-Затем smoke, полный магазин и Swagger проверяются на опубликованном Docker Hub digest.
-
-Это локальная учебная среда. Для публичного сервиса нужны TLS, управление секретами,
-SMTP auth/TLS, очередь доставки, распределённый limiter и эксплуатационный аудит.
-Сейчас один Uvicorn worker; лимитер входа и development JWT key принадлежат процессу.
+[История проекта](docs/history.md) · [Процесс выпуска](docs/DELIVERY.md)

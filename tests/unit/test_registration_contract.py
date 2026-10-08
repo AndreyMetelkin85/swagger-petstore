@@ -7,7 +7,9 @@ from petstore.config import Settings
 
 def test_removed_confirmation_conflict_is_absent_from_implementation_and_contract():
     root = Path(__file__).resolve().parents[2]
-    assert "CONFIRMATION_STATE_CHANGED" not in (root / "src/petstore/service/auth_service.py").read_text()
+    assert "CONFIRMATION_STATE_CHANGED" not in (root / "src/petstore/service/auth_service.py").read_text(
+        encoding="utf-8"
+    )
     assert "CONFIRMATION_STATE_CHANGED" not in (Settings().resources / "openapi.yaml").read_text(
         encoding="utf-8"
     )

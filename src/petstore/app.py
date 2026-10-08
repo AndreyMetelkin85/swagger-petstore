@@ -1,4 +1,4 @@
-"""FastAPI transport around the original OpenAPI-first Petstore contract."""
+"""Приложение FastAPI с действующим контрактом Petstore и Swagger."""
 
 import copy
 import logging
@@ -39,7 +39,13 @@ logger = logging.getLogger("petstore")
 
 @lru_cache(maxsize=8)
 def _load_contract(path: Path, modified: int, size: int) -> Row:
-    """Cache safe parsing by file identity; callers receive independent documents."""
+    """Кэширует разбор контракта по пути, времени изменения и размеру файла.
+
+    :param path: Путь ресурса или файла, сформированный вызывающим кодом.
+    :param modified: Время изменения файла для ключа кэша.
+    :param size: Размер файла для ключа кэша.
+    :return: Результат операции типа Row.
+    """
     del modified, size
     return yaml.load(path.read_text(encoding="utf-8"), Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
 
@@ -47,11 +53,12 @@ def _load_contract(path: Path, modified: int, size: int) -> Row:
 def create_app(
     settings: Settings | None = None, database: Database | None = None, start_database: bool = True
 ) -> FastAPI:
-    """Create an isolated application with the existing API paths and Swagger assets.
+    """Создаёт отдельный экземпляр FastAPI с существующими маршрутами и Swagger.
 
-    :param settings: Runtime settings; environment values are used when omitted.
-    :param database: Injectable PostgreSQL factory for integration and unit tests.
-    :param start_database: Disable pool startup only for transport unit tests.
+    :param settings: Настройки приложения и его инфраструктурных подключений.
+    :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+    :param start_database: Открывать ли пул при запуске; отключается только в изолированных unit-тестах.
+    :return: Результат операции типа FastAPI.
     """
     settings = settings or Settings.from_env()
     database = database or Database(settings)
@@ -59,13 +66,16 @@ def create_app(
     contract_path = settings.resources / "openapi.yaml"
     contract_stat = contract_path.stat()
     document = copy.deepcopy(_load_contract(contract_path, contract_stat.st_mtime_ns, contract_stat.st_size))
-    # Swagger must execute against its own container, not an absolute localhost:8080 from the reference.
+    # Swagger выполняет запросы к своему API, а не к абсолютному адресу исходного контракта.
     document["servers"][0]["url"] = "/api/v3"
     auth = AuthService(UserData(db), settings)
     stop = Event()
 
     def expire() -> None:
-        """Run a stoppable, row-lock-safe expiry job without logging database values."""
+        """Периодически освобождает просроченные резервы; останавливается вместе с приложением.
+
+        :return: Ничего не возвращает.
+        """
         next_media_cleanup = 0.0
         while not stop.wait(settings.expire_interval):
             try:
@@ -78,9 +88,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
-        """Manage the pool and background worker for exactly this application instance.
+        """Управляет пулом соединений и фоновым worker только этого экземпляра приложения.
 
-        :param application: FastAPI application entering or leaving its lifespan.
+        :param application: Экземпляр FastAPI, начинающий или завершающий жизненный цикл.
+        :yield: Значение текущего шага управляемого контекстом жизненного цикла.
         """
         worker: Thread | None = None
         logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -120,10 +131,11 @@ def create_app(
 
     @app.exception_handler(ApiException)
     async def business_error(request: Request, exc: ApiException) -> Response:
-        """Render the unchanged business error envelope.
+        """Формирует публичный ответ бизнес-ошибки без изменения контракта.
 
-        :param request: Failed request.
-        :param exc: Safe public business exception.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param exc: Обрабатываемое исключение.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         payload = ErrorResponse.model_validate(
             {"status": exc.status, "error": exc.code, "message": exc.message, "details": exc.details}
@@ -135,15 +147,21 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(request: Request, exc: RequestValidationError) -> Response:
-        """Preserve documented errors without exposing Pydantic inputs or security values."""
+        """Формирует документированную ошибку валидации без исходных значений и секретов.
+
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param exc: Обрабатываемое исключение.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         return await business_error(request, validation_error(request, exc))
 
     @app.exception_handler(HTTPException)
     async def transport_error(request: Request, exc: HTTPException) -> Response:
-        """Translate unknown routes and methods into the original error contract.
+        """Преобразует ошибки маршрута и HTTP-метода в единый формат API.
 
-        :param request: Failed request.
-        :param exc: Framework transport exception.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param exc: Обрабатываемое исключение.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         status = exc.status_code
         if status == 405 and request.url.path.startswith("/api/"):
@@ -166,10 +184,11 @@ def create_app(
 
     @app.middleware("http")
     async def safe_log(request: Request, call_next: Callable[[Request], Any]) -> Response:
-        """Log method, route and result only, never credentials, bodies or query codes.
+        """Записывает метод, маршрут и результат без тела, учётных данных и кодов ссылки.
 
-        :param request: Incoming request.
-        :param call_next: Remaining request pipeline.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param call_next: Следующий обработчик HTTP-запроса в middleware.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         request_id = request.headers.get("X-Request-ID", "")
         if (
@@ -210,12 +229,18 @@ def create_app(
 
     @app.get("/api/v3/openapi.json", include_in_schema=False)
     def openapi_json() -> Response:
-        """Serve the existing contract rather than an incompatible generated replacement."""
+        """Возвращает действующий контракт OpenAPI в JSON.
+
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         return Responses(document)
 
     @app.get("/api/v3/openapi.yaml", include_in_schema=False)
     def openapi_yaml() -> Response:
-        """Serve a YAML representation of the same contract."""
+        """Возвращает тот же контракт OpenAPI в YAML.
+
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         return Response(
             yaml.safe_dump(document, allow_unicode=True, sort_keys=False), media_type="application/yaml"
         )

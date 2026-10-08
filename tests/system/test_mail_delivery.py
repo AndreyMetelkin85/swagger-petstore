@@ -86,10 +86,11 @@ def test_smtp_routes_each_recipient_to_its_own_imap_mailbox(username, mailbox_na
 
 
 def find_message(mailbox_name: str, subject: str) -> dict:
-    """Find one uniquely marked message without consuming another test's mail.
+    """Находит единственное письмо по уникальной метке текущего сценария.
 
-    :param mailbox_name: Configured local mailbox.
-    :param subject: Unique subject or recipient marker.
+    :param mailbox_name: Имя настроенного тестового ящика.
+    :param subject: Уникальная тема или получатель текущего письма.
+    :return: Результат описанной проверки или подготовки тестовых данных.
     """
     url = os.environ["PETSTORE_MAIL_UI_URL"].rstrip("/")
     deadline = time.monotonic() + 10
@@ -109,10 +110,11 @@ def find_message(mailbox_name: str, subject: str) -> dict:
 
 
 def read_by_imap(username: str, subject: str) -> EmailMessage:
-    """Retrieve the exact received message via IMAP without marking all mail as read.
+    """Читает нужное письмо по IMAP без изменения остальных писем.
 
-    :param username: Local IMAP test account.
-    :param subject: Subject searched in this mailbox.
+    :param username: Имя пользователя.
+    :param subject: Уникальная тема или получатель текущего письма.
+    :return: Результат описанной проверки или подготовки тестовых данных.
     """
     port = int(os.getenv("PETSTORE_MAIL_IMAP_PORT", "1143"))
     with imaplib.IMAP4("127.0.0.1", port, timeout=5) as mailbox:
@@ -130,6 +132,10 @@ def read_by_imap(username: str, subject: str) -> EmailMessage:
 
 @pytest.fixture
 def mail_lab():
+    """Создаёт отдельный API/SMTP-сценарий с очисткой собственных данных.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     url = os.getenv("PETSTORE_MAIL_UI_URL")
     api_url = os.getenv("BASE_URL")
     if not url or not api_url:
@@ -170,7 +176,7 @@ def test_registration_resend_and_hidden_reset_link_arrive_in_local_mail(mail_lab
     body = httpx.get(ui + f"/api/Messages/{first['id']}/plaintext", timeout=5).text
     assert "24 часа" in body
     assert request["password"] not in body
-    # Read the same MIME message through IMAP using its unique recipient marker.
+    # Читаем то же MIME-письмо по IMAP с уникальной меткой получателя.
     with imaplib.IMAP4("127.0.0.1", int(os.getenv("PETSTORE_MAIL_IMAP_PORT", "1143")), timeout=5) as mailbox:
         assert mailbox.login("tests", "mail-test-only")[0] == "OK"
         assert mailbox.select("INBOX", readonly=True)[0] == "OK"

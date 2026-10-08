@@ -1,4 +1,4 @@
-"""HS256 tokens compatible with the existing Java claims and invalidation rules."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import secrets
 import time
@@ -10,14 +10,15 @@ from petstore.service.exceptions import AccountException
 
 
 class TokenService:
-    """Issue and verify access tokens with one key shared by this application instance."""
+    """Выдача и проверка JWT с общим ключом экземпляра приложения."""
 
     DEFAULT_TTL_SECONDS = 3600
 
     def __init__(self, secret: str | None = None) -> None:
-        """Use the configured key or a process-local random development key.
+        """Выбирает настроенный ключ JWT либо временный случайный ключ этого процесса.
 
-        :param secret: Existing PETSTORE_TOKEN_SECRET; never logged.
+        :param secret: Секрет подписи JWT; не выводится в логи.
+        :return: Ничего не возвращает.
         """
         if secret is not None and (
             not secret.strip()
@@ -28,10 +29,11 @@ class TokenService:
         self.secret = secret.encode("utf-8") if secret is not None else secrets.token_bytes(32)
 
     def issue_token(self, user: dict[str, Any], ttl_seconds: int = DEFAULT_TTL_SECONDS) -> str:
-        """Issue the existing sub/role/ver/iat/exp claim set.
+        """Выдаёт токен с совместимыми claims sub, role, ver, iat и exp.
 
-        :param user: Persisted account row.
-        :param ttl_seconds: Token lifetime, in seconds.
+        :param user: Строка пользователя, полученная из базы данных.
+        :param ttl_seconds: Время жизни JWT в секундах.
+        :return: Строковый результат описанной операции.
         """
         now = int(time.time())
         return jwt.encode(  # pyright: ignore[reportUnknownMemberType]
@@ -47,9 +49,10 @@ class TokenService:
         )
 
     def validate(self, token: str) -> dict[str, Any]:
-        """Validate signature, claim types and expiry without accepting other algorithms.
+        """Проверяет подпись, типы claims и срок действия, запрещая другие алгоритмы.
 
-        :param token: Encoded Bearer token.
+        :param token: Строка Bearer-токена для проверки.
+        :return: Результат операции типа dict[str, Any].
         """
         try:
             claims: dict[str, Any] = jwt.decode(  # pyright: ignore[reportUnknownMemberType]

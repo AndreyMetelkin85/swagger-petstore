@@ -19,6 +19,10 @@ from petstore.utils.responses import Responses
 
 @pytest.fixture
 def client():
+    """Предоставляет HTTP-клиент текущего изолированного сценария.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     database = Mock(spec=Database)
     database.is_healthy.return_value = True
     with TestClient(create_app(database=database, start_database=False)) as client:

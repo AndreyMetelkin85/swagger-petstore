@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from typing import cast
 
@@ -15,28 +15,31 @@ from petstore.utils.responses import Responses
 
 
 class AuthenticationController:
-    """Login and password-recovery operations."""
+    """Вход и восстановление пароля."""
 
     def login(self, context: RequestContext) -> Response:
-        """Authenticate an active account and issue a Bearer token.
+        """Проверяет активный аккаунт и возвращает Bearer-токен.
 
-        :param context: Login credentials.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         request = context.validated(LoginRequest, V.login)
         return Responses(context.auth.login(cast(str, request.email), cast(str, request.password)))
 
     def forgot_password(self, context: RequestContext) -> Response:
-        """Generate a password-reset link with configured exposure.
+        """Создаёт ссылку восстановления с учётом настройки её видимости.
 
-        :param context: Recovery email.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         request = context.validated(PasswordForgotRequest, V.forgot)
         return Responses(context.auth.forgot_password(cast(str, request.email)))
 
     def reset_password(self, context: RequestContext) -> Response:
-        """Consume the query code and set the JSON-body password.
+        """Передаёт одноразовый код из query и новый пароль из JSON сервису восстановления.
 
-        :param context: Parsed reset code and payload.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         request = context.validated(PasswordResetRequest, V.reset)
         context.auth.reset_password(context.parameters["code"], cast(str, request.new_password))

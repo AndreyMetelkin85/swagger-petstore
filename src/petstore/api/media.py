@@ -1,4 +1,4 @@
-"""Media routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -14,7 +14,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> MediaController:
-    """Inject this application's media controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа MediaController.
+    """
     return cast(MediaController, context.request.app.state.controllers.media)
 
 
@@ -35,7 +39,13 @@ def upload_media(
     controller: Controller,
     response: Response,
 ) -> MediaMetadata:
-    """Загрузить проверенное фото (10 MiB / 40 MP)."""
+    """Загрузить проверенное фото (10 MiB / 40 MP).
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа MediaMetadata.
+    """
     result = controller.upload(context)
     return decode_response(result, response)
 
@@ -55,7 +65,14 @@ def get_media(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> MediaMetadata:
-    """Метаданные или изображение."""
+    """Метаданные или изображение.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа MediaMetadata.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get(context)
     return decode_response(result, response)
@@ -76,7 +93,14 @@ def delete_media(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> Response:
-    """Удалить неиспользуемое фото."""
+    """Удалить неиспользуемое фото.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"id": resource_id}
     result = controller.delete(context)
     return result
@@ -97,7 +121,14 @@ def get_media_image(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> Response:
-    """Метаданные или изображение."""
+    """Метаданные или изображение.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get(context, False)
     return result
@@ -118,7 +149,14 @@ def get_media_thumb(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> Response:
-    """Метаданные или изображение."""
+    """Метаданные или изображение.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get(context, True)
     return result

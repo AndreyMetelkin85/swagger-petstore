@@ -1,4 +1,4 @@
-"""Report the critical path and BuildKit export time from the current Actions run."""
+"""Инфраструктурные проверки сборки, миграций и публикации."""
 
 import json
 import os
@@ -10,9 +10,19 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 class GitHubRedirect(HTTPRedirectHandler):
-    """Download signed logs without forwarding the API token to the blob host."""
+    """Загрузка подписанного лога без передачи API-токена серверу хранения."""
 
     def redirect_request(self, request, response, code, message, headers, url):
+        """Обрабатывает перенаправление лога без передачи GitHub-токена серверу хранения.
+
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :param message: Публичное описание ошибки без исходных значений запроса.
+        :param headers: Заголовки HTTP-запроса или перенаправления.
+        :param url: URL ресурса, предоставленный вызывающим кодом.
+        :return: Результат описанной проверки или запроса.
+        """
         redirected = super().redirect_request(request, response, code, message, headers, url)
         if redirected and urlsplit(request.full_url).netloc != urlsplit(url).netloc:
             redirected.remove_header("Authorization")
@@ -20,12 +30,23 @@ class GitHubRedirect(HTTPRedirectHandler):
 
 
 def elapsed(start: str | None, end: str | None) -> float | None:
+    """Вычисляет длительность между двумя временными отметками GitHub Actions.
+
+    :param start: Начальная временная отметка.
+    :param end: Конечная временная отметка.
+    :return: Результат описанной проверки или запроса.
+    """
     if not start or not end:
         return None
     return max(0, (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds())
 
 
 def cache_export_seconds(log: str) -> float | None:
+    """Извлекает время экспорта кэша из лога BuildKit.
+
+    :param log: Текст лога BuildKit.
+    :return: Результат описанной проверки или запроса.
+    """
     step = None
     for line in log.splitlines():
         start = re.search(r"#(\d+) exporting cache to registry", line)
@@ -39,11 +60,20 @@ def cache_export_seconds(log: str) -> float | None:
 
 
 def main() -> None:
+    """Выводит длительность проверок, сборок и публикации текущего запуска CI.
+
+    :return: Ничего не возвращает.
+    """
     repository = os.environ["GITHUB_REPOSITORY"]
     run_id = os.environ["GITHUB_RUN_ID"]
     api = os.getenv("GITHUB_API_URL", "https://api.github.com")
 
     def get(path: str) -> bytes:
+        """Загружает содержимое GitHub API с ограничением времени запроса.
+
+        :param path: Путь ресурса или файла, сформированный вызывающим кодом.
+        :return: Результат описанной проверки или запроса.
+        """
         request = Request(
             api + path,
             headers={

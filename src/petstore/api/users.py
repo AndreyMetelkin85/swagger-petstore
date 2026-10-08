@@ -1,4 +1,4 @@
-"""Users routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -16,7 +16,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> UserController:
-    """Inject this application's users controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа UserController.
+    """
     return cast(UserController, context.request.app.state.controllers.users)
 
 
@@ -37,7 +41,13 @@ def get_current_user(
     controller: Controller,
     response: Response,
 ) -> User:
-    """Получение профиля."""
+    """Получение профиля.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа User.
+    """
     result = controller.get_current_user(context)
     return decode_response(result, response)
 
@@ -57,7 +67,14 @@ def update_current_user(
     response: Response,
     body: Annotated[UserUpdateRequest, BeforeValidator(UserUpdateRequest.from_wire), Body()],
 ) -> User:
-    """Обновление профиля."""
+    """Обновление профиля.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа User.
+    """
     context.body = body
     result = controller.update_current_user(context)
     return decode_response(result, response)
@@ -77,7 +94,13 @@ def list_users(
     controller: Controller,
     response: Response,
 ) -> list[User]:
-    """Получение списка пользователей."""
+    """Получение списка пользователей.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа list[User].
+    """
     result = controller.list_users(context)
     return decode_response(result, response)
 
@@ -97,7 +120,14 @@ def get_user_by_id(
     response: Response,
     user_id: Annotated[UUID, Path(alias="userId")],
 ) -> User:
-    """Получение пользователя."""
+    """Получение пользователя.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param user_id: UUID целевого пользователя.
+    :return: Результат операции типа User.
+    """
     context.parameters = {"userId": user_id}
     result = controller.get_user_by_id(context)
     return decode_response(result, response)
@@ -119,7 +149,15 @@ def update_user_by_id(
     body: Annotated[AdminUserUpdateRequest, BeforeValidator(AdminUserUpdateRequest.from_wire), Body()],
     user_id: Annotated[UUID, Path(alias="userId")],
 ) -> User:
-    """Обновление пользователя."""
+    """Обновление пользователя.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param user_id: UUID целевого пользователя.
+    :return: Результат операции типа User.
+    """
     context.parameters = {"userId": user_id}
     context.body = body
     result = controller.update_user_by_id(context)
@@ -141,7 +179,14 @@ def delete_user_by_id(
     response: Response,
     user_id: Annotated[UUID, Path(alias="userId")],
 ) -> Response:
-    """Удаление пользователя."""
+    """Удаление пользователя.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param user_id: UUID целевого пользователя.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"userId": user_id}
     result = controller.delete_user_by_id(context)
     return result
