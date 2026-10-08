@@ -27,6 +27,7 @@ from petstore.data.user_data import UserData
 from petstore.model.responses import ErrorResponse
 from petstore.service.auth_service import AuthService
 from petstore.service.commerce_order_service import CommerceOrderService
+from petstore.service.demo_catalog_service import populate_demo_catalog
 from petstore.service.exceptions import ApiException
 from petstore.service.media_service import MediaService
 from petstore.utils.responses import Responses
@@ -76,6 +77,12 @@ def create_app(
         logger.setLevel(logging.INFO)
         if start_database:
             await run_in_threadpool(db.start)
+            if settings.demo_catalog:
+                try:
+                    await run_in_threadpool(populate_demo_catalog, db, settings)
+                except Exception:
+                    await run_in_threadpool(db.close)
+                    raise
             if settings.expire_interval > 0:
                 worker = Thread(target=expire, name="petstore-order-expiration", daemon=True)
                 worker.start()

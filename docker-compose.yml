@@ -20,6 +20,7 @@ services:
       PETSTORE_MAIL_FRONTEND_URL: http://localhost:${FRONTEND_PORT:-8090}
       PETSTORE_EMBEDDED_MAIL: "true"
       PETSTORE_MEDIA_ROOT: /var/lib/petstore/media
+      PETSTORE_DEMO_CATALOG: ${PETSTORE_DEMO_CATALOG:-true}
     volumes:
       - petstore-data:/var/lib/postgresql/data
       - petstore-media:/var/lib/petstore/media

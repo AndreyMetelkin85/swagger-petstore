@@ -45,7 +45,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 LABEL org.opencontainers.image.title="Lapki complete training store" \
       org.opencontainers.image.description="React, FastAPI, PostgreSQL and test SMTP in one container" \
       org.opencontainers.image.source="https://github.com/AndreyMetelkin85/swagger-petstore" \
-      org.opencontainers.image.licenses="Apache-2.0 AND PostgreSQL"
+      org.opencontainers.image.licenses="Apache-2.0 AND PostgreSQL AND CC0-1.0 AND CC-BY-SA-2.0 AND LicenseRef-Public-Domain"
 
 COPY --from=python-runtime /usr/local/ /usr/local/
 COPY --from=patched-mail-runtime /usr/share/dotnet /opt/dotnet
@@ -59,7 +59,8 @@ ENV JAVA_HOME=/opt/java/openjdk \
     PYTHONDONTWRITEBYTECODE=1 \
     PETSTORE_RESOURCE_ROOT=/app/resources \
     PETSTORE_STATIC_ROOT=/app/resources/web \
-    PETSTORE_MEDIA_ROOT=/var/lib/petstore/media
+    PETSTORE_MEDIA_ROOT=/var/lib/petstore/media \
+    PETSTORE_DEMO_CATALOG=true
 
 WORKDIR /app
 COPY pyproject.toml /app/

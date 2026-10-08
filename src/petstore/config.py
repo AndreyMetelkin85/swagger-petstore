@@ -29,6 +29,7 @@ class Settings:
     expose_test_links: bool = True
     expire_interval: float = 30.0
     test_support: bool = False
+    demo_catalog: bool = False
     smtp_host: str | None = None
     smtp_port: int = 25
     smtp_timeout: float = 5.0
@@ -54,6 +55,7 @@ class Settings:
             .rstrip("/"),
             expose_test_links=os.getenv("PETSTORE_EXPOSE_TEST_LINKS", "true").lower() == "true",
             test_support=os.getenv("PETSTORE_TEST_SUPPORT", "false").lower() == "true",
+            demo_catalog=os.getenv("PETSTORE_DEMO_CATALOG", "false").lower() == "true",
             smtp_host=os.getenv("PETSTORE_SMTP_HOST") or None,
             smtp_port=int(environment("PETSTORE_SMTP_PORT", "25")),
             smtp_timeout=float(environment("PETSTORE_SMTP_TIMEOUT", "5")),
