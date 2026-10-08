@@ -6,14 +6,13 @@ ARG SECURITY_UPDATE_EPOCH=local
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends tini libicu72 \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system petstore && useradd --system --gid petstore petstore \
+    && groupadd --system --gid 998 petstore && useradd --system --uid 998 --gid petstore petstore \
     && mkdir -p /smtp4dev && chown petstore:petstore /smtp4dev
 COPY --from=dotnet /usr/share/dotnet /opt/dotnet
 COPY --from=mail /app /opt/smtp4dev
 COPY docker/run_mail.py /app/run_mail.py
 ENV DOTNET_ROOT=/opt/dotnet DOTNET_CLI_HOME=/smtp4dev
 WORKDIR /opt/smtp4dev
-USER petstore
 EXPOSE 8025 2525 1143
 VOLUME ["/smtp4dev"]
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=12 \
