@@ -1,5 +1,7 @@
+import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 from petstore.config import Settings
@@ -11,32 +13,118 @@ def test_canonical_dockerfile_builds_the_python_application():
     release = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert not (ROOT / "Dockerfile.python").exists()
     assert "python -m pip install --no-cache-dir --no-deps ." in release
-    assert release.index("--requirement requirements-runtime.txt") < release.index("COPY src /app/src")
+    assert release.index("--requirement requirements-runtime.txt") < release.index(
+        "COPY --chown=petstore:petstore src /app/src"
+    )
     assert "petstore-entrypoint" in release
     assert "tomcat" not in release.lower()
 
 
 def test_publication_requires_python_tests_and_both_platform_scans():
     workflow = yaml.safe_load((ROOT / ".github/workflows/docker-security.yml").read_text())
-    matrix = workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
-    assert {entry["arch"] for entry in matrix} == {"amd64", "arm64"}
-    assert next(entry for entry in matrix if entry["arch"] == "arm64")["runner"] == "ubuntu-24.04-arm"
-    assert set(workflow["jobs"]["publish"]["needs"]) == {
+    jobs = workflow["jobs"]
+    for arch, runner in (("amd64", "ubuntu-24.04"), ("arm64", "ubuntu-24.04-arm")):
+        assert jobs["build-" + arch]["with"] == {"arch": arch, "runner": runner}
+        assert jobs["verify-" + arch]["needs"] == "build-" + arch
+    for lane in ("python-verification", "swagger", "runtime"):
+        assert jobs[lane]["needs"] == ["changes", "build-amd64"]
+        assert "build-amd64.outputs.candidate_digest" in jobs[lane]["with"]["digest"]
+    assert set(jobs["publish"]["needs"]) == {
         "changes",
         "quality",
-        "build",
+        "build-amd64",
+        "build-arm64",
+        "verify-amd64",
+        "verify-arm64",
         "python-verification",
+        "swagger",
         "runtime",
     }
-    steps = workflow["jobs"]["publish"]["steps"]
+    steps = jobs["publish"]["steps"]
     assert not any(step.get("uses", "").startswith("docker/build-push-action") for step in steps)
     assert any("imagetools create" in step.get("run", "") and ":latest" in step["run"] for step in steps)
-    build = next(step for step in workflow["jobs"]["build"]["steps"] if step.get("id") == "image")
+    platform = yaml.safe_load((ROOT / ".github/workflows/build-platform.yml").read_text())
+    build = next(step for step in platform["jobs"]["build"]["steps"] if step.get("id") == "image")
     assert build["with"]["file"] == "Dockerfile"
-    assert build["with"]["platforms"] == "linux/${{ matrix.arch }}"
+    assert build["with"]["platforms"] == "linux/${{ inputs.arch }}"
     assert "candidate-" in build["with"]["tags"] and ":latest" not in build["with"]["tags"]
-    assert "cache-from" in build["with"] and build["with"]["provenance"] == "mode=max"
-    assert "needs.runtime.result == 'success'" in workflow["jobs"]["publish"]["if"]
+    assert "type=registry" in build["with"]["cache-to"] and "mode=max" in build["with"]["cache-to"]
+    assert build["with"]["sbom"] and build["with"]["provenance"] == "mode=max"
+
+
+def publication_allowed(results, backend=True, event="push", ref="refs/heads/master"):
+    """Evaluate the actual repository's restricted GitHub gate expression in scenarios."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/docker-security.yml").read_text())
+    expression = workflow["jobs"]["publish"]["if"]
+    expression = expression.replace("always()", "True").replace("&&", " and ").replace("||", " or ")
+    values = {
+        "github.event_name": event,
+        "github.ref": ref,
+        "needs.changes.outputs.runtime": "true",
+        "needs.changes.outputs.backend": str(backend).lower(),
+    }
+    values.update({"needs." + name + ".result": result for name, result in results.items()})
+    expression = re.sub(
+        r"(?:needs|github)\.[a-zA-Z0-9_.-]+", lambda match: repr(values[match.group()]), expression
+    )
+    return eval(expression, {"__builtins__": {}}, {})
+
+
+@pytest.mark.parametrize(
+    "job",
+    [
+        "changes",
+        "quality",
+        "build-amd64",
+        "build-arm64",
+        "verify-amd64",
+        "verify-arm64",
+        "python-verification",
+        "swagger",
+        "runtime",
+    ],
+)
+@pytest.mark.parametrize("result", ["failure", "cancelled", "skipped"])
+def test_each_required_gate_prevents_any_promotion(job, result):
+    results = dict.fromkeys(
+        [
+            "changes",
+            "quality",
+            "build-amd64",
+            "build-arm64",
+            "verify-amd64",
+            "verify-arm64",
+            "python-verification",
+            "swagger",
+            "runtime",
+        ],
+        "success",
+    )
+    assert publication_allowed(results)
+    assert not publication_allowed(results | {job: result})
+
+
+def test_ui_release_requires_expected_skips_and_never_publishes_pr_or_dev():
+    results = dict.fromkeys(
+        [
+            "changes",
+            "quality",
+            "build-amd64",
+            "build-arm64",
+            "verify-amd64",
+            "verify-arm64",
+            "python-verification",
+            "swagger",
+            "runtime",
+        ],
+        "success",
+    )
+    fast = results | {"python-verification": "skipped", "swagger": "skipped"}
+    assert publication_allowed(fast, backend=False)
+    assert not publication_allowed(fast, backend=True)
+    assert not publication_allowed(fast | {"swagger": "failure"}, backend=False)
+    assert not publication_allowed(results, event="pull_request")
+    assert not publication_allowed(results, ref="refs/heads/dev")
 
 
 def test_main_compose_healthcheck_works_without_curl_and_keeps_volume():
@@ -91,7 +179,7 @@ def test_source_resources_and_docker_paths_agree():
     assert Settings().resources == ROOT / "resources"
     assert Settings().static == ROOT / "resources/web"
     dockerfile = (ROOT / "Dockerfile").read_text()
-    assert "COPY src /app/src" in dockerfile
+    assert "COPY --chown=petstore:petstore src /app/src" in dockerfile
     assert "PETSTORE_RESOURCE_ROOT=/app/resources" in dockerfile
     assert "PETSTORE_STATIC_ROOT=/app/resources/web" in dockerfile
     assert "filesystem:/app/resources/db/migration" in (ROOT / "docker/entrypoint.sh").read_text()

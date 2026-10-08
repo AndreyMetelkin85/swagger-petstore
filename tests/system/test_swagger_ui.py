@@ -22,9 +22,9 @@ def test_every_operation_has_try_out_execute_and_only_real_parameters():
         executable = os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE")
         browser = playwright.chromium.launch(executable_path=executable)
         page = browser.new_page()
-        page.goto(url, wait_until="networkidle")
+        page.goto(url, wait_until="domcontentloaded")
         page.locator(".opblock").first.wait_for()
-        assert page.locator(".opblock").count() == len(operations)
+        expect(page.locator(".opblock")).to_have_count(len(operations))
         for path, item, method, operation in operations:
             tag = operation["tags"][0].replace(" ", "_")
             block = page.locator("[id='operations-" + tag + "-" + operation["operationId"] + "']")
@@ -57,4 +57,6 @@ def test_every_operation_has_try_out_execute_and_only_real_parameters():
                 block.locator(".execute").click()
                 block.locator(".live-responses-table").wait_for()
                 expect(block.locator(".live-responses-table")).to_contain_text('"UP"')
+            block.locator(".opblock-summary").click()
+            expect(block.locator(".execute")).not_to_be_visible()
         browser.close()

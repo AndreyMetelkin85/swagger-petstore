@@ -51,7 +51,6 @@ LABEL org.opencontainers.image.title="Lapki complete training store" \
 COPY --from=python-runtime /usr/local/ /usr/local/
 COPY --from=patched-mail-runtime /usr/share/dotnet /opt/dotnet
 COPY --from=mail-runtime /app /opt/smtp4dev
-COPY --from=frontend-build /ui/dist /app/frontend
 # Flyway is a migration tool, not an application server; keep the existing history/checksums.
 COPY --from=flyway /minimal /opt/flyway
 COPY --from=migration-runtime /opt/java/openjdk /opt/java/openjdk
@@ -64,15 +63,14 @@ ENV JAVA_HOME=/opt/java/openjdk \
     PETSTORE_DEMO_CATALOG=true
 
 WORKDIR /app
-COPY pyproject.toml /app/
+COPY --chown=petstore:petstore pyproject.toml /app/
 COPY requirements-runtime.txt /app/
 RUN python -m pip install --no-cache-dir --requirement requirements-runtime.txt
-COPY src /app/src
+COPY --from=swagger-ui --chown=petstore:petstore /usr/share/nginx/html/ /app/resources/web/
+COPY --chown=petstore:petstore src /app/src
 RUN python -m pip install --no-cache-dir --no-deps .
-COPY resources /app/resources
-COPY --from=swagger-ui /usr/share/nginx/html/ /app/resources/web/
-COPY resources/web/index.html /app/resources/web/index.html
-COPY resources/web/reset-password.html /app/resources/web/reset-password.html
+COPY --from=frontend-build --chown=petstore:petstore /ui/dist /app/frontend
+COPY --chown=petstore:petstore resources /app/resources
 COPY docker/entrypoint.sh /usr/local/bin/petstore-entrypoint
 COPY docker/unified-nginx.conf /etc/nginx/nginx.conf
 COPY docker/unified_health.py /usr/local/bin/petstore-unified-health.py
@@ -81,8 +79,7 @@ COPY LICENSE /licenses/LICENSE
 RUN chmod 0755 /usr/local/bin/petstore-entrypoint \
     && mkdir -p /var/lib/petstore/media /smtp4dev \
     && chown petstore:petstore /smtp4dev \
-    && chown petstore:petstore /var/lib/petstore/media \
-    && chown -R petstore:petstore /app
+    && chown petstore:petstore /var/lib/petstore/media
 
 EXPOSE 8080 8090 8025 2525 1143 5432
 VOLUME ["/var/lib/petstore/media", "/smtp4dev"]
