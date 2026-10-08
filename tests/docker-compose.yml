@@ -10,6 +10,7 @@ services:
     environment:
       PETSTORE_PUBLIC_BASE_URL: http://localhost:8081/api/v3
       PETSTORE_EXPOSE_TEST_LINKS: "true"
+      PETSTORE_DEMO_CATALOG: "false"
       PETSTORE_SMTP_HOST: 127.0.0.1
       PETSTORE_SMTP_PORT: "2525"
       PETSTORE_SMTP_FROM: noreply@petstore.test

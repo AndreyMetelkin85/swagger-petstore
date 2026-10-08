@@ -1,0 +1,152 @@
+[
+  {
+    "key": "cat-food",
+    "kind": "product",
+    "category": "Корма",
+    "card": {
+      "name": "Сухой корм для кошек, 1 кг",
+      "sku": "LAPKI-DEMO-V1-CAT-FOOD",
+      "price": 1290,
+      "stock": 10,
+      "brand": "Учебная линейка",
+      "productType": "FEED",
+      "animalTypes": [
+        "cat"
+      ],
+      "feedForm": "DRY",
+      "lifeStages": [
+        "ADULT"
+      ],
+      "netWeightGrams": 1000,
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию."
+    },
+    "file": "cat-food.jpg",
+    "sha256": "872da4c51589827e33edf97993d856ebd581ae384d896646fc3d43705be2b983",
+    "source_note": "Фото: Photos Public Domain; Public Domain; https://www.photos-public-domain.com/2010/12/15/bowl-of-dry-cat-food/; лицензия: https://www.photos-public-domain.com/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  },
+  {
+    "key": "dog-food",
+    "kind": "product",
+    "category": "Корма",
+    "card": {
+      "name": "Сухой корм для собак, 2 кг",
+      "sku": "LAPKI-DEMO-V1-DOG-FOOD",
+      "price": 1490,
+      "stock": 10,
+      "brand": "Учебная линейка",
+      "productType": "FEED",
+      "animalTypes": [
+        "dog"
+      ],
+      "feedForm": "DRY",
+      "lifeStages": [
+        "ADULT"
+      ],
+      "netWeightGrams": 2000,
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию. Фото: James Redekop; CC BY-SA 2.0; https://commons.wikimedia.org/wiki/File:Dog_food_in_a_bowl.jpg; лицензия: https://creativecommons.org/licenses/by-sa/2.0/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+    },
+    "file": "dog-food.jpg",
+    "sha256": "aaf51ee15601c5790c5dda3ca51f901ff3fb2e1d92a2e641340befcf3d45c042",
+    "source_note": "Фото: James Redekop; CC BY-SA 2.0; https://commons.wikimedia.org/wiki/File:Dog_food_in_a_bowl.jpg; лицензия: https://creativecommons.org/licenses/by-sa/2.0/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  },
+  {
+    "key": "bowls",
+    "kind": "product",
+    "category": "Аксессуары",
+    "card": {
+      "name": "Набор керамических мисок",
+      "sku": "LAPKI-DEMO-V1-BOWLS",
+      "price": 790,
+      "stock": 10,
+      "productType": "ACCESSORY",
+      "animalTypes": [
+        "cat",
+        "dog"
+      ],
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию."
+    },
+    "file": "bowls.jpg",
+    "sha256": "a82260fc5cb6919aabaf9c5209bc6bb94b50263ad4d9888a397f3e813f70c8bd",
+    "source_note": "Фото: Photos Public Domain; Public Domain; https://www.photos-public-domain.com/2010/12/15/stack-of-bowls/; лицензия: https://www.photos-public-domain.com/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  },
+  {
+    "key": "bed",
+    "kind": "product",
+    "category": "Аксессуары",
+    "card": {
+      "name": "Лежанка",
+      "sku": "LAPKI-DEMO-V1-BED",
+      "price": 3490,
+      "stock": 10,
+      "productType": "ACCESSORY",
+      "animalTypes": [
+        "cat",
+        "dog"
+      ],
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию."
+    },
+    "file": "bed.jpg",
+    "sha256": "b8557927c9295949728cbd27704215915c764662dfb255979ade2cd65597a2fe",
+    "source_note": "Фото: Tony Kakkar; CC0; https://commons.wikimedia.org/wiki/File:Washable_Dog_Beds_(248152059).jpg; лицензия: https://creativecommons.org/publicdomain/zero/1.0/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  },
+  {
+    "key": "barsik",
+    "kind": "pet",
+    "category": "Кошки",
+    "card": {
+      "name": "Барсик",
+      "price": 7000,
+      "animalType": "cat",
+      "breed": "Домашняя кошка",
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию."
+    },
+    "file": "barsik.jpg",
+    "sha256": "53aea300f5f649c9587004a34d013d6d6f4b1b9efe2472d5d0c09bf3ced49b43",
+    "source_note": "Фото: HJAndrews; CC0; https://commons.wikimedia.org/wiki/File:BAPhoto-Portrait.jpg; лицензия: https://creativecommons.org/publicdomain/zero/1.0/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  },
+  {
+    "key": "luna",
+    "kind": "pet",
+    "category": "Кошки",
+    "card": {
+      "name": "Луна",
+      "price": 9000,
+      "animalType": "cat",
+      "breed": "Домашняя кошка",
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию."
+    },
+    "file": "luna.jpg",
+    "sha256": "6616a95cd436afda223c6a5b2246dff237867ed8f8603e47402ad639b8672ba4",
+    "source_note": "Фото: Erik-Jan Leusink; CC0; https://commons.wikimedia.org/wiki/File:Mellow_kitten_(Unsplash).jpg; лицензия: https://creativecommons.org/publicdomain/zero/1.0/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  },
+  {
+    "key": "bim",
+    "kind": "pet",
+    "category": "Собаки",
+    "card": {
+      "name": "Бим",
+      "price": 15000,
+      "animalType": "dog",
+      "breed": "Золотистый ретривер",
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию."
+    },
+    "file": "bim.jpg",
+    "sha256": "96bd803ee7b525075b2ff147493b8eb1e23942b5fa6fc07494d6dd162950e0d3",
+    "source_note": "Фото: Karen Arnold; CC0; https://commons.wikimedia.org/wiki/File:Golden-retriever-dog.jpg; лицензия: https://creativecommons.org/publicdomain/zero/1.0/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  },
+  {
+    "key": "richi",
+    "kind": "pet",
+    "category": "Собаки",
+    "card": {
+      "name": "Ричи",
+      "price": 18000,
+      "animalType": "dog",
+      "breed": "Золотистый ретривер",
+      "description": "Учебная карточка. Название, цена и сведения созданы для обучения тестированию."
+    },
+    "file": "richi.jpg",
+    "sha256": "5b5a4aaf5cc7c66bab77387172cdc474772f63f1189d1ab55a22d453e72e255d",
+    "source_note": "Фото: Apurv013; CC0; https://commons.wikimedia.org/wiki/File:Golden_Retriever_(Pet_Dog).jpg; лицензия: https://creativecommons.org/publicdomain/zero/1.0/. При загрузке: JPEG до 1600 px, миниатюра до 400 px, удаление EXIF."
+  }
+]

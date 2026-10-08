@@ -1,0 +1,82 @@
+[
+  {
+    "key": "cat-food",
+    "file": "cat-food.jpg",
+    "sourceUrl": "https://www.photos-public-domain.com/2010/12/15/bowl-of-dry-cat-food/",
+    "downloadUrl": "https://i0.wp.com/www.photos-public-domain.com/wp-content/uploads/2010/12/bowl_of_dry_catfood.jpg?w=1024",
+    "author": "Photos Public Domain",
+    "license": "Public Domain",
+    "licenseUrl": "https://www.photos-public-domain.com/",
+    "sha256": "872da4c51589827e33edf97993d856ebd581ae384d896646fc3d43705be2b983"
+  },
+  {
+    "key": "dog-food",
+    "file": "dog-food.jpg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Dog_food_in_a_bowl.jpg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/7/71/Dog_food_in_a_bowl.jpg",
+    "author": "James Redekop",
+    "license": "CC BY-SA 2.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0/",
+    "sha256": "aaf51ee15601c5790c5dda3ca51f901ff3fb2e1d92a2e641340befcf3d45c042"
+  },
+  {
+    "key": "bowls",
+    "file": "bowls.jpg",
+    "sourceUrl": "https://www.photos-public-domain.com/2010/12/15/stack-of-bowls/",
+    "downloadUrl": "https://i0.wp.com/www.photos-public-domain.com/wp-content/uploads/2010/12/stack_of_bowls.jpg?w=1024",
+    "author": "Photos Public Domain",
+    "license": "Public Domain",
+    "licenseUrl": "https://www.photos-public-domain.com/",
+    "sha256": "a82260fc5cb6919aabaf9c5209bc6bb94b50263ad4d9888a397f3e813f70c8bd"
+  },
+  {
+    "key": "bed",
+    "file": "bed.jpg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Washable_Dog_Beds_(248152059).jpg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Washable_Dog_Beds_%28248152059%29.jpg",
+    "author": "Tony Kakkar",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "b8557927c9295949728cbd27704215915c764662dfb255979ade2cd65597a2fe"
+  },
+  {
+    "key": "barsik",
+    "file": "barsik.jpg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:BAPhoto-Portrait.jpg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/0/08/BAPhoto-Portrait.jpg",
+    "author": "HJAndrews",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "53aea300f5f649c9587004a34d013d6d6f4b1b9efe2472d5d0c09bf3ced49b43"
+  },
+  {
+    "key": "luna",
+    "file": "luna.jpg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Mellow_kitten_(Unsplash).jpg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/5/58/Mellow_kitten_%28Unsplash%29.jpg",
+    "author": "Erik-Jan Leusink",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "6616a95cd436afda223c6a5b2246dff237867ed8f8603e47402ad639b8672ba4"
+  },
+  {
+    "key": "bim",
+    "file": "bim.jpg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Golden-retriever-dog.jpg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/c/c2/Golden-retriever-dog.jpg",
+    "author": "Karen Arnold",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "96bd803ee7b525075b2ff147493b8eb1e23942b5fa6fc07494d6dd162950e0d3"
+  },
+  {
+    "key": "richi",
+    "file": "richi.jpg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Golden_Retriever_(Pet_Dog).jpg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/1/16/Golden_Retriever_%28Pet_Dog%29.jpg",
+    "author": "Apurv013",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "5b5a4aaf5cc7c66bab77387172cdc474772f63f1189d1ab55a22d453e72e255d"
+  }
+]

@@ -59,7 +59,9 @@ jobs:
           BASE_URL: http://127.0.0.1:8081/api/v3
         run: python -m pytest tests/smoke -q -o addopts=''
       - name: Install browser
-        run: python -m playwright install --with-deps chromium
+        run: |
+          command -v google-chrome
+          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
       - name: Swagger, email and restart system tests
         env:
           PETSTORE_UI_URL: http://127.0.0.1:8081
@@ -84,6 +86,7 @@ jobs:
             if docker inspect --format '{{.State.Health.Status}}' petstore-unified-ci | grep -q '^healthy$'; then break; fi
             sleep 2
           done
+          PETSTORE_DEMO_STORE_URL=http://127.0.0.1:8090 python -m pytest tests/system/test_demo_catalog_browser.py -q
           cd ui
           npm run test:api
       - name: Upload coverage
