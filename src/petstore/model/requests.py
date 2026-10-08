@@ -1,4 +1,4 @@
-"""Transport types; business validation deliberately preserves original errors."""
+"""Типизированные модели и правила действующего контракта API."""
 
 from decimal import Decimal
 from typing import Any, Self
@@ -10,16 +10,16 @@ from petstore.model.enums import Role
 
 
 class RequestModel(BaseModel):
-    """Retain unknown fields so each operation can report its own validation errors."""
+    """Модель запроса, сохраняющая неизвестные поля для ошибок конкретной операции."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     @classmethod
     def from_wire(cls, value: Any) -> Self:
-        """Validate HTTP aliases without changing Python-side constructor ergonomics.
+        """Разбирает внешние JSON-имена, сохраняя snake_case конструкторов Python.
 
-        :param value: JSON object supplied to the native FastAPI body field.
-        :raises ValidationError: A field has an incompatible type or value.
+        :param value: JSON со внешними именами полей запроса.
+        :return: Результат операции типа Self.
         """
         if isinstance(value, cls):
             return value
@@ -27,7 +27,7 @@ class RequestModel(BaseModel):
 
 
 class Address(RequestModel):
-    """Russian delivery address, with original external field names."""
+    """Российский адрес доставки с действующими внешними именами полей."""
 
     city: str | None = None
     street: str | None = None
@@ -37,7 +37,7 @@ class Address(RequestModel):
 
 
 class RegisterRequest(RequestModel):
-    """New account data; role and account status are assigned by the server."""
+    """Регистрация; роль и состояние аккаунта назначает сервер."""
 
     username: str | None = None
     password: str | None = Field(None, repr=False)
@@ -49,26 +49,26 @@ class RegisterRequest(RequestModel):
 
 
 class LoginRequest(RequestModel):
-    """Credentials used for login and resending confirmation links."""
+    """Учётные данные входа и повторной отправки подтверждения."""
 
     email: str | None = None
     password: str | None = Field(None, repr=False)
 
 
 class PasswordForgotRequest(RequestModel):
-    """Email identifying the account to recover."""
+    """Email аккаунта для восстановления доступа."""
 
     email: str | None = None
 
 
 class PasswordResetRequest(RequestModel):
-    """New password; the one-time code remains a query parameter."""
+    """Новый пароль; одноразовый код передаётся отдельно в query."""
 
     new_password: str | None = Field(None, alias="newPassword", repr=False)
 
 
 class UserUpdateRequest(RequestModel):
-    """Partial profile update; explicit null address clears the saved address."""
+    """Частичный профиль; явный null адреса удаляет сохранённый адрес."""
 
     first_name: str | None = Field(None, alias="firstName")
     last_name: str | None = Field(None, alias="lastName")
@@ -77,7 +77,7 @@ class UserUpdateRequest(RequestModel):
 
 
 class AdminUserUpdateRequest(UserUpdateRequest):
-    """Full administrator update, including username, email and role."""
+    """Полное административное изменение аккаунта, включая имя, email и роль."""
 
     username: str | None = None
     email: str | None = None
@@ -85,18 +85,18 @@ class AdminUserUpdateRequest(UserUpdateRequest):
 
 
 class Category(RequestModel):
-    """Nested pet category with a server-generated identifier when omitted."""
+    """Вложенная категория питомца с идентификатором."""
 
     id: UUID | None = None
     name: str | None = None
 
 
 class Tag(Category):
-    """Nested searchable pet tag."""
+    """Поисковый тег питомца."""
 
 
 class PetCreateRequest(RequestModel):
-    """Administrator-managed pet creation data."""
+    """Данные создания питомца администратором."""
 
     name: str | None = None
     category: Category | None = None
@@ -107,20 +107,20 @@ class PetCreateRequest(RequestModel):
 
 
 class PetUpdateRequest(PetCreateRequest):
-    """Full pet update protected by an optimistic version check."""
+    """Полное изменение питомца с защитой ожидаемой версией."""
 
     version: int | None = None
 
 
 class OrderCreateRequest(RequestModel):
-    """Editable draft fields; quantity is one for an individual pet."""
+    """Редактируемый черновик; количество отдельного питомца равно единице."""
 
     pet_id: UUID | None = Field(None, alias="petId")
     quantity: int | None = None
 
 
 class PaymentRequest(RequestModel):
-    """Test-card payment input; sensitive values are never included in repr."""
+    """Ввод тестовой карты; секретные реквизиты исключены из repr."""
 
     card_number: str | None = Field(None, alias="cardNumber", repr=False)
     expiry_month: int | None = Field(None, alias="expiryMonth")

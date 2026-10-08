@@ -1,4 +1,4 @@
-"""Transactional draft, reservation, delivery and refund lifecycle."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 from datetime import UTC, datetime
 from uuid import UUID
@@ -15,23 +15,26 @@ from petstore.utils.responses import public_user
 
 
 class OrderData:
-    """Order repository retaining row locks, payment snapshots and ownership rules."""
+    """Заказы, блокировки строк, снимки оплаты и проверки доступа."""
 
     PAYMENT_TIMEOUT_MINUTES = 15
 
     def __init__(self, database: Database) -> None:
-        """Use the shared pool without opening an independent transaction.
+        """Сохраняет общий пул соединений для операций репозитория.
 
-        :param database: PostgreSQL connection factory.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.database = database
 
     @staticmethod
     def lock_order(connection: DbConnection, order_id: UUID, legacy_only: bool = False) -> Row:
-        """Lock the parent order before any payment or lifecycle mutation.
+        """Блокирует родительский заказ перед изменением оплаты или состояния.
 
-        :param connection: Existing transaction.
-        :param order_id: Parent order UUID.
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param order_id: UUID заказа.
+        :param legacy_only: Ограничить обработку заказами прежнего формата.
+        :return: Результат операции типа Row.
         """
         row = connection.execute(
             "SELECT * FROM store_orders WHERE id = %s FOR UPDATE", (order_id,)
@@ -42,12 +45,13 @@ class OrderData:
 
     @staticmethod
     def assert_access(order: Row, actor: Row, payments: bool = False, modifying: bool = False) -> None:
-        """Authorize an owner or administrator after acquiring the parent row.
+        """Проверяет владельца либо ADMIN после блокировки заказа.
 
-        :param order: Persisted order row.
-        :param actor: Authorized user row.
-        :param payments: Whether the operation concerns payment history.
-        :param modifying: Whether to use the original modification-specific message.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param payments: История попыток оплаты текущего заказа.
+        :param modifying: Выполняет ли операция изменение данных.
+        :return: Ничего не возвращает.
         """
         if actor["role"] != "ADMIN" and actor["id"] != order["owner_user_id"]:
             message = (
@@ -61,11 +65,12 @@ class OrderData:
 
     @staticmethod
     def update_pet_status(connection: DbConnection, pet_id: UUID, status: str) -> None:
-        """Change availability and increment the optimistic pet version atomically.
+        """Атомарно меняет доступность питомца и увеличивает его версию.
 
-        :param connection: Current transaction.
-        :param pet_id: Reserved pet UUID.
-        :param status: New catalog availability.
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param pet_id: UUID питомца.
+        :param status: Статус ресурса либо HTTP-ответа согласно операции.
+        :return: Ничего не возвращает.
         """
         connection.execute(
             "UPDATE pets SET status = %s::pet_status, version = version + 1 WHERE id = %s", (status, pet_id)
@@ -73,10 +78,11 @@ class OrderData:
 
     @staticmethod
     def has_active_order(connection: DbConnection, pet_id: UUID) -> bool:
-        """Check whether a pet is still reserved by an active order.
+        """Проверяет наличие активного заказа, удерживающего питомца.
 
-        :param connection: Current transaction.
-        :param pet_id: Catalog UUID.
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param pet_id: UUID питомца.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         return (
             connection.execute(
@@ -90,10 +96,11 @@ class OrderData:
 
     @classmethod
     def expire_locked_order_if_needed(cls, connection: DbConnection, order: Row) -> bool:
-        """Expire a due unpaid order under its existing row lock.
+        """Просрочивает неоплаченный заказ под существующей блокировкой.
 
-        :param connection: Current transaction.
-        :param order: Locked mutable order row.
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         expires = order["payment_expires_at"]
         if order.get("order_kind", "LEGACY") == "MIXED":
@@ -116,7 +123,10 @@ class OrderData:
         return False
 
     def expire_overdue_orders(self) -> int:
-        """Release overdue reservations without duplicating work done by another worker."""
+        """Освобождает просроченные резервы без повторения работы другого worker.
+
+        :return: Числовой результат описанной операции.
+        """
         with self.database.connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM store_orders WHERE order_kind='LEGACY' AND status = 'placed' AND payment_status = 'UNPAID' AND payment_expires_at <= CURRENT_TIMESTAMP FOR UPDATE SKIP LOCKED"
@@ -124,10 +134,11 @@ class OrderData:
             return sum(self.expire_locked_order_if_needed(connection, row) for row in rows)
 
     def get_order_by_id(self, order_id: UUID, actor: Row) -> Row:
-        """Read an authorized order after reconciling expired reservations.
+        """Возвращает доступный заказ после обработки истёкшего резерва.
 
-        :param order_id: Order UUID.
-        :param actor: Authorized user.
+        :param order_id: UUID заказа.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
         """
         self.expire_overdue_orders()
         with self.database.connect() as connection:
@@ -140,9 +151,10 @@ class OrderData:
             return row
 
     def find_all(self, actor: Row) -> list[Row]:
-        """List all orders for admins or only the caller's orders for users.
+        """Возвращает все заказы ADMIN или только заказы текущего покупателя.
 
-        :param actor: Authorized account.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа list[Row].
         """
         self.expire_overdue_orders()
         with self.database.connect() as connection:
@@ -156,7 +168,10 @@ class OrderData:
             ).fetchall()
 
     def get_count_by_status(self) -> Row:
-        """Return the original inventory totals grouped by order status."""
+        """Возвращает число заказов по состояниям.
+
+        :return: Результат операции типа Row.
+        """
         self.expire_overdue_orders()
         with self.database.connect() as connection:
             rows = connection.execute(
@@ -165,10 +180,11 @@ class OrderData:
             return {row["status"]: row["total"] for row in rows}
 
     def create_draft(self, request: OrderCreateRequest, owner: Row) -> Row:
-        """Create a draft without reserving availability or capturing price/profile snapshots.
+        """Создаёт черновик без резерва и снимков цены или профиля.
 
-        :param request: Validated draft fields.
-        :param owner: Authorized order owner.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param owner: Идентификатор либо данные владельца ресурса.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             UserData.locked_user(connection, owner["id"])
@@ -191,11 +207,12 @@ class OrderData:
             return row
 
     def update_draft(self, order_id: UUID, request: OrderCreateRequest, actor: Row) -> Row:
-        """Replace only editable draft fields in one transaction.
+        """Заменяет редактируемые поля черновика в одной транзакции.
 
-        :param order_id: Draft UUID.
-        :param request: Replacement pet and quantity.
-        :param actor: Owner or administrator.
+        :param order_id: UUID заказа.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             order = self.lock_order(connection, order_id, legacy_only=True)
@@ -219,10 +236,11 @@ class OrderData:
             return row
 
     def place_draft(self, order_id: UUID, actor: Row) -> Row:
-        """Capture checkout snapshots and reserve an available pet for fifteen minutes.
+        """Создаёт снимки оформления и резервирует доступного питомца на 15 минут.
 
-        :param order_id: Draft UUID.
-        :param actor: Owner or administrator.
+        :param order_id: UUID заказа.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             order = self.lock_order(connection, order_id, legacy_only=True)
@@ -273,10 +291,11 @@ class OrderData:
             return row
 
     def delete_order(self, order_id: UUID, actor: Row) -> None:
-        """Delete an allowed order and its attempts atomically, retaining RESTRICT constraints.
+        """Атомарно удаляет допустимый заказ и попытки оплаты с сохранением ограничений связей.
 
-        :param order_id: Draft or terminal order UUID.
-        :param actor: Owner of a draft, or administrator.
+        :param order_id: UUID заказа.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Ничего не возвращает.
         """
         with self.database.connect() as connection:
             order = self.lock_order(connection, order_id, legacy_only=True)
@@ -293,11 +312,12 @@ class OrderData:
             connection.execute("DELETE FROM store_orders WHERE id = %s", (order_id,))
 
     def transition(self, order_id: UUID, target: OrderStatus, actor: Row) -> Row:
-        """Apply a valid transition, refund if needed and reconcile the pet in one transaction.
+        """Меняет состояние, выполняет возврат и обновляет питомца в одной транзакции.
 
-        :param order_id: Order UUID.
-        :param target: Requested destination state.
-        :param actor: Authorized owner or administrator.
+        :param order_id: UUID заказа.
+        :param target: Целевое состояние жизненного цикла.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             order = self.lock_order(connection, order_id, legacy_only=True)

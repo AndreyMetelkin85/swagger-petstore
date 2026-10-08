@@ -11,6 +11,9 @@ on:
       digest:
         type: string
         required: true
+      mail_digest:
+        type: string
+        required: true
 permissions:
   contents: read
 jobs:
@@ -23,10 +26,14 @@ jobs:
         env:
           DIGEST: ${{ inputs.digest }}
           REPOSITORY: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore
+          MAIL_DIGEST: ${{ inputs.mail_digest }}
         run: |
           [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
           docker pull "$REPOSITORY@$DIGEST"
           docker tag "$REPOSITORY@$DIGEST" swagger-petstore:ci
+          docker tag "$REPOSITORY@$DIGEST" swagger-petstore-python:preview
+          docker pull "${REPOSITORY}-mail@$MAIL_DIGEST"
+          docker tag "${REPOSITORY}-mail@$MAIL_DIGEST" swagger-petstore-mail:preview
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -38,15 +45,11 @@ jobs:
         run: python -m pip install --constraint requirements-runtime.txt -e '.[test]'
       - name: Contracts and persistence on the target architecture
         env:
-          BASE_URL: http://127.0.0.1:8080/api/v3
-          PETSTORE_COMMERCE_CONTAINER: petstore-ci
+          BASE_URL: http://127.0.0.1:8081/api/v3
+          PETSTORE_COMMERCE_CONTAINER: petstore-python-preview
+          PETSTORE_COMMERCE_DB_CONTAINER: petstore-python-db
         run: |
-          docker run --detach --name petstore-ci --env PETSTORE_DEMO_CATALOG=false --publish 127.0.0.1:8080:8080 swagger-petstore:ci
-          for _attempt in $(seq 1 90); do
-            if curl --fail --silent http://localhost:8080/api/v3/health; then break; fi
-            sleep 2
-          done
-          curl --fail http://localhost:8080/api/v3/health
+          docker compose -f tests/docker-compose.yml up -d --no-build --wait --wait-timeout 180
           python -m pytest tests/smoke tests/system/test_commerce_system.py -q -o addopts=''
       - name: Scanner cache epoch
         id: epoch
@@ -66,9 +69,11 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" --mount type=bind,source="$PWD/candidate-image.tar",target=/image.tar,readonly --mount type=bind,source="$PWD/.trivy-cache",target=/cache aquasec/trivy:0.74.0 --cache-dir /cache image --input /image.tar --timeout 10m --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --no-progress
           test -r .trivy-cache/db/metadata.json
           test -r .trivy-cache/java-db/metadata.json
+          docker save --output mail-image.tar swagger-petstore-mail:preview
+          docker run --rm --user "$(id -u):$(id -g)" --mount type=bind,source="$PWD/mail-image.tar",target=/image.tar,readonly --mount type=bind,source="$PWD/.trivy-cache",target=/cache aquasec/trivy:0.74.0 --cache-dir /cache image --input /image.tar --timeout 10m --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --no-progress
           echo "Trivy cache restored: ${{ steps.scanner-cache.outputs.cache-hit }}; databases readable by runner" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove own architecture test container
         if: always()
         run: |
-          docker logs --tail=40 petstore-ci || true
-          docker rm --force --volumes petstore-ci || true
+          docker compose -f tests/docker-compose.yml logs --tail=40 || true
+          docker compose -f tests/docker-compose.yml down --volumes

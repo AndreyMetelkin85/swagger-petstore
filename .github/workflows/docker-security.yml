@@ -23,7 +23,6 @@ jobs:
     timeout-minutes: 3
     outputs:
       backend: ${{ steps.scope.outputs.backend }}
-      ui: ${{ steps.scope.outputs.ui }}
       runtime: ${{ steps.scope.outputs.runtime }}
       build: ${{ steps.scope.outputs.build }}
     steps:
@@ -60,17 +59,6 @@ jobs:
       - name: Verify the offline data package on the fast path
         if: needs.changes.outputs.backend != 'true'
         run: python -m pytest tests/unit -n 4 --dist loadscope -q
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-      - name: Frontend unit tests and TypeScript
-        working-directory: ui
-        run: |
-          npm ci --no-audit --no-fund
-          npm test
-          npm run build
 
   build-amd64:
     needs: changes
@@ -88,6 +76,7 @@ jobs:
       arch: amd64
       runner: ubuntu-24.04
       digest: ${{ needs.build-amd64.outputs.candidate_digest }}
+      mail_digest: ${{ needs.build-amd64.outputs.mail_digest }}
 
   build-arm64:
     needs: changes
@@ -105,6 +94,7 @@ jobs:
       arch: arm64
       runner: ubuntu-24.04-arm
       digest: ${{ needs.build-arm64.outputs.candidate_digest }}
+      mail_digest: ${{ needs.build-arm64.outputs.mail_digest }}
 
   python-verification:
     needs: [changes, build-amd64]
@@ -114,6 +104,7 @@ jobs:
       mode: regression
       candidate: true
       digest: ${{ needs.build-amd64.outputs.candidate_digest }}
+      mail_digest: ${{ needs.build-amd64.outputs.mail_digest }}
 
   swagger:
     needs: [changes, build-amd64]
@@ -123,6 +114,7 @@ jobs:
       mode: swagger
       candidate: true
       digest: ${{ needs.build-amd64.outputs.candidate_digest }}
+      mail_digest: ${{ needs.build-amd64.outputs.mail_digest }}
 
   runtime:
     needs: [changes, build-amd64]
@@ -132,6 +124,7 @@ jobs:
       mode: runtime
       candidate: true
       digest: ${{ needs.build-amd64.outputs.candidate_digest }}
+      mail_digest: ${{ needs.build-amd64.outputs.mail_digest }}
       backend: ${{ needs.changes.outputs.backend == 'true' }}
 
   pull-request:
@@ -163,9 +156,13 @@ jobs:
           REPOSITORY: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore
           AMD64: ${{ needs.build-amd64.outputs.candidate_digest }}
           ARM64: ${{ needs.build-arm64.outputs.candidate_digest }}
+          MAIL_AMD64: ${{ needs.build-amd64.outputs.mail_digest }}
+          MAIL_ARM64: ${{ needs.build-arm64.outputs.mail_digest }}
         run: |
           docker buildx imagetools create --tag "$REPOSITORY:sha-${{ github.sha }}" --tag "$REPOSITORY:latest" "$REPOSITORY@$AMD64" "$REPOSITORY@$ARM64"
           docker buildx imagetools inspect "$REPOSITORY:latest"
+          docker buildx imagetools create --tag "${REPOSITORY}-mail:sha-${{ github.sha }}" --tag "${REPOSITORY}-mail:latest" "${REPOSITORY}-mail@$MAIL_AMD64" "${REPOSITORY}-mail@$MAIL_ARM64"
+          docker buildx imagetools inspect "${REPOSITORY}-mail:latest"
           echo "Published only verified AMD64 and ARM64 digests without rebuilding" >> "$GITHUB_STEP_SUMMARY"
 
   timing:

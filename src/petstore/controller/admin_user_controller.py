@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from starlette.responses import Response
 
@@ -7,20 +7,22 @@ from petstore.utils.responses import Responses, public_user
 
 
 class AdminUserController:
-    """Administrator block/unblock actions separate from profile editing."""
+    """Блокировка и восстановление пользователей отдельно от редактирования профиля."""
 
     def block_user(self, context: RequestContext) -> Response:
-        """Block a user and invalidate existing access tokens.
+        """Блокирует пользователя и отзывает ранее выданные токены доступа.
 
-        :param context: Administrator and target account.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("ADMIN")
         return Responses(public_user(context.auth.set_blocked(actor, context.identifier("userId"), True)))
 
     def unblock_user(self, context: RequestContext) -> Response:
-        """Restore a blocked account's confirmed or pending state.
+        """Восстанавливает состояние подтверждения заблокированного аккаунта.
 
-        :param context: Administrator and target account.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("ADMIN")
         return Responses(public_user(context.auth.set_blocked(actor, context.identifier("userId"), False)))

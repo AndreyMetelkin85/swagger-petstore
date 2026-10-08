@@ -1,4 +1,4 @@
-"""Bounded SMTP delivery from FastAPI's synchronous worker pool."""
+"""Тестовые письма: шаблоны и безопасная SMTP-отправка."""
 
 import logging
 import smtplib
@@ -15,21 +15,23 @@ logger = logging.getLogger("petstore.mail")
 
 
 class MailService:
-    """Optional SMTP transport; application passwords and raw URLs are never logged."""
+    """Необязательная SMTP-отправка без паролей приложения и ссылок в логах."""
 
     def __init__(self, settings: Settings) -> None:
-        """Configure a local SMTP transport, disabled unless a host is supplied.
+        """Настраивает локальный SMTP; без адреса сервера отправка отключена.
 
-        :param settings: SMTP and external application URL settings.
+        :param settings: Настройки приложения и его инфраструктурных подключений.
+        :return: Ничего не возвращает.
         """
         self.settings = settings
 
     def action_url(self, user_id: UUID, code: str, reset: bool) -> str:
-        """Use a configured real frontend, or the working backend fallback.
+        """Строит ссылку на настроенный фронтенд либо рабочую страницу восстановления бэкенда.
 
-        :param user_id: Account UUID.
-        :param code: One-time code; never logged.
-        :param reset: Select password recovery.
+        :param user_id: UUID целевого пользователя.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :param reset: Формировать письмо восстановления вместо подтверждения регистрации.
+        :return: Строковый результат описанной операции.
         """
         token = quote(code, safe="")
         if self.settings.mail_frontend_url:
@@ -49,14 +51,15 @@ class MailService:
         expires_at: datetime,
         reset: bool = False,
     ) -> bool:
-        """Send HTML and text; a transport outage does not undo a committed account action.
+        """Отправляет HTML и текст; сбой SMTP не отменяет уже зафиксированное изменение аккаунта.
 
-        :param user_id: Account UUID.
-        :param recipient: Recipient address.
-        :param username: Account name for the greeting.
-        :param code: Generated one-time code.
-        :param expires_at: Link deadline.
-        :param reset: Select the password-recovery template.
+        :param user_id: UUID целевого пользователя.
+        :param recipient: Получатель тестового письма.
+        :param username: Имя пользователя.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :param expires_at: Время окончания действия ссылки с часовым поясом.
+        :param reset: Формировать письмо восстановления вместо подтверждения регистрации.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         host = self.settings.smtp_host
         if not host:

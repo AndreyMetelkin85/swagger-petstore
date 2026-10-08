@@ -1,4 +1,4 @@
-"""Typed inventory boundary used by checkout and cart policies, never exposed as a public DTO."""
+"""Типизированные модели и правила действующего контракта API."""
 
 from decimal import Decimal
 from typing import Literal
@@ -13,7 +13,7 @@ from petstore.service.exceptions import ApiException
 
 
 class InventoryItem(BaseModel):
-    """Validated immutable inventory state read while the caller holds its row lock."""
+    """Проверенный неизменяемый снимок остатков под блокировкой строки."""
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 
@@ -29,11 +29,20 @@ class InventoryItem(BaseModel):
 
     @classmethod
     def from_row(cls, kind: str, row: Row) -> "InventoryItem":
-        """Validate driver values once before any monetary or availability decision."""
+        """Проверяет данные драйвера до расчёта цены и доступности.
+
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param row: Строка базы данных для обработки или преобразования.
+        :return: Результат операции типа 'InventoryItem'.
+        """
         return cls.model_validate({**row, "kind": kind})
 
     def availability_reason(self, quantity: int) -> str | None:
-        """Explain cart unavailability without removing a buyer's soft reference."""
+        """Объясняет недоступность позиции, не удаляя ссылку покупателя из корзины.
+
+        :param quantity: Количество единиц позиции; для питомца всегда одна.
+        :return: Результат операции типа str | None.
+        """
         if self.publication_status != Publication.PUBLISHED or self.price is None:
             return "PRODUCT_UNAVAILABLE" if self.kind == "product" else "PET_NOT_AVAILABLE"
         if self.kind == "product" and self.stock - self.reserved < quantity:
@@ -43,10 +52,11 @@ class InventoryItem(BaseModel):
         return None
 
     def checkout_amount(self, quoted_price: Decimal, quantity: int) -> Decimal:
-        """Validate a locked item's quote and availability before any reserve is written.
+        """Проверяет сохранённую цену и доступность заблокированной позиции перед записью резерва.
 
-        :raises ApiException: Publication, price or unreserved inventory has changed.
-        :return: Exact line amount; calculations never pass through binary floats.
+        :param quoted_price: Сохранённая цена для проверки изменения перед оформлением.
+        :param quantity: Количество единиц позиции; для питомца всегда одна.
+        :return: Результат операции типа Decimal.
         """
         if self.publication_status != Publication.PUBLISHED or self.price is None:
             raise ApiException(409, "PRODUCT_UNAVAILABLE", "A checkout item is unpublished")

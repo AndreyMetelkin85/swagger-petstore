@@ -1,4 +1,4 @@
-"""Telemetry routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 
@@ -14,7 +14,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> TelemetryController:
-    """Inject this application's telemetry controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа TelemetryController.
+    """
     return cast(TelemetryController, context.request.app.state.controllers.telemetry)
 
 
@@ -36,7 +40,14 @@ def client_events(
     response: Response,
     body: Annotated[TelemetryCommand, BeforeValidator(TelemetryCommand.from_wire), Body()],
 ) -> Response:
-    """Обезличенные события (allowlist)."""
+    """Обезличенные события (allowlist).
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.body = body
     result = controller.client_events(context)
     return result

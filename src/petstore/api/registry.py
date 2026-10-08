@@ -1,4 +1,4 @@
-"""Application-scoped controller composition and explicit router registration."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from dataclasses import dataclass
 
@@ -38,7 +38,7 @@ from petstore.data.database import Database
 
 @dataclass(frozen=True)
 class Controllers:
-    """Typed dependency container: each controller owns one bounded HTTP responsibility."""
+    """Типизированные контроллеры с отдельной ответственностью каждого HTTP-раздела."""
 
     health: HealthController
     registration: RegistrationController
@@ -56,7 +56,12 @@ class Controllers:
 
     @classmethod
     def create(cls, database: Database, settings: Settings) -> "Controllers":
-        """Compose dependencies once per application, never once per incoming request."""
+        """Однократно собирает зависимости приложения, а не создаёт их для каждого запроса.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :param settings: Настройки приложения и его инфраструктурных подключений.
+        :return: Результат операции типа 'Controllers'.
+        """
         return cls(
             health=HealthController(database),
             registration=RegistrationController(),
@@ -75,7 +80,11 @@ class Controllers:
 
 
 def include_routers(app: FastAPI) -> None:
-    """Register concrete native routers, independent of the OpenAPI YAML's contents."""
+    """Подключает явные маршруты FastAPI независимо от содержимого OpenAPI YAML.
+
+    :param app: Экземпляр приложения FastAPI.
+    :return: Ничего не возвращает.
+    """
     app.include_router(health.router)
     app.include_router(registration.router)
     app.include_router(authentication.router)

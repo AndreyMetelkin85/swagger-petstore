@@ -1,4 +1,4 @@
-"""Original named response DTOs with Python attributes and unchanged JSON aliases."""
+"""Типизированные модели и правила действующего контракта API."""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -23,13 +23,13 @@ Money = Annotated[Decimal, PlainSerializer(float, return_type=float, when_used="
 
 
 class ResponseModel(BaseModel):
-    """Public DTOs reject extra fields, especially private database/security columns."""
+    """Публичный DTO, запрещающий лишние поля и утечку приватных столбцов."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class Address(ResponseModel):
-    """Strict public address: private or unsupported nested fields cannot leak."""
+    """Российский адрес доставки с действующими внешними именами полей."""
 
     city: str
     street: str
@@ -39,21 +39,21 @@ class Address(ResponseModel):
 
 
 class Category(ResponseModel):
-    """Legacy pet category summary."""
+    """Вложенная категория питомца с идентификатором."""
 
     id: UUID | None = None
     name: str | None = None
 
 
 class Tag(ResponseModel):
-    """Legacy pet tag summary."""
+    """Поисковый тег питомца."""
 
     id: UUID | None = None
     name: str | None = None
 
 
 class User(ResponseModel):
-    """Public account profile, without password, codes or token version."""
+    """Публичный профиль без пароля, одноразовых кодов и версии токена."""
 
     id: UUID
     username: str
@@ -67,7 +67,7 @@ class User(ResponseModel):
 
 
 class RegistrationResponse(ResponseModel):
-    """Pending account, confirmation URL and deadline."""
+    """Неподтверждённый аккаунт, ссылка подтверждения и срок действия."""
 
     user: User
     confirmation_url: str = Field(alias="confirmationUrl")
@@ -75,21 +75,21 @@ class RegistrationResponse(ResponseModel):
 
 
 class ConfirmationLinkResponse(ResponseModel):
-    """Replacement confirmation URL and deadline."""
+    """Новая ссылка подтверждения и срок её действия."""
 
     confirmation_url: str = Field(alias="confirmationUrl")
     expires_at: WireTime = Field(alias="expiresAt")
 
 
 class PasswordResetLinkResponse(ResponseModel):
-    """Recovery deadline and optionally exposed test link."""
+    """Срок восстановления и необязательная видимая тестовая ссылка."""
 
     reset_url: str | None = Field(alias="resetUrl")
     expires_at: WireTime = Field(alias="expiresAt")
 
 
 class LoginResponse(ResponseModel):
-    """Bearer access token and authenticated user profile."""
+    """Bearer-токен и профиль авторизованного пользователя."""
 
     access_token: str = Field(repr=False)
     token_type: str
@@ -98,7 +98,7 @@ class LoginResponse(ResponseModel):
 
 
 class Pet(ResponseModel):
-    """Public catalog data with exact price and optimistic version."""
+    """Публичный питомец с точной ценой и версией."""
 
     id: UUID
     name: str
@@ -112,7 +112,7 @@ class Pet(ResponseModel):
 
 
 class DeliveryDetails(ResponseModel):
-    """Checkout-time contact/address snapshot, independent of later profile edits."""
+    """Неизменяемый снимок контактов и адреса на момент оформления."""
 
     first_name: str = Field(alias="firstName")
     last_name: str = Field(alias="lastName")
@@ -121,7 +121,7 @@ class DeliveryDetails(ResponseModel):
 
 
 class Order(ResponseModel):
-    """Draft or placed order using the original owner and snapshot fields."""
+    """Заказ с владельцем и сохранёнными снимками прежнего контракта."""
 
     id: UUID
     pet_id: UUID = Field(alias="petId")
@@ -140,7 +140,7 @@ class Order(ResponseModel):
 
 
 class Payment(ResponseModel):
-    """Safe payment summary without card number, CVV or request hash."""
+    """Безопасная сводка оплаты без номера карты, CVV и хеша запроса."""
 
     id: UUID
     order_id: UUID = Field(alias="orderId")
@@ -155,14 +155,14 @@ class Payment(ResponseModel):
 
 
 class ErrorDetail(ResponseModel):
-    """Field-specific error details, including empty-list-compatible business failures."""
+    """Ошибка отдельного поля; бизнес-ошибки допускают пустой список деталей."""
 
     field: str
     message: str
 
 
 class ErrorResponse(ResponseModel):
-    """The four-field API error envelope retained by every controller."""
+    """Общий ответ ошибки со статусом, кодом, сообщением и деталями."""
 
     status: int = Field(ge=400, le=599)
     error: str
@@ -171,7 +171,7 @@ class ErrorResponse(ResponseModel):
 
 
 class HealthResponse(ResponseModel):
-    """Service and PostgreSQL availability plus UTC probe time."""
+    """Готовность сервиса и PostgreSQL с временем проверки UTC."""
 
     status: str
     service: str
@@ -180,7 +180,7 @@ class HealthResponse(ResponseModel):
 
 
 class CatalogCategory(ResponseModel):
-    """Versioned category; deactivation keeps its existing cards."""
+    """Категория с версией; деактивация сохраняет связанные карточки."""
 
     id: UUID
     name: str
@@ -191,7 +191,7 @@ class CatalogCategory(ResponseModel):
 
 
 class CatalogImage(ResponseModel):
-    """Ordered image metadata, never a filesystem path."""
+    """Метаданные изображения с порядком, без пути файловой системы."""
 
     media_id: UUID = Field(alias="mediaId")
     position: int
@@ -202,7 +202,7 @@ class CatalogImage(ResponseModel):
 
 
 class CatalogCard(ResponseModel):
-    """Shared public card fields independent of the inventory type."""
+    """Общие публичные поля карточек независимо от типа остатков."""
 
     id: UUID
     name: str
@@ -216,7 +216,7 @@ class CatalogCard(ResponseModel):
 
 
 class ProductCard(CatalogCard):
-    """A product/feed card including current unreserved inventory."""
+    """Карточка товара или корма с текущим свободным остатком."""
 
     kind: Literal["product"]
     sku: str | None
@@ -235,7 +235,7 @@ class ProductCard(CatalogCard):
 
 
 class PetCard(CatalogCard):
-    """Extended pet card: availability remains separate from publication."""
+    """Расширенная карточка питомца с отдельной доступностью и публикацией."""
 
     kind: Literal["pet"]
     animal_type: Animal | None = Field(alias="animalType")
@@ -247,7 +247,7 @@ class PetCard(CatalogCard):
 
 
 class Page[Item: ResponseModel](ResponseModel):
-    """Stable pagination envelope with typed card contents."""
+    """Пагинация с типизированными карточками."""
 
     items: list[Item]
     page: int
@@ -260,7 +260,7 @@ PetPage = Page[PetCard]
 
 
 class MediaMetadata(ResponseModel):
-    """Sanitized image metadata without uploader identity or storage paths."""
+    """Очищенные метаданные изображения без автора загрузки и путей хранения."""
 
     id: UUID
     name: str
@@ -276,7 +276,7 @@ class MediaMetadata(ResponseModel):
 
 
 class CartLine(ResponseModel):
-    """Current availability and saved quote for one soft catalog reference."""
+    """Текущая доступность и сохранённая цена позиции корзины."""
 
     id: UUID
     kind: Literal["product", "pet"]
@@ -292,14 +292,14 @@ class CartLine(ResponseModel):
 
 
 class Cart(ResponseModel):
-    """Versioned mixed cart retaining unavailable positions."""
+    """Смешанная корзина с версией и сохранением недоступных позиций."""
 
     lines: list[CartLine]
     version: int
 
 
 class StoreOrderLine(ResponseModel):
-    """Immutable checkout quote plus optional legacy-compatible allocation state."""
+    """Неизменяемая позиция заказа с ценой и состоянием выделенного резерва."""
 
     kind: Literal["product", "pet"]
     item_id: UUID = Field(alias="itemId")
@@ -312,7 +312,7 @@ class StoreOrderLine(ResponseModel):
 
 
 class StoreOrder(ResponseModel):
-    """Mixed or adapted legacy order with typed immutable snapshots."""
+    """Смешанный либо адаптированный прежний заказ с типизированными снимками."""
 
     id: UUID
     user_id: UUID = Field(alias="userId")

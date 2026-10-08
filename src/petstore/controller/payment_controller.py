@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from starlette.responses import Response
 
@@ -13,19 +13,21 @@ from petstore.utils.responses import Responses, public_payment
 
 
 class PaymentController:
-    """Test-card payment creation, replay, history and declined-attempt cleanup."""
+    """Симуляция оплаты, повторы, история и удаление отклонённых попыток."""
 
     def __init__(self, database: Database) -> None:
-        """Configure the payment repository.
+        """Настраивает зависимости операции на общем пуле приложения.
 
-        :param database: Application pool.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.data = PaymentData(database)
 
     def create_payment(self, context: RequestContext) -> Response:
-        """Create or replay a payment using its required idempotency key.
+        """Создаёт платёж или возвращает результат повтора по обязательному ключу идемпотентности.
 
-        :param context: Parent UUID, idempotency header and payment body.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("USER", "ADMIN")
         payment, replayed = self.data.create_payment(
@@ -37,9 +39,10 @@ class PaymentController:
         return Responses(public_payment(payment), status_code=200 if replayed else 201)
 
     def list_payments(self, context: RequestContext) -> Response:
-        """Read an authorized order's payment history.
+        """Возвращает историю платежей после проверки доступа к заказу.
 
-        :param context: Authenticated parent order UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("USER", "ADMIN")
         return Responses(
@@ -47,9 +50,10 @@ class PaymentController:
         )
 
     def get_payment(self, context: RequestContext) -> Response:
-        """Read an authorized payment summary.
+        """Возвращает безопасную сводку доступного платежа.
 
-        :param context: Parent and payment UUIDs with Bearer token.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("USER", "ADMIN")
         return Responses(
@@ -59,9 +63,10 @@ class PaymentController:
         )
 
     def delete_payment(self, context: RequestContext) -> Response:
-        """Delete a declined attempt only as an administrator.
+        """Удаляет отклонённую попытку оплаты только как ADMIN.
 
-        :param context: Parent and payment UUIDs with ADMIN token.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         self.data.delete_declined_payment(context.identifier("orderId"), context.identifier("paymentId"))

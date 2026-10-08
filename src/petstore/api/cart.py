@@ -1,4 +1,4 @@
-"""Cart routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -16,7 +16,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> CartController:
-    """Inject this application's cart controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа CartController.
+    """
     return cast(CartController, context.request.app.state.controllers.cart)
 
 
@@ -37,7 +41,13 @@ def get_cart(
     controller: Controller,
     response: Response,
 ) -> Cart:
-    """Общая корзина."""
+    """Общая корзина.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа Cart.
+    """
     result = controller.get(context)
     return decode_response(result, response)
 
@@ -58,7 +68,15 @@ def replace_cart(
     body: Annotated[CartCommand, BeforeValidator(CartCommand.from_wire), Body()],
     idempotency_key: Annotated[UUID | None, Header(alias="Idempotency-Key")] = None,
 ) -> Cart:
-    """Полная замена корзины по версии."""
+    """Полная замена корзины по версии.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param idempotency_key: UUID из Idempotency-Key, защищающий повтор операции.
+    :return: Результат операции типа Cart.
+    """
     context.parameters = {"Idempotency-Key": idempotency_key}
     context.body = body
     result = controller.replace(context)

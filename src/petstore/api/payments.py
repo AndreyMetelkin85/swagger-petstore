@@ -1,4 +1,4 @@
-"""Payments routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -16,7 +16,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> PaymentController:
-    """Inject this application's payments controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа PaymentController.
+    """
     return cast(PaymentController, context.request.app.state.controllers.payments)
 
 
@@ -40,7 +44,16 @@ def create_payment(
     order_id: Annotated[UUID, Path(alias="orderId")],
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> Payment:
-    """Оплата заказа."""
+    """Оплата заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param order_id: UUID заказа.
+    :param idempotency_key: UUID из Idempotency-Key, защищающий повтор операции.
+    :return: Результат операции типа Payment.
+    """
     context.parameters = {"orderId": order_id, "Idempotency-Key": idempotency_key}
     context.body = body
     result = controller.create_payment(context)
@@ -62,7 +75,14 @@ def list_payments(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> list[Payment]:
-    """Получение платежей заказа."""
+    """Получение платежей заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа list[Payment].
+    """
     context.parameters = {"orderId": order_id}
     result = controller.list_payments(context)
     return decode_response(result, response)
@@ -84,7 +104,15 @@ def get_payment(
     order_id: Annotated[UUID, Path(alias="orderId")],
     payment_id: Annotated[UUID, Path(alias="paymentId")],
 ) -> Payment:
-    """Получение платежа."""
+    """Получение платежа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :param payment_id: UUID попытки оплаты.
+    :return: Результат операции типа Payment.
+    """
     context.parameters = {"orderId": order_id, "paymentId": payment_id}
     result = controller.get_payment(context)
     return decode_response(result, response)
@@ -106,7 +134,15 @@ def delete_payment(
     order_id: Annotated[UUID, Path(alias="orderId")],
     payment_id: Annotated[UUID, Path(alias="paymentId")],
 ) -> Response:
-    """Удаление неуспешного платежа."""
+    """Удаление неуспешного платежа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :param payment_id: UUID попытки оплаты.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"orderId": order_id, "paymentId": payment_id}
     result = controller.delete_payment(context)
     return result

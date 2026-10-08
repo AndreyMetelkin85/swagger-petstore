@@ -1,4 +1,4 @@
-"""Select checks against the last actually published master, not an unverified parent."""
+"""Инфраструктурные проверки сборки, миграций и публикации."""
 
 import argparse
 import json
@@ -9,24 +9,24 @@ from urllib.request import Request, urlopen
 
 
 def classify(paths: list[str]) -> dict[str, bool]:
-    """Unknown files and pipeline changes fail closed into the full release checks."""
-    backend = ui = runtime = False
+    """Выбирает полные проверки для неизвестных файлов и изменений CI.
+
+    :param paths: Пути изменённых файлов относительно корня репозитория.
+    :return: Результат описанной проверки или запроса.
+    """
+    backend = runtime = False
     for path in paths:
         if path.startswith("docs/") or path.endswith(".md") or path == ".gitignore":
             continue
-        if path.startswith("ui/"):
-            ui = runtime = True
-        elif path.startswith("resources/demo-catalog/"):
-            ui = runtime = True
-        elif path.startswith("tests/"):
-            backend = runtime = True
-        else:
-            backend = runtime = True
-    return {"backend": backend, "ui": ui or backend, "runtime": runtime, "build": runtime or backend or ui}
+        backend = runtime = True
+    return {"backend": backend, "runtime": runtime, "build": runtime or backend}
 
 
 def previous_release() -> str | None:
-    """Only a successful publishing job establishes a reusable backend baseline."""
+    """Находит последний master с успешно выполненной публикацией.
+
+    :return: Результат описанной проверки или запроса.
+    """
     repository = os.getenv("GITHUB_REPOSITORY")
     token = os.getenv("GITHUB_TOKEN")
     if not repository or not token:
@@ -34,6 +34,11 @@ def previous_release() -> str | None:
     api = os.getenv("GITHUB_API_URL", "https://api.github.com")
 
     def get(path: str):
+        """Читает JSON GitHub API с авторизацией и ограничением времени запроса.
+
+        :param path: Путь ресурса или файла, сформированный вызывающим кодом.
+        :return: Результат описанной проверки или запроса.
+        """
         request = Request(
             api + path, headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
         )
@@ -56,11 +61,15 @@ def previous_release() -> str | None:
 
 
 def main() -> None:
+    """Выбирает проверки по изменённым файлам относительно проверенного релиза.
+
+    :return: Ничего не возвращает.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--base")
     arguments = parser.parse_args()
     base = arguments.base or previous_release()
-    result = {"backend": True, "ui": True, "runtime": True, "build": True}
+    result = {"backend": True, "runtime": True, "build": True}
     if base:
         diff = subprocess.run(
             ["git", "diff", "--name-only", "-z", base, "HEAD"], capture_output=True, check=False

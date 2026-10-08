@@ -1,4 +1,4 @@
-"""Prepare separate Flyway-migrated databases for parallel test workers."""
+"""Создание отдельных баз с миграциями Flyway для параллельных тестов."""
 
 import argparse
 import subprocess
@@ -6,12 +6,17 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 def prepare(container: str, name: str) -> None:
-    """Names originate only from this module; no destructive reset or user database."""
+    """Создаёт изолированную базу и применяет миграции из образа API.
+
+    :param container: Разрешённый контейнер API с CLI Flyway.
+    :param name: Имя тестовой базы, сформированное этим модулем.
+    :return: None после успешного создания базы и применения миграций.
+    """
     subprocess.run(
         [
             "docker",
             "exec",
-            container,
+            "petstore-python-db",
             "psql",
             "-U",
             "petstore",
@@ -28,7 +33,7 @@ def prepare(container: str, name: str) -> None:
             "docker",
             "exec",
             "-e",
-            f"FLYWAY_URL=jdbc:postgresql://127.0.0.1:5432/{name}",
+            f"FLYWAY_URL=jdbc:postgresql://postgres:5432/{name}",
             "-e",
             "FLYWAY_USER=petstore",
             "-e",
@@ -45,12 +50,17 @@ def prepare(container: str, name: str) -> None:
 
 
 def main() -> None:
+    """Создаёт базовую тестовую базу и отдельные базы для worker-процессов.
+
+    :return: None после завершения подготовки всех баз.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--container", choices=["petstore-python-preview", "petstore-ci-regression"], required=True
     )
     parser.add_argument("--workers", type=int, choices=range(1, 5), default=4)
     arguments = parser.parse_args()
+    prepare(arguments.container, "petstore_python_test")
     with ThreadPoolExecutor(max_workers=arguments.workers) as workers:
         list(
             workers.map(

@@ -1,4 +1,4 @@
-"""Catalog SQL operations and safe public row mapping; business decisions live in CatalogService."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 import json
 from typing import Any, LiteralString, cast
@@ -12,18 +12,28 @@ from petstore.service.exceptions import ApiException
 
 
 class CatalogData:
-    """Persistence and deterministic row locking, without opening independent transactions."""
+    """SQL каталога и упорядоченные блокировки в транзакции вызывающего сервиса."""
 
     @staticmethod
     def table(kind: str) -> LiteralString:
-        """Return an allowlisted identifier; user input is never interpolated as SQL."""
+        """Возвращает имя таблицы из разрешённого списка без SQL-подстановки пользовательского ввода.
+
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :return: Результат операции типа LiteralString.
+        """
         if kind not in {"product", "pet"}:
             raise ApiException(422, "VALIDATION_ERROR", "Unknown item kind")
         return "products" if kind == "product" else "pets"
 
     @classmethod
     def locked(cls, connection: DbConnection, kind: str, identifier: UUID) -> Row:
-        """Acquire a catalog row under the caller's existing transaction."""
+        """Блокирует карточку в уже открытой транзакции вызывающего сервиса.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Row.
+        """
         row = connection.execute(
             f"SELECT * FROM {cls.table(kind)} WHERE id = %s FOR UPDATE", (identifier,)
         ).fetchone()
@@ -37,7 +47,13 @@ class CatalogData:
 
     @staticmethod
     def gallery(connection: DbConnection, kind: str, identifier: UUID) -> list[Row]:
-        """Read gallery order/cover without exposing storage paths."""
+        """Возвращает порядок изображений и обложку без путей хранения.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа list[Row].
+        """
         column = "product_id" if kind == "product" else "pet_id"
         rows = connection.execute(
             f"SELECT media_id, position, alt, is_cover FROM catalog_images WHERE {column} = %s ORDER BY position",
@@ -57,7 +73,13 @@ class CatalogData:
 
     @classmethod
     def public(cls, connection: DbConnection, kind: str, row: Row) -> Row:
-        """Map database columns to the documented card DTO."""
+        """Преобразует столбцы карточки в публичный DTO.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param row: Строка базы данных для обработки или преобразования.
+        :return: Результат операции типа Row.
+        """
         common = {
             "id": row["id"],
             "kind": kind,
@@ -97,7 +119,13 @@ class CatalogData:
 
     @staticmethod
     def categories(connection: DbConnection, public: bool, kind: str | None) -> Cursor[Row]:
-        """Read category rows with optional public/activity filtering."""
+        """Читает категории с дополнительным фильтром активности.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "SELECT * FROM catalog_categories WHERE (%s = FALSE OR active) AND (%s::text IS NULL OR kind = %s) ORDER BY name, id",
             (public, kind, kind),
@@ -105,7 +133,14 @@ class CatalogData:
 
     @staticmethod
     def create_category(connection: DbConnection, name: str, kind: str, active: bool) -> Cursor[Row]:
-        """Insert an already validated category."""
+        """Добавляет предварительно проверенную категорию.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param name: Имя поля, параметра или ресурса текущей операции.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param active: Фильтр активности категории.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "INSERT INTO catalog_categories (name,kind,active) VALUES (%s,%s,%s) RETURNING *",
             (name, kind, active),
@@ -113,12 +148,24 @@ class CatalogData:
 
     @staticmethod
     def lock_category(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Lock a category for versioned replacement."""
+        """Блокирует категорию перед обновлением по версии.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("SELECT * FROM catalog_categories WHERE id=%s FOR UPDATE", (identifier,))
 
     @staticmethod
     def update_category(connection: DbConnection, identifier: UUID, name: str, active: bool) -> Cursor[Row]:
-        """Persist a checked category edit without removing linked cards."""
+        """Сохраняет изменение категории, не удаляя связанные карточки.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param name: Имя поля, параметра или ресурса текущей операции.
+        :param active: Фильтр активности категории.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE catalog_categories SET name=%s,active=%s,version=version+1 WHERE id=%s RETURNING *",
             (name, active, identifier),
@@ -126,17 +173,33 @@ class CatalogData:
 
     @staticmethod
     def share_category(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Hold activity/kind stable during a catalog command."""
+        """Удерживает тип и активность категории неизменными на время команды каталога.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("SELECT * FROM catalog_categories WHERE id=%s FOR SHARE", (identifier,))
 
     @staticmethod
     def lock_media(connection: DbConnection, media_id: UUID) -> Cursor[Row]:
-        """Protect an image against concurrent deletion."""
+        """Блокирует изображение от конкурентного удаления.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param media_id: UUID изображения.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("SELECT id FROM media WHERE id=%s AND NOT deleted FOR UPDATE", (media_id,))
 
     @staticmethod
     def clear_gallery(connection: DbConnection, kind: str, identifier: UUID) -> Cursor[Row]:
-        """Replace a card's image associations under existing locks."""
+        """Удаляет прежние связи галереи под уже полученными блокировками.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             f"DELETE FROM catalog_images WHERE {'product_id' if kind == 'product' else 'pet_id'}=%s",
             (identifier,),
@@ -151,7 +214,16 @@ class CatalogData:
         image: ImageReference,
         is_cover: bool,
     ) -> Cursor[Row]:
-        """Persist service-decided display position and cover selection."""
+        """Сохраняет порядок и выбор обложки, определённые сервисом.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param position: Порядковый номер изображения в галерее.
+        :param image: Изображение либо его метаданные.
+        :param is_cover: Используется ли изображение как обложка.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             f"INSERT INTO catalog_images ({'product_id' if kind == 'product' else 'pet_id'},media_id,position,alt,is_cover) VALUES (%s,%s,%s,%s,%s)",
             (
@@ -165,7 +237,14 @@ class CatalogData:
 
     @staticmethod
     def update_card(connection: DbConnection, kind: str, identifier: UUID, fields: Row) -> Cursor[Row]:
-        """Update allowlisted command fields with bound values."""
+        """Обновляет разрешённые поля карточки с параметризованными значениями.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param fields: Проверяемые или изменяемые поля операции.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             sql.SQL("UPDATE {} SET {},version=version+1 WHERE id=%s RETURNING *").format(
                 sql.Identifier(CatalogData.table(kind)),
@@ -176,7 +255,13 @@ class CatalogData:
 
     @staticmethod
     def insert_card(connection: DbConnection, kind: str, fields: Row) -> Cursor[Row]:
-        """Insert a service-built card without interpolating values."""
+        """Создаёт подготовленную сервисом карточку без SQL-подстановки значений.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param fields: Проверяемые или изменяемые поля операции.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             sql.SQL("INSERT INTO {} ({}) VALUES ({}) RETURNING *").format(
                 sql.Identifier(CatalogData.table(kind)),
@@ -188,12 +273,25 @@ class CatalogData:
 
     @staticmethod
     def get(connection: DbConnection, kind: str, identifier: UUID) -> Cursor[Row]:
-        """Read a card; the service enforces publication visibility."""
+        """Читает карточку; проверка видимости публикации остаётся в сервисе.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(f"SELECT * FROM {CatalogData.table(kind)} WHERE id=%s", (identifier,))
 
     @staticmethod
     def set_publication(connection: DbConnection, kind: str, identifier: UUID, target: str) -> Cursor[Row]:
-        """Persist a service-approved publication state."""
+        """Сохраняет состояние публикации, разрешённое сервисом.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param target: Целевое состояние жизненного цикла.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             f"UPDATE {CatalogData.table(kind)} SET publication_status=%s,version=version+1 WHERE id=%s RETURNING *",
             (target, identifier),
@@ -201,7 +299,13 @@ class CatalogData:
 
     @staticmethod
     def set_stock(connection: DbConnection, identifier: UUID, value: int) -> Cursor[Row]:
-        """Persist a checked stock amount under the product lock."""
+        """Сохраняет проверенный остаток под блокировкой товара.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE products SET stock=%s,version=version+1 WHERE id=%s RETURNING *", (value, identifier)
         )
@@ -216,7 +320,17 @@ class CatalogData:
         before: int,
         value: int,
     ) -> Cursor[Row]:
-        """Append an immutable inventory adjustment audit."""
+        """Добавляет неизменяемую запись изменения остатка.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param actor_id: UUID пользователя, выполняющего операцию.
+        :param delta: Изменение остатка относительно текущего значения.
+        :param reason: Причина изменения остатка или недоступности позиции.
+        :param before: Состояние записи до изменения.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "INSERT INTO stock_adjustments (product_id,actor_id,delta,reason,before_stock,after_stock) VALUES (%s,%s,%s,%s,%s,%s)",
             (identifier, actor_id, delta, reason, before, value),
@@ -235,7 +349,20 @@ class CatalogData:
         maximum: str | None,
         ordering: str,
     ) -> tuple[Row, list[Row]]:
-        """Execute normalized search filters with bound values and allowlisted ordering."""
+        """Выполняет поиск с параметризованными фильтрами и разрешённой сортировкой.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :param query: Текст запроса или разобранные фильтры текущей операции.
+        :param page: Номер страницы, начиная с первой.
+        :param size: Размер файла для ключа кэша.
+        :param category: Данные категории для связи с карточкой.
+        :param minimum: Минимальное допустимое значение.
+        :param maximum: Максимальное допустимое значение.
+        :param ordering: Проверенное SQL-выражение сортировки из разрешённого списка.
+        :return: Результат операции типа tuple[Row, list[Row]].
+        """
         conditions = [
             "(%s = FALSE OR publication_status='PUBLISHED')",
             "(%s::uuid IS NULL OR category_id=%s)",

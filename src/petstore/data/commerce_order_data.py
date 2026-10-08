@@ -1,4 +1,4 @@
-"""Mixed-order SQL repository. Callers own the transaction and business decisions."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 import json
 from datetime import datetime
@@ -14,23 +14,38 @@ from petstore.utils.responses import Responses
 
 
 class CommerceOrderData:
-    """Persistence only: methods never open/commit a second connection or decide transitions."""
+    """SQL смешанных заказов без самостоятельных транзакций и решений о переходах."""
 
     @staticmethod
     def lines(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Read snapshot lines in stable display order."""
+        """Возвращает снимки позиций заказа в порядке отображения.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "SELECT * FROM order_lines WHERE order_id=%s ORDER BY position", (identifier,)
         )
 
     @staticmethod
     def legacy_pet(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Read a preserved single-pet order's current display name."""
+        """Читает имя питомца для сохранённого заказа прежнего формата.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("SELECT name FROM pets WHERE id=%s", (identifier,))
 
     @staticmethod
     def history(connection: DbConnection, actor: Row) -> Cursor[Row]:
-        """Read the authorized account's order candidates."""
+        """Читает заказы, доступные указанному аккаунту.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "SELECT * FROM store_orders WHERE (%s = 'ADMIN' OR owner_user_id=%s) ORDER BY created_at DESC,id",
             (actor["role"], actor["id"]),
@@ -38,14 +53,25 @@ class CommerceOrderData:
 
     @staticmethod
     def cart_lines(connection: DbConnection, user_id: UUID) -> Cursor[Row]:
-        """Read cart quotes under the caller's existing cart lock."""
+        """Читает сохранённые цены корзины под существующей блокировкой.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param user_id: UUID целевого пользователя.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "SELECT * FROM cart_lines WHERE user_id=%s ORDER BY item_type,item_id", (user_id,)
         )
 
     @staticmethod
     def create_draft(connection: DbConnection, user_id: UUID, cart_version: int) -> Cursor[Row]:
-        """Insert an unreserved MIXED draft parent."""
+        """Добавляет родительскую запись MIXED-черновика без резерва.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param user_id: UUID целевого пользователя.
+        :param cart_version: Ожидаемая версия серверной корзины при оформлении.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             """INSERT INTO store_orders (owner_user_id,pet_id,quantity,status,order_kind,payment_status,cart_version)
                VALUES (%s,NULL,1,'draft','MIXED','NOT_STARTED',%s) RETURNING *""",
@@ -54,7 +80,12 @@ class CommerceOrderData:
 
     @staticmethod
     def lock_cover(connection: DbConnection, media_id: UUID) -> Cursor[Row]:
-        """Protect an immutable order cover after inventory locks."""
+        """Блокирует обложку снимка заказа после блокировок остатков.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param media_id: UUID изображения.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("SELECT id FROM media WHERE id=%s AND NOT deleted FOR UPDATE", (media_id,))
 
     @staticmethod
@@ -71,7 +102,21 @@ class CommerceOrderData:
         cover_id: UUID | None,
         snapshot: Row,
     ) -> Cursor[Row]:
-        """Persist one immutable order line and sanitized cover snapshot."""
+        """Сохраняет неизменяемую позицию заказа и безопасный снимок обложки.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param order_id: UUID заказа.
+        :param position: Порядковый номер изображения в галерее.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param item_id: UUID позиции каталога.
+        :param quantity: Количество единиц позиции; для питомца всегда одна.
+        :param name: Имя поля, параметра или ресурса текущей операции.
+        :param sku: Уникальный артикул товара.
+        :param price: Цена в рублях с точностью до копейки.
+        :param cover_id: UUID выбранной обложки.
+        :param snapshot: Сохранённый неизменяемый снимок данных оформления.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             """INSERT INTO order_lines (order_id,position,item_type,item_id,quantity,name,sku,unit_price,cover_id,snapshot)
                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
@@ -91,7 +136,13 @@ class CommerceOrderData:
 
     @staticmethod
     def reserve_product(connection: DbConnection, identifier: UUID, quantity: int) -> Cursor[Row]:
-        """Increment reserved inventory; availability is checked by the service."""
+        """Увеличивает резерв товара после проверки доступности сервисом.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param quantity: Количество единиц позиции; для питомца всегда одна.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE products SET reserved=reserved+%s,version=version+1 WHERE id=%s",
             (quantity, identifier),
@@ -99,7 +150,13 @@ class CommerceOrderData:
 
     @staticmethod
     def reserve_line(connection: DbConnection, identifier: UUID, position: int) -> Cursor[Row]:
-        """Record a line's allocation while its parent is locked."""
+        """Отмечает резерв позиции под блокировкой родительского заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param position: Порядковый номер изображения в галерее.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE order_lines SET allocation='RESERVED' WHERE order_id=%s AND position=%s",
             (identifier, position),
@@ -107,7 +164,14 @@ class CommerceOrderData:
 
     @staticmethod
     def place(connection: DbConnection, identifier: UUID, total: Decimal, delivery: Row) -> Cursor[Row]:
-        """Persist verified delivery/total and the 15-minute reservation deadline."""
+        """Сохраняет проверенную доставку, сумму и срок резерва на 15 минут.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param total: Сумма заказа, рассчитанная сервером.
+        :param delivery: Проверенный снимок контактов и адреса доставки.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             """UPDATE store_orders SET status='placed',payment_status='UNPAID',total_amount=%s,delivery_details=%s,
                payment_expires_at=CURRENT_TIMESTAMP+INTERVAL '15 minutes',version=version+1 WHERE id=%s RETURNING *""",
@@ -116,14 +180,26 @@ class CommerceOrderData:
 
     @staticmethod
     def lock_pet(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Join the shared legacy pet lock ordering."""
+        """Блокирует питомца в общем порядке блокировок старых и новых заказов.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("SELECT id FROM pets WHERE id=%s FOR UPDATE", (identifier,))
 
     @staticmethod
     def release_product(
         connection: DbConnection, identifier: UUID, quantity: int, consumed: int
     ) -> Cursor[Row]:
-        """Apply a guarded reserve/stock decrement exactly once."""
+        """Однократно уменьшает резерв или остаток с проверкой текущего состояния.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param quantity: Количество единиц позиции; для питомца всегда одна.
+        :param consumed: Признак уже списанного количества позиции.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE products SET stock=stock-%s,reserved=reserved-%s,version=version+1 WHERE id=%s AND reserved >= %s",
             (consumed, quantity, identifier, quantity),
@@ -133,7 +209,14 @@ class CommerceOrderData:
     def release_line(
         connection: DbConnection, identifier: UUID, position: int, allocation: str
     ) -> Cursor[Row]:
-        """Record release/consumption only for a currently RESERVED line."""
+        """Освобождает либо потребляет только позицию в состоянии RESERVED.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param position: Порядковый номер изображения в галерее.
+        :param allocation: Состояние выделенного резерва позиции заказа.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE order_lines SET allocation=%s WHERE order_id=%s AND position=%s AND allocation='RESERVED'",
             (allocation, identifier, position),
@@ -141,14 +224,26 @@ class CommerceOrderData:
 
     @staticmethod
     def restore_product(connection: DbConnection, identifier: UUID, quantity: int) -> Cursor[Row]:
-        """Restore a service-approved paid quantity; the locked allocation prevents duplicate refunds."""
+        """Восстанавливает оплаченное количество; блокировка защищает от повторного возврата.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param quantity: Количество единиц позиции; для питомца всегда одна.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE products SET stock=stock+%s,version=version+1 WHERE id=%s", (quantity, identifier)
         )
 
     @staticmethod
     def restore_line(connection: DbConnection, identifier: UUID, position: int) -> Cursor[Row]:
-        """Mark a consumed product allocation restored under its parent lock."""
+        """Отмечает восстановление потреблённого товара под блокировкой заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param position: Порядковый номер изображения в галерее.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE order_lines SET allocation='RELEASED' WHERE order_id=%s AND position=%s AND allocation='CONSUMED'",
             (identifier, position),
@@ -156,7 +251,12 @@ class CommerceOrderData:
 
     @staticmethod
     def set_expired(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Persist a service-approved unpaid expiry."""
+        """Сохраняет разрешённое сервисом истечение неоплаченного заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE store_orders SET status='expired',payment_status='EXPIRED',complete=TRUE,version=version+1 WHERE id=%s",
             (identifier,),
@@ -164,7 +264,11 @@ class CommerceOrderData:
 
     @staticmethod
     def overdue(connection: DbConnection) -> Cursor[Row]:
-        """Select overdue MIXED parents without waiting for concurrent payments."""
+        """Выбирает просроченные MIXED-заказы, не ожидая конкурентной оплаты.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             """SELECT * FROM store_orders WHERE order_kind='MIXED' AND status='placed' AND payment_status='UNPAID'
                AND payment_expires_at<=CURRENT_TIMESTAMP ORDER BY id FOR UPDATE SKIP LOCKED"""
@@ -172,7 +276,12 @@ class CommerceOrderData:
 
     @staticmethod
     def refund(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Change successful attempts to REFUNDED under the order lock."""
+        """Переводит успешные платежи в REFUNDED под блокировкой заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE payments SET status='REFUNDED',updated_at=CURRENT_TIMESTAMP WHERE order_id=%s AND status='SUCCEEDED'",
             (identifier,),
@@ -186,7 +295,15 @@ class CommerceOrderData:
         payment_status: str,
         ship_date: datetime | None,
     ) -> Cursor[Row]:
-        """Persist an already validated lifecycle decision."""
+        """Сохраняет переход состояния, предварительно проверенный сервисом.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param target: Целевое состояние жизненного цикла.
+        :param payment_status: Состояние оплаты заказа.
+        :param ship_date: Дата отправки заказа.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute(
             "UPDATE store_orders SET status=%s::order_status,payment_status=%s::order_payment_status,complete=%s,ship_date=%s,version=version+1 WHERE id=%s RETURNING *",
             (
@@ -200,15 +317,30 @@ class CommerceOrderData:
 
     @staticmethod
     def delete_payments(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Delete dependent attempts before the RESTRICT-protected parent."""
+        """Удаляет попытки оплаты перед удалением защищённого связями заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("DELETE FROM payments WHERE order_id=%s", (identifier,))
 
     @staticmethod
     def delete_lines(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Delete immutable lines for a service-approved deletable order."""
+        """Удаляет снимки позиций только для разрешённого к удалению заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("DELETE FROM order_lines WHERE order_id=%s", (identifier,))
 
     @staticmethod
     def delete_parent(connection: DbConnection, identifier: UUID) -> Cursor[Row]:
-        """Delete a locked parent after its dependent rows."""
+        """Удаляет заблокированный заказ после зависимых записей.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Cursor[Row].
+        """
         return connection.execute("DELETE FROM store_orders WHERE id=%s", (identifier,))

@@ -40,7 +40,7 @@ def verify_recreation(client, container, media, order, email, password, digest):
     """Replace only an isolated CI container while retaining its exact DB and media volumes."""
     original = json.loads(docker("inspect", container))[0]
     mounts = {mount["Destination"]: mount for mount in original["Mounts"]}
-    destinations = ["/var/lib/postgresql/data", "/var/lib/petstore/media"]
+    destinations = ["/var/lib/petstore/media"]
     assert all(mounts[path]["Type"] == "volume" for path in destinations)
     replacement = "petstore-commerce-recreation-" + uuid4().hex[:12]
     owner = uuid4().hex
@@ -58,8 +58,14 @@ def verify_recreation(client, container, media, order, email, password, digest):
     ]
     for destination in destinations:
         args.extend(["--volume", mounts[destination]["Name"] + ":" + destination])
+    # База и почта остаются отдельными сервисами; повторяем окружение и сеть API.
+    for variable in original["Config"]["Env"]:
+        if variable.startswith("PETSTORE_"):
+            args.extend(["--env", variable])
+    network = next(iter(original["NetworkSettings"]["Networks"]))
+    args.extend(["--network", network])
     args.append(original["Image"])
-    docker("stop", "--time", "30", container)
+    docker("stop", "--timeout", "30", container)
     try:
         docker(*args)
         port = docker("port", replacement, "8080/tcp").rsplit(":", 1)[1]
@@ -272,7 +278,7 @@ def shop():
             for identifier in owned["products"]:
                 docker(
                     "exec",
-                    container,
+                    os.environ["PETSTORE_COMMERCE_DB_CONTAINER"],
                     "psql",
                     "-v",
                     "ON_ERROR_STOP=1",
@@ -288,7 +294,7 @@ def shop():
             for identifier in owned["categories"]:
                 docker(
                     "exec",
-                    container,
+                    os.environ["PETSTORE_COMMERCE_DB_CONTAINER"],
                     "psql",
                     "-v",
                     "ON_ERROR_STOP=1",

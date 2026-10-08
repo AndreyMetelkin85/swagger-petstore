@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from datetime import UTC, datetime
 
@@ -10,19 +10,21 @@ from petstore.utils.responses import Responses
 
 
 class HealthController:
-    """Public API and database readiness."""
+    """Публичная проверка готовности API и PostgreSQL."""
 
     def __init__(self, database: Database) -> None:
-        """Use the existing PostgreSQL health probe.
+        """Настраивает зависимости операции на общем пуле приложения.
 
-        :param database: Application pool.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.database = database
 
     def health(self, context: RequestContext) -> Response:
-        """Report service readiness using the original response fields.
+        """Возвращает готовность API и PostgreSQL в действующем формате.
 
-        :param context: Incoming request context.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         healthy = self.database.is_healthy()
         state = "UP" if healthy else "DOWN"

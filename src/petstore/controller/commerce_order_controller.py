@@ -1,4 +1,4 @@
-"""Mixed checkout and payment HTTP handlers; transaction rules belong to services."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from starlette.responses import Response
 
@@ -14,19 +14,31 @@ from petstore.utils.responses import Responses, public_payment
 
 
 class CommerceOrderController:
-    """Adapt authenticated mixed-order commands to a single transaction service."""
+    """Адаптация авторизованных команд смешанного заказа к транзакционному сервису."""
 
     def __init__(self, database: Database) -> None:
-        """Share the application pool with legacy order and payment operations."""
+        """Настраивает зависимости операции на общем пуле приложения.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
+        """
         self.orders = CommerceOrderService(database)
         self.payments = PaymentData(database)
 
     def list_orders(self, context: RequestContext) -> Response:
-        """List owned orders, or the entire history for ADMIN."""
+        """Возвращает собственные заказы пользователя или всю историю для ADMIN.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         return Responses(self.orders.find_all(context.authorize("USER", "ADMIN")))
 
     def create(self, context: RequestContext) -> Response:
-        """Snapshot a cart draft, returning 200 for a safely replayed creation."""
+        """Создаёт снимок корзины; безопасный повтор возвращает прежний результат со статусом 200.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         assert isinstance(context.body, CheckoutCommand)
         result, replayed = self.orders.create(
             context.body, context.authorize("USER", "ADMIN"), context.identifier("Idempotency-Key")
@@ -34,16 +46,28 @@ class CommerceOrderController:
         return Responses(result, status_code=200 if replayed else 201)
 
     def get(self, context: RequestContext) -> Response:
-        """Read an order after access checks and overdue-reservation reconciliation."""
+        """Возвращает доступный заказ после проверки владельца и срока резерва.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         return Responses(self.orders.get(context.identifier("id"), context.authorize("USER", "ADMIN")))
 
     def delete(self, context: RequestContext) -> Response:
-        """Atomically delete a permitted order and its dependent payments."""
+        """Атомарно удаляет разрешённый заказ и связанные платежи.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         self.orders.delete(context.identifier("id"), context.authorize("USER", "ADMIN"))
         return Response(status_code=204)
 
     def place(self, context: RequestContext) -> Response:
-        """Validate and reserve the entire draft composition atomically."""
+        """Передаёт полный состав черновика сервису для атомарного резервирования.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         assert isinstance(context.body, VersionCommand)
         return Responses(
             self.orders.place(
@@ -55,7 +79,12 @@ class CommerceOrderController:
         )
 
     def transition(self, context: RequestContext, target: OrderStatus) -> Response:
-        """Apply authorized lifecycle rules; cancellation permits the owning USER."""
+        """Проверяет права на смену статуса; владелец может отменить допустимый заказ.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param target: Целевое состояние жизненного цикла.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         actor = context.authorize("USER", "ADMIN")
         if target != OrderStatus.CANCELLED:
             context.authorize("ADMIN")
@@ -65,7 +94,11 @@ class CommerceOrderController:
         )
 
     def list_payments(self, context: RequestContext) -> Response:
-        """Expose safe payment summaries for an accessible order."""
+        """Возвращает безопасную историю платежей доступного заказа.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         return Responses(
             [
                 public_payment(row)
@@ -76,7 +109,11 @@ class CommerceOrderController:
         )
 
     def create_payment(self, context: RequestContext) -> Response:
-        """Use the existing simulator and the same order lock as checkout/expiry."""
+        """Вызывает симулятор оплаты под той же блокировкой заказа, что оформление и истечение резерва.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         actor = context.authorize("USER", "ADMIN")
         request = context.validated(PaymentRequest, ValidationService.payment)
         result, replayed = self.payments.create_payment(

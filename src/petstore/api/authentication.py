@@ -1,4 +1,4 @@
-"""Authentication routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 
@@ -15,7 +15,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> AuthenticationController:
-    """Inject this application's authentication controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа AuthenticationController.
+    """
     return cast(AuthenticationController, context.request.app.state.controllers.authentication)
 
 
@@ -37,7 +41,14 @@ def forgot_password(
     response: Response,
     body: Annotated[PasswordForgotRequest, BeforeValidator(PasswordForgotRequest.from_wire), Body()],
 ) -> PasswordResetLinkResponse:
-    """Запрос восстановления пароля."""
+    """Запрос восстановления пароля.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа PasswordResetLinkResponse.
+    """
     context.body = body
     result = controller.forgot_password(context)
     return decode_response(result, response)
@@ -59,7 +70,15 @@ def reset_password(
     body: Annotated[PasswordResetRequest, BeforeValidator(PasswordResetRequest.from_wire), Body()],
     code: Annotated[str, Query(alias="code")],
 ) -> Response:
-    """Сброс пароля."""
+    """Сброс пароля.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"code": code}
     context.body = body
     result = controller.reset_password(context)
@@ -81,7 +100,14 @@ def login(
     response: Response,
     body: Annotated[LoginRequest, BeforeValidator(LoginRequest.from_wire), Body()],
 ) -> LoginResponse:
-    """Авторизация пользователя."""
+    """Авторизация пользователя.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа LoginResponse.
+    """
     context.body = body
     result = controller.login(context)
     return decode_response(result, response)

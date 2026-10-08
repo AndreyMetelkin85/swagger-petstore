@@ -26,7 +26,7 @@ def docker(*args: str, timeout: int = 180) -> str:
     ).stdout.strip()
 
 
-def start_image(image: str, container: str, volume: str, owner: str) -> str:
+def start_image(image: str, container: str, volume: str, owner: str, network: str | None = None) -> str:
     """Start a migration test image and wait for both API and PostgreSQL.
 
     :param image: Explicit legacy digest or the isolated candidate image.
@@ -34,7 +34,7 @@ def start_image(image: str, container: str, volume: str, owner: str) -> str:
     :param volume: Unique test volume shared by the two runtimes.
     :param owner: Resource ownership label checked during cleanup.
     """
-    docker(
+    args = [
         "run",
         "--detach",
         "--name",
@@ -43,10 +43,12 @@ def start_image(image: str, container: str, volume: str, owner: str) -> str:
         "petstore.upgrade-test=" + owner,
         "--publish",
         "127.0.0.1::8080",
-        "--volume",
-        volume + ":/var/lib/postgresql/data",
-        image,
-    )
+    ]
+    if network is None:
+        args.extend(["--volume", volume + ":/var/lib/postgresql/data"])
+    else:
+        args.extend(["--network", network, "--env", "PETSTORE_DB_URL=postgresql://postgres:5432/petstore"])
+    docker(*args, image)
     port = docker("port", container, "8080/tcp").rsplit(":", 1)[1]
     base = "http://127.0.0.1:" + port + "/api/v3"
     deadline = time.monotonic() + 120
@@ -79,6 +81,8 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
     owner = uuid4().hex
     container = "petstore-python-upgrade-test-" + owner[:12]
     volume = "petstore-python-upgrade-data-" + owner[:12]
+    network = "petstore-upgrade-network-" + owner[:12]
+    database_container = "petstore-upgrade-db-" + owner[:12]
     docker("pull", LEGACY_IMAGE)
     docker("volume", "create", "--label", "petstore.upgrade-test=" + owner, volume)
     try:
@@ -148,9 +152,57 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
             paid_order = client.get("/store/order/" + paid_order["id"], headers=user_auth).json()
         history_query = "SELECT string_agg(version || ':' || checksum::text, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success AND type = 'SQL'"
         history = docker("exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query)
-        docker("stop", "--time", "30", container)
+        docker("stop", "--timeout", "30", container)
         docker("rm", container)
-        base = start_image(candidate, container, volume, owner)
+        docker("network", "create", "--label", "petstore.upgrade-test=" + owner, network)
+        docker(
+            "run",
+            "--detach",
+            "--name",
+            database_container,
+            "--label",
+            "petstore.upgrade-test=" + owner,
+            "--network",
+            network,
+            "--network-alias",
+            "postgres",
+            "--env",
+            "POSTGRES_USER=petstore",
+            "--env",
+            "POSTGRES_PASSWORD=petstore",
+            "--env",
+            "POSTGRES_DB=petstore",
+            "--volume",
+            volume + ":/var/lib/postgresql/data",
+            "postgres:16.15-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825",
+        )
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            try:
+                docker("exec", database_container, "pg_isready", "-U", "petstore", "-d", "petstore")
+                break
+            except subprocess.CalledProcessError:
+                time.sleep(1)
+        else:
+            pytest.fail("База не готова после перехода на отдельный контейнер")
+        docker(
+            "run",
+            "--rm",
+            "--network",
+            network,
+            "--env",
+            "FLYWAY_URL=jdbc:postgresql://postgres:5432/petstore",
+            "--env",
+            "FLYWAY_USER=petstore",
+            "--env",
+            "FLYWAY_PASSWORD=petstore",
+            "--entrypoint",
+            "/opt/flyway/flyway",
+            candidate,
+            "-locations=filesystem:/app/resources/db/migration",
+            "migrate",
+        )
+        base = start_image(candidate, container, volume, owner, network)
         with httpx.Client(base_url=base, timeout=10) as client:
             admin = admin_headers(client)
             user_after = client.get("/users/" + user["id"], headers=admin)
@@ -187,7 +239,7 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
                 )
             assert restored == payment
         migrated = docker(
-            "exec", container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query
+            "exec", database_container, "psql", "-U", "petstore", "-d", "petstore", "-tAc", history_query
         )
         assert migrated.startswith(history + ",")
         assert len(migrated.split(",")) == 12
@@ -198,6 +250,14 @@ def test_existing_records_and_migration_checksums_survive_runtime_upgrade():
             labels = json.loads(docker("inspect", "--format", "{{json .Config.Labels}}", container))
             assert labels["petstore.upgrade-test"] == owner
             docker("rm", "--force", "--volumes", container)
+        if docker("ps", "-aq", "--filter", "name=^/" + database_container + "$"):
+            labels = json.loads(docker("inspect", "--format", "{{json .Config.Labels}}", database_container))
+            assert labels["petstore.upgrade-test"] == owner
+            docker("rm", "--force", database_container)
+        if docker("network", "ls", "-q", "--filter", "name=^" + network + "$"):
+            labels = json.loads(docker("network", "inspect", "--format", "{{json .Labels}}", network))
+            assert labels["petstore.upgrade-test"] == owner
+            docker("network", "rm", network)
         labels = json.loads(docker("volume", "inspect", "--format", "{{json .Labels}}", volume))
         assert labels["petstore.upgrade-test"] == owner
         docker("volume", "rm", volume)

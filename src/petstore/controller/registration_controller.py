@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from typing import cast
 
@@ -14,29 +14,32 @@ from petstore.utils.responses import Responses, public_user
 
 
 class RegistrationController:
-    """Account registration and one-time confirmation operations."""
+    """Регистрация аккаунта и одноразовое подтверждение."""
 
     def register(self, context: RequestContext) -> Response:
-        """Register a pending account.
+        """Создаёт аккаунт, ожидающий подтверждения регистрации.
 
-        :param context: Registration request context.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         request = context.validated(RegisterRequest, V.registration)
         return Responses(context.auth.register(request), status_code=201)
 
     def confirm(self, context: RequestContext) -> Response:
-        """Confirm an account using its path UUID and query code.
+        """Подтверждает аккаунт по UUID из пути и одноразовому коду из query.
 
-        :param context: Parsed confirmation parameters.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return Responses(
             public_user(context.auth.confirm(context.identifier("userId"), context.parameters["code"]))
         )
 
     def resend_confirmation(self, context: RequestContext) -> Response:
-        """Replace an unconfirmed account's confirmation link.
+        """Перевыпускает ссылку неподтверждённого аккаунта; предыдущие ссылки становятся недействительными.
 
-        :param context: Account credentials.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         request = context.validated(LoginRequest, V.login)
         return Responses(

@@ -1,4 +1,4 @@
-"""Catalog HTTP authorization and command adaptation, without operation-name dispatch."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from uuid import UUID
 
@@ -18,26 +18,48 @@ from petstore.utils.responses import Responses
 
 
 class CatalogController:
-    """Product, pet and category handlers sharing the same catalog rules."""
+    """HTTP-команды товаров, питомцев и категорий с общими правилами каталога."""
 
     def __init__(self, database: Database) -> None:
-        """Inject the application's catalog repository."""
+        """Настраивает зависимости операции на общем пуле приложения.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
+        """
         self.catalog = CatalogService(database)
 
     def list_cards(self, context: RequestContext, kind: str, public: bool) -> Response:
-        """List public cards or require ADMIN for unpublished cards."""
+        """Возвращает публичные карточки; доступ к неопубликованным требует роли ADMIN.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         if not public:
             context.authorize("ADMIN")
         return Responses(self.catalog.find_all(kind, public, dict(context.request.query_params)))
 
     def get_card(self, context: RequestContext, kind: str, public: bool) -> Response:
-        """Read one visible card, checking the administrator role when needed."""
+        """Возвращает доступную карточку и проверяет административные права при необходимости.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         if not public:
             context.authorize("ADMIN")
         return Responses(self.catalog.get(kind, context.identifier("id"), public))
 
     def save_card(self, context: RequestContext, kind: str, identifier: UUID | None) -> Response:
-        """Create or fully replace an administrator-owned catalog command."""
+        """Создаёт или заменяет карточку по команде администратора.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         context.authorize("ADMIN")
         command = context.body
         assert isinstance(command, (ProductCommand, PetCardCommand))
@@ -46,25 +68,45 @@ class CatalogController:
         )
 
     def publish(self, context: RequestContext, kind: str, target: str) -> Response:
-        """Apply a versioned publication action as ADMIN."""
+        """Применяет действие публикации с проверкой версии и роли ADMIN.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param target: Целевое состояние жизненного цикла.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         context.authorize("ADMIN")
         assert isinstance(context.body, VersionCommand)
         return Responses(self.catalog.publish(kind, context.identifier("id"), context.body.version, target))
 
     def adjust_stock(self, context: RequestContext) -> Response:
-        """Apply and audit an ADMIN inventory delta under the product lock."""
+        """Проверяет ADMIN и передаёт изменение остатка сервису с журналированием операции.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         actor = context.authorize("ADMIN")
         assert isinstance(context.body, StockCommand)
         return Responses(self.catalog.adjust_stock(context.identifier("id"), context.body, actor))
 
     def categories(self, context: RequestContext, public: bool) -> Response:
-        """List categories without removing inactive categories' existing cards."""
+        """Возвращает категории, не удаляя товары деактивированных категорий.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         if not public:
             context.authorize("ADMIN")
         return Responses(self.catalog.categories(public, context.request.query_params.get("kind")))
 
     def save_category(self, context: RequestContext, identifier: UUID | None) -> Response:
-        """Create or version-update a category as ADMIN."""
+        """Создаёт или обновляет категорию с проверкой ADMIN и версии.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         context.authorize("ADMIN")
         assert isinstance(context.body, CategoryCommand)
         return Responses(

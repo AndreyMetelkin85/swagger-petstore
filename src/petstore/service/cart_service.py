@@ -1,4 +1,4 @@
-"""Versioned mixed carts with server prices and retained unavailable identities."""
+"""Бизнес-правила и согласование операций приложения."""
 
 from uuid import UUID
 
@@ -12,15 +12,24 @@ from petstore.service.exceptions import ApiException
 
 
 class CartService:
-    """A user's cart is mutated only under its own row lock."""
+    """Изменение собственной корзины под блокировкой её строки."""
 
     def __init__(self, database: Database) -> None:
-        """Use the shared transaction factory."""
+        """Настраивает зависимости операции на общем пуле приложения.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
+        """
         self.database = database
 
     @classmethod
     def public(cls, connection: DbConnection, cart: Row) -> Row:
-        """Return current prices, stock and an explicit unavailability reason."""
+        """Возвращает актуальные цены, остатки и причину недоступности позиции.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param cart: Серверная корзина с текущей версией.
+        :return: Результат операции типа Row.
+        """
         lines = CartData.lines(connection, cart["user_id"]).fetchall()
         result: list[Row] = []
         for line in lines:
@@ -52,12 +61,22 @@ class CartService:
         return {"lines": result, "version": cart["version"]}
 
     def get(self, actor: Row) -> Row:
-        """Return or initialize only the authenticated user's cart."""
+        """Возвращает либо создаёт корзину только авторизованного пользователя.
+
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
+        """
         with self.database.connect() as connection:
             return self.public(connection, CartData.lock(connection, actor["id"]))
 
     def replace(self, command: CartCommand, actor: Row, key: UUID | None) -> Row:
-        """Atomically replace a versioned cart; idempotent guest retries cannot duplicate it."""
+        """Атомарно заменяет корзину по версии; повтор объединения гостевой корзины не создаёт дубликаты.
+
+        :param command: Проверенная команда изменения, подготовленная вызывающим слоем.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :return: Результат операции типа Row.
+        """
         payload = command.model_dump()
         with self.database.connect() as connection:
             replay = IdempotencyData.replay(connection, actor["id"], "cart:replace", key, payload)

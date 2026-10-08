@@ -1,7 +1,16 @@
 services:
-  petstore:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
-    image: swagger-petstore:local
+    image: swagger-petstore-python:preview
+    pull_policy: never
+  migrations:
+    image: swagger-petstore-python:preview
+    pull_policy: never
+  mail:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mail
+    image: swagger-petstore-mail:preview
     pull_policy: never

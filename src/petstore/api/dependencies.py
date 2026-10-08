@@ -1,4 +1,4 @@
-"""Native FastAPI dependencies and bounded transport preserving the published wire contract."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 import json
 from collections.abc import Callable, Coroutine
@@ -24,31 +24,45 @@ from petstore.service.media_service import MAX_BYTES
 
 
 class DecimalRequest(Request):
-    """Decode monetary JSON numbers exactly before native Pydantic validation."""
+    """Разбор денежных JSON-чисел как Decimal перед валидацией Pydantic."""
 
     async def json(self) -> Any:
-        """Read the already bounded body without float conversion."""
+        """Разбирает ограниченное JSON-тело с точными Decimal вместо float.
+
+        :return: Результат операции типа Any.
+        """
         if not hasattr(self, "_json"):
             self._json = json.loads(await self.body(), parse_float=Decimal)
         return self._json
 
     def cache_body(self, content: bytes) -> None:
-        """Reuse a bounded stream when FastAPI reads the declared Body field."""
+        """Сохраняет ограниченный поток для последующего чтения Body в FastAPI.
+
+        :param content: Данные для сериализации в публичный ответ.
+        :return: Ничего не возвращает.
+        """
         self._body = content
 
 
 class ContractRoute(APIRoute):
-    """Native typed route with body-size and legacy transport error compatibility."""
+    """Маршрут FastAPI с ограничением тела и совместимыми транспортными ошибками."""
 
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-        """Bound JSON input before FastAPI validates its declared Body model."""
+        """Ограничивает JSON-тело перед стандартной проверкой модели FastAPI.
+
+        :return: Результат операции типа Callable[[Request], Coroutine[Any, Any, Response]].
+        """
         original = super().get_route_handler()
 
         async def handle(request: Request) -> Response:
-            """Keep missing/malformed body errors distinct from field validation."""
+            """Различает пустое или повреждённое тело и ошибки отдельных полей.
+
+            :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+            :return: HTTP-ответ с публичными данными и статусом операции.
+            """
             request = DecimalRequest(request.scope, request.receive)
             if self.body_field is not None:
-                # Reuse native fields, not YAML parsing: legacy parameter errors precede body errors.
+                # Проверяем поля FastAPI: ошибки параметров по контракту предшествуют ошибкам тела.
                 for fields, values in (
                     (self.dependant.path_params, request.path_params),
                     (self.dependant.query_params, request.query_params),
@@ -86,7 +100,11 @@ class ContractRoute(APIRoute):
 
 
 def request_context(request: Request) -> RequestContext:
-    """Inject this application's auth service; parameter/body validation remains native."""
+    """Создаёт контекст с сервисом авторизации приложения; HTTP-валидацию выполняет FastAPI.
+
+    :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+    :return: Результат операции типа RequestContext.
+    """
     return RequestContext(request, cast(AuthService, request.app.state.auth), {}, None)
 
 
@@ -94,19 +112,28 @@ Context = Annotated[RequestContext, Depends(request_context)]
 
 
 def decode_response(result: Response, response: Response) -> Any:
-    """Pass a controller payload through FastAPI's actual response-model validation.
+    """Переносит HTTP-статус контроллера и разбирает JSON перед проверкой модели ответа FastAPI.
 
-    :param result: Existing public result; never a private database row.
-    :param response: FastAPI's mutable response, retaining 201/200 replay and 503 health status.
+    Входной result уже содержит публичный JSON, а не приватную строку базы.
+    Числа разбираются как Decimal. Возвращаемые данные проверяются response_model маршрута.
+
+    :param result: Публичный JSON-ответ контроллера; не приватная строка базы.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа Any.
     """
     response.status_code = result.status_code
     return json.loads(bytes(result.body), parse_float=Decimal)
 
 
 def validation_error(request: Request, exc: RequestValidationError) -> ApiException:
-    """Translate native validation failures to safe, operation-specific public errors."""
+    """Преобразует ошибки FastAPI в безопасные публичные ошибки соответствующей операции.
+
+    :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+    :param exc: Обрабатываемое исключение.
+    :return: Результат операции типа ApiException.
+    """
     errors = exc.errors()
-    # Preserve the published parameter-first error semantics without echoing input values.
+    # Сохраняем приоритет ошибок параметров без вывода исходных значений.
     for error in errors:
         location = error["loc"]
         if not location or location[0] == "body":
@@ -154,7 +181,11 @@ def validation_error(request: Request, exc: RequestValidationError) -> ApiExcept
 
 
 async def upload_body(request: Request) -> tuple[bytes, str, str]:
-    """Bound the complete multipart stream before decoding a single image."""
+    """Ограничивает весь multipart-поток перед декодированием одного изображения.
+
+    :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+    :return: Результат операции типа tuple[bytes, str, str].
+    """
     if request.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "multipart/form-data":
         raise ApiException(415, "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be multipart/form-data")
     raw = bytearray()
@@ -164,7 +195,10 @@ async def upload_body(request: Request) -> tuple[bytes, str, str]:
         raw.extend(chunk)
 
     async def receive() -> Message:
-        """Provide the already bounded form body to Starlette's parser."""
+        """Предоставляет сохранённое ограниченное тело multipart-парсеру Starlette.
+
+        :return: Результат операции типа Message.
+        """
         return {"type": "http.request", "body": bytes(raw), "more_body": False}
 
     bounded = Request(request.scope, receive=receive)
@@ -187,7 +221,11 @@ async def upload_body(request: Request) -> tuple[bytes, str, str]:
 
 
 async def upload_context(context: Context) -> RequestContext:
-    """Authorize ADMIN before reading or decoding the bounded multipart stream."""
+    """Проверяет роль ADMIN до чтения и декодирования ограниченной загрузки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа RequestContext.
+    """
     await run_in_threadpool(context.auth.authorize, context.request.headers.get("Authorization"), "ADMIN")
     context.upload = await upload_body(context.request)
     return context

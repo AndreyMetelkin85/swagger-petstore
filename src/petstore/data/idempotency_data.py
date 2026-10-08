@@ -1,4 +1,4 @@
-"""Persistent replay for cart replacement, draft creation and placement."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 import hashlib
 import json
@@ -13,11 +13,15 @@ from petstore.utils.responses import Responses
 
 
 class IdempotencyData:
-    """Share transaction-scoped advisory locks with the existing payment protocol."""
+    """Сохранённые повторы команд с транзакционными advisory-блокировками."""
 
     @staticmethod
     def digest(payload: Row) -> str:
-        """Hash a canonical nonsensitive command; never persist its raw request."""
+        """Вычисляет хеш канонической безопасной команды без сохранения исходного запроса.
+
+        :param payload: Тело команды либо ограниченное содержимое загруженного файла.
+        :return: Строковый результат описанной операции.
+        """
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()
         ).hexdigest()
@@ -26,7 +30,15 @@ class IdempotencyData:
     def replay(
         connection: DbConnection, actor: UUID, operation: str, key: UUID | None, payload: Row
     ) -> tuple[Row, int] | None:
-        """Lock a key and return its committed result only for the same actor/operation/hash."""
+        """Блокирует ключ и возвращает результат только при совпадении пользователя, операции и хеша.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param operation: Имя операции для проверки области ключа идемпотентности.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :param payload: Тело команды либо ограниченное содержимое загруженного файла.
+        :return: Результат операции типа tuple[Row, int] | None.
+        """
         if key is None:
             return None
         connection.execute("SELECT pg_advisory_xact_lock(%s)", (PaymentData.advisory_key(key),))
@@ -52,7 +64,17 @@ class IdempotencyData:
         result: Row,
         status: int,
     ) -> None:
-        """Persist a safe JSON result in the same transaction as the mutation."""
+        """Сохраняет безопасный JSON-результат в той же транзакции, что и изменение.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param operation: Имя операции для проверки области ключа идемпотентности.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :param payload: Тело команды либо ограниченное содержимое загруженного файла.
+        :param result: Ответ контроллера с уже сформированным JSON и HTTP-статусом.
+        :param status: Статус ресурса либо HTTP-ответа согласно операции.
+        :return: Ничего не возвращает.
+        """
         if key is not None:
             plain = json.loads(bytes(Responses(result).body))
             connection.execute(
