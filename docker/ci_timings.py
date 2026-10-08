@@ -3,10 +3,20 @@
 import json
 import os
 import re
-import subprocess
 from datetime import datetime
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+
+class GitHubRedirect(HTTPRedirectHandler):
+    """Download signed logs without forwarding the API token to the blob host."""
+
+    def redirect_request(self, request, response, code, message, headers, url):
+        redirected = super().redirect_request(request, response, code, message, headers, url)
+        if redirected and urlsplit(request.full_url).netloc != urlsplit(url).netloc:
+            redirected.remove_header("Authorization")
+        return redirected
 
 
 def elapsed(start: str | None, end: str | None) -> float | None:
@@ -41,7 +51,7 @@ def main() -> None:
                 "Accept": "application/vnd.github+json",
             },
         )
-        with urlopen(request, timeout=20) as response:
+        with build_opener(GitHubRedirect()).open(request, timeout=20) as response:
             return response.read()
 
     try:
@@ -65,12 +75,7 @@ def main() -> None:
         if job["name"].startswith("build-") and job["conclusion"] == "success":
             try:
                 cache = cache_export_seconds(
-                    subprocess.run(
-                        ["gh", "api", f"/repos/{repository}/actions/jobs/{job['id']}/logs"],
-                        capture_output=True,
-                        check=True,
-                        timeout=30,
-                    ).stdout.decode()
+                    get(f"/repos/{repository}/actions/jobs/{job['id']}/logs").decode()
                 )
             except Exception:
                 pass
