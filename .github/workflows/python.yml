@@ -9,6 +9,9 @@ on:
       backend:
         type: boolean
         default: true
+      digest:
+        type: string
+        default: ''
       candidate:
         type: boolean
         default: false
@@ -31,19 +34,19 @@ jobs:
             pyproject.toml
             requirements-runtime.txt
       - name: Install test dependencies
-        run: python -m pip install --constraint requirements-runtime.txt -e '.[test,quality]'
-      - name: Restore the exact built candidate
-        if: inputs.candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: release-digest-amd64
-          path: candidate
+        run: python -m pip install --constraint requirements-runtime.txt -e '.[test]'
+      - name: Install PR quality dependencies
+        if: ${{ !inputs.candidate }}
+        run: python -m pip install --constraint requirements-runtime.txt -e '.[quality]'
       - name: Load the immutable candidate
         if: inputs.candidate
+        env:
+          DIGEST: ${{ inputs.digest }}
+          REPOSITORY: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore
         run: |
-          CANDIDATE=$(cat candidate/amd64)
-          docker pull "$CANDIDATE"
-          docker tag "$CANDIDATE" swagger-petstore-python:preview
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker pull "$REPOSITORY@$DIGEST"
+          docker tag "$REPOSITORY@$DIGEST" swagger-petstore-python:preview
       - uses: docker/setup-buildx-action@v4
         if: ${{ !inputs.candidate }}
       - name: Daily security cache epoch
@@ -59,8 +62,10 @@ jobs:
           push: false
           tags: swagger-petstore-python:preview
           build-args: SECURITY_UPDATE_EPOCH=${{ steps.epoch.outputs.day }}
-          cache-from: type=gha,scope=store-amd64
-          cache-to: type=gha,scope=store-amd64,mode=max
+          cache-from: |
+            type=registry,ref=${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore:buildcache-master-amd64
+            type=gha,scope=store-pr-amd64
+          cache-to: type=gha,scope=store-pr-amd64,mode=max
       - name: Scan PR candidate without registry credentials
         if: ${{ !inputs.candidate }}
         run: |
@@ -75,10 +80,10 @@ jobs:
       - name: Start the isolated application without rebuilding
         run: docker compose -f tests/docker-compose.yml up -d --no-build --wait --wait-timeout 180
       - name: Prepare one database per parallel worker
-        if: inputs.mode != 'runtime'
+        if: inputs.mode == 'regression' || inputs.mode == 'all'
         run: python docker/ci_databases.py --container petstore-python-preview --workers 4
       - name: Unit and integration tests once, parallel and isolated
-        if: inputs.mode != 'runtime'
+        if: inputs.mode == 'regression' || inputs.mode == 'all'
         env:
           PETSTORE_TEST_DB_URL: postgresql://127.0.0.1:5433/petstore_python_test
         run: python -m pytest tests/unit tests/integration -n 4 --dist loadscope -q --durations=20 --cov=petstore --cov-report=xml --cov-report=term-missing --cov-fail-under=90
@@ -86,7 +91,7 @@ jobs:
         if: inputs.mode != 'regression'
         run: echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
       - name: System contracts, Swagger, mail and persistence
-        if: inputs.mode != 'regression' && inputs.backend
+        if: (inputs.mode == 'runtime' || inputs.mode == 'all') && inputs.backend
         env:
           PETSTORE_UI_URL: http://127.0.0.1:8081
           PETSTORE_RESTART_CONTAINER: petstore-python-preview
@@ -100,12 +105,17 @@ jobs:
         run: |
           python -m pytest tests/smoke -q -o addopts=''
           if [ '${{ inputs.candidate }}' = 'true' ]; then
-            python -m pytest tests/system -q --ignore=tests/system/test_commerce_system.py
+            python -m pytest tests/system -q --ignore=tests/system/test_commerce_system.py --ignore=tests/system/test_swagger_ui.py --ignore=tests/system/test_demo_catalog_browser.py --durations=20
           else
-            python -m pytest tests/system -q
+            python -m pytest tests/system -q --ignore=tests/system/test_demo_catalog_browser.py --durations=20
           fi
+      - name: Every Swagger operation with a single browser
+        if: inputs.mode == 'swagger'
+        env:
+          PETSTORE_UI_URL: http://127.0.0.1:8081
+        run: python -m pytest tests/system/test_swagger_ui.py -q --durations=20
       - uses: actions/setup-node@v6
-        if: inputs.mode != 'regression'
+        if: inputs.mode == 'runtime' || inputs.mode == 'all'
         with:
           node-version: '22'
           cache: npm
@@ -118,7 +128,7 @@ jobs:
           npm test
           npm run build
       - name: Actual frontend, default photos, API and SMTP
-        if: inputs.mode != 'regression'
+        if: inputs.mode == 'runtime' || inputs.mode == 'all'
         env:
           LAPKI_PREVIEW_URL: http://127.0.0.1:8090
           LAPKI_MAIL_URL: http://127.0.0.1:8025
@@ -135,7 +145,7 @@ jobs:
           npm ci --no-audit --no-fund
           npm run test:api
       - name: Upload coverage and timing
-        if: always() && inputs.mode != 'runtime'
+        if: always() && (inputs.mode == 'regression' || inputs.mode == 'all')
         uses: actions/upload-artifact@v4
         with:
           name: python-coverage

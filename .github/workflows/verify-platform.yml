@@ -1,0 +1,74 @@
+name: Verify one immutable candidate
+on:
+  workflow_call:
+    inputs:
+      arch:
+        type: string
+        required: true
+      runner:
+        type: string
+        required: true
+      digest:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load exactly the built digest
+        env:
+          DIGEST: ${{ inputs.digest }}
+          REPOSITORY: ${{ vars.DOCKERHUB_USERNAME }}/swagger-petstore
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker pull "$REPOSITORY@$DIGEST"
+          docker tag "$REPOSITORY@$DIGEST" swagger-petstore:ci
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-runtime.txt
+      - name: Install contract dependencies
+        run: python -m pip install --constraint requirements-runtime.txt -e '.[test]'
+      - name: Contracts and persistence on the target architecture
+        env:
+          BASE_URL: http://127.0.0.1:8080/api/v3
+          PETSTORE_COMMERCE_CONTAINER: petstore-ci
+        run: |
+          docker run --detach --name petstore-ci --env PETSTORE_DEMO_CATALOG=false --publish 127.0.0.1:8080:8080 swagger-petstore:ci
+          for _attempt in $(seq 1 90); do
+            if curl --fail --silent http://localhost:8080/api/v3/health; then break; fi
+            sleep 2
+          done
+          curl --fail http://localhost:8080/api/v3/health
+          python -m pytest tests/smoke tests/system/test_commerce_system.py -q -o addopts=''
+      - name: Scanner cache epoch
+        id: epoch
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - name: Restore writable scanner databases
+        id: scanner-cache
+        uses: actions/cache@v4
+        with:
+          path: .trivy-cache
+          key: trivy-v2-${{ runner.os }}-${{ inputs.arch }}-0.74.0-${{ steps.epoch.outputs.day }}
+          restore-keys: trivy-v2-${{ runner.os }}-${{ inputs.arch }}-0.74.0-
+      - name: Scan exact candidate with runner-owned cache
+        run: |
+          mkdir -p .trivy-cache
+          test -w .trivy-cache
+          docker save --output candidate-image.tar swagger-petstore:ci
+          docker run --rm --user "$(id -u):$(id -g)" --mount type=bind,source="$PWD/candidate-image.tar",target=/image.tar,readonly --mount type=bind,source="$PWD/.trivy-cache",target=/cache aquasec/trivy:0.74.0 --cache-dir /cache image --input /image.tar --timeout 10m --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --no-progress
+          test -r .trivy-cache/db/metadata.json
+          test -r .trivy-cache/java-db/metadata.json
+          echo "Trivy cache restored: ${{ steps.scanner-cache.outputs.cache-hit }}; databases readable by runner" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove own architecture test container
+        if: always()
+        run: |
+          docker logs --tail=40 petstore-ci || true
+          docker rm --force --volumes petstore-ci || true
