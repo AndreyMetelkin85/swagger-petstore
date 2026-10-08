@@ -5,6 +5,8 @@ import logging
 import time
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
+from functools import lru_cache
+from pathlib import Path
 from threading import Event, Thread
 from typing import Any
 from uuid import uuid4
@@ -35,6 +37,13 @@ from petstore.utils.responses import Responses
 logger = logging.getLogger("petstore")
 
 
+@lru_cache(maxsize=8)
+def _load_contract(path: Path, modified: int, size: int) -> Row:
+    """Cache safe parsing by file identity; callers receive independent documents."""
+    del modified, size
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 def create_app(
     settings: Settings | None = None, database: Database | None = None, start_database: bool = True
 ) -> FastAPI:
@@ -47,8 +56,9 @@ def create_app(
     settings = settings or Settings.from_env()
     database = database or Database(settings)
     db = database
-    document: Row = yaml.safe_load((settings.resources / "openapi.yaml").read_text(encoding="utf-8"))
-    document = copy.deepcopy(document)
+    contract_path = settings.resources / "openapi.yaml"
+    contract_stat = contract_path.stat()
+    document = copy.deepcopy(_load_contract(contract_path, contract_stat.st_mtime_ns, contract_stat.st_size))
     # Swagger must execute against its own container, not an absolute localhost:8080 from the reference.
     document["servers"][0]["url"] = "/api/v3"
     auth = AuthService(UserData(db), settings)

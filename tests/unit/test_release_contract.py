@@ -10,23 +10,33 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_canonical_dockerfile_builds_the_python_application():
     release = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert not (ROOT / "Dockerfile.python").exists()
-    assert "python -m pip install --no-cache-dir --constraint requirements-runtime.txt ." in release
+    assert "python -m pip install --no-cache-dir --no-deps ." in release
+    assert release.index("--requirement requirements-runtime.txt") < release.index("COPY src /app/src")
     assert "petstore-entrypoint" in release
     assert "tomcat" not in release.lower()
 
 
 def test_publication_requires_python_tests_and_both_platform_scans():
     workflow = yaml.safe_load((ROOT / ".github/workflows/docker-security.yml").read_text())
-    assert workflow["jobs"]["scan"]["strategy"]["matrix"]["arch"] == ["amd64", "arm64"]
-    assert workflow["jobs"]["publish"]["needs"] == ["scan", "python-verification"]
+    matrix = workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
+    assert {entry["arch"] for entry in matrix} == {"amd64", "arm64"}
+    assert next(entry for entry in matrix if entry["arch"] == "arm64")["runner"] == "ubuntu-24.04-arm"
+    assert set(workflow["jobs"]["publish"]["needs"]) == {
+        "changes",
+        "quality",
+        "build",
+        "python-verification",
+        "runtime",
+    }
     steps = workflow["jobs"]["publish"]["steps"]
-    build = next(step for step in steps if step.get("id") == "image")
+    assert not any(step.get("uses", "").startswith("docker/build-push-action") for step in steps)
+    assert any("imagetools create" in step.get("run", "") and ":latest" in step["run"] for step in steps)
+    build = next(step for step in workflow["jobs"]["build"]["steps"] if step.get("id") == "image")
     assert build["with"]["file"] == "Dockerfile"
-    assert build["with"]["platforms"] == "linux/amd64,linux/arm64"
-    assert "sha-" in build["with"]["tags"]
-    start = next(step for step in steps if step["name"] == "Start exactly the published digest")
-    assert "@${{ steps.image.outputs.digest }}" in start["env"]["PUBLISHED_IMAGE"]
-    assert any("tests/system/test_swagger_ui.py" in step.get("run", "") for step in steps)
+    assert build["with"]["platforms"] == "linux/${{ matrix.arch }}"
+    assert "candidate-" in build["with"]["tags"] and ":latest" not in build["with"]["tags"]
+    assert "cache-from" in build["with"] and build["with"]["provenance"] == "mode=max"
+    assert "needs.runtime.result == 'success'" in workflow["jobs"]["publish"]["if"]
 
 
 def test_main_compose_healthcheck_works_without_curl_and_keeps_volume():

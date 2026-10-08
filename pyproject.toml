@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest==9.1.1", "pytest-cov==7.1.0", "httpx==0.28.1", "playwright==1.63.0"]
+test = ["pytest==9.1.1", "pytest-cov==7.1.0", "pytest-xdist==3.8.0", "httpx==0.28.1", "playwright==1.63.0"]
 quality = ["pyright==1.1.414", "ruff==0.16.10"]
 
 [tool.setuptools.packages.find]
