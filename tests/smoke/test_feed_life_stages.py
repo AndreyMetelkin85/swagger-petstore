@@ -7,7 +7,11 @@ from tests.smoke.test_api_smoke import client as client
 
 @pytest.fixture(scope="module")
 def catalog_admin_headers(client):
-    """Authorize the public image validation checks once without creating records."""
+    """Авторизует администратора только изолированного тестового API.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     return bearer(login(client, "admin", "admin123"))
 
 

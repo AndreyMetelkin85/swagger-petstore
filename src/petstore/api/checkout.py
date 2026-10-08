@@ -1,4 +1,4 @@
-"""Checkout routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -18,7 +18,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> CommerceOrderController:
-    """Inject this application's checkout controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа CommerceOrderController.
+    """
     return cast(CommerceOrderController, context.request.app.state.controllers.checkout)
 
 
@@ -39,7 +43,13 @@ def list_commerce_orders(
     controller: Controller,
     response: Response,
 ) -> list[StoreOrder]:
-    """История заказов."""
+    """История заказов.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа list[StoreOrder].
+    """
     result = controller.list_orders(context)
     return decode_response(result, response)
 
@@ -60,7 +70,15 @@ def create_commerce_order(
     body: Annotated[CheckoutCommand, BeforeValidator(CheckoutCommand.from_wire), Body()],
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> StoreOrder:
-    """Черновик из версии корзины."""
+    """Черновик из версии корзины.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param idempotency_key: UUID из Idempotency-Key, защищающий повтор операции.
+    :return: Результат операции типа StoreOrder.
+    """
     context.parameters = {"Idempotency-Key": idempotency_key}
     context.body = body
     result = controller.create(context)
@@ -82,7 +100,14 @@ def get_commerce_order(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> StoreOrder:
-    """Состав заказа и снимок доставки."""
+    """Состав заказа и снимок доставки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа StoreOrder.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get(context)
     return decode_response(result, response)
@@ -103,7 +128,14 @@ def delete_commerce_order(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> Response:
-    """Очистить черновик или терминальный заказ."""
+    """Очистить черновик или терминальный заказ.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"id": resource_id}
     result = controller.delete(context)
     return result
@@ -126,7 +158,16 @@ def place_commerce_order(
     resource_id: Annotated[UUID, Path(alias="id")],
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> StoreOrder:
-    """Действие заказа: place."""
+    """Действие заказа: place.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :param idempotency_key: UUID из Idempotency-Key, защищающий повтор операции.
+    :return: Результат операции типа StoreOrder.
+    """
     context.parameters = {"id": resource_id, "Idempotency-Key": idempotency_key}
     context.body = body
     result = controller.place(context)
@@ -149,7 +190,15 @@ def approve_commerce_order(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> StoreOrder:
-    """Действие заказа: approve."""
+    """Действие заказа: approve.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа StoreOrder.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.transition(context, OrderStatus.APPROVED)
@@ -172,7 +221,15 @@ def ship_commerce_order(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> StoreOrder:
-    """Действие заказа: ship."""
+    """Действие заказа: ship.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа StoreOrder.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.transition(context, OrderStatus.SHIPPED)
@@ -195,7 +252,15 @@ def deliver_commerce_order(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> StoreOrder:
-    """Действие заказа: deliver."""
+    """Действие заказа: deliver.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа StoreOrder.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.transition(context, OrderStatus.DELIVERED)
@@ -218,7 +283,15 @@ def cancel_commerce_order(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> StoreOrder:
-    """Действие заказа: cancel."""
+    """Действие заказа: cancel.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа StoreOrder.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.transition(context, OrderStatus.CANCELLED)
@@ -240,7 +313,14 @@ def list_commerce_payments(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> list[Payment]:
-    """История общей оплаты."""
+    """История общей оплаты.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа list[Payment].
+    """
     context.parameters = {"id": resource_id}
     result = controller.list_payments(context)
     return decode_response(result, response)
@@ -263,7 +343,16 @@ def create_commerce_payment(
     resource_id: Annotated[UUID, Path(alias="id")],
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> Payment:
-    """Единая оплата состава заказа."""
+    """Единая оплата состава заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :param idempotency_key: UUID из Idempotency-Key, защищающий повтор операции.
+    :return: Результат операции типа Payment.
+    """
     context.parameters = {"id": resource_id, "Idempotency-Key": idempotency_key}
     context.body = body
     result = controller.create_payment(context)

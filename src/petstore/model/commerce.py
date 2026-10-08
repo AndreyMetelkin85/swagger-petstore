@@ -1,4 +1,4 @@
-"""Validated catalog, gallery, cart and checkout commands."""
+"""Типизированные модели и правила действующего контракта API."""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -12,13 +12,13 @@ from petstore.model.requests import RequestModel
 
 
 class CommerceRequest(RequestModel):
-    """Reject unsupported fields rather than accepting client-controlled stock or totals."""
+    """Команда магазина, запрещающая неподдерживаемые и управляемые сервером поля."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True, str_strip_whitespace=True)
 
 
 class Publication(StrEnum):
-    """Visibility independent of inventory availability."""
+    """Публикация карточки независимо от доступного остатка."""
 
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
@@ -26,7 +26,7 @@ class Publication(StrEnum):
 
 
 class Animal(StrEnum):
-    """Supported audience/species filters."""
+    """Поддерживаемые виды животных и фильтры аудитории."""
 
     DOG = "dog"
     CAT = "cat"
@@ -38,7 +38,7 @@ class Animal(StrEnum):
 
 
 class LifeStage(StrEnum):
-    """Supported feed age groups; ALL is exclusive of specific stages."""
+    """Возрастные группы корма; ALL не совмещается с отдельными группами."""
 
     YOUNG = "YOUNG"
     ADULT = "ADULT"
@@ -47,7 +47,7 @@ class LifeStage(StrEnum):
 
 
 class ImageReference(CommerceRequest):
-    """Ordered gallery entry; at most one explicit cover per card."""
+    """Изображение галереи с порядком и признаком единственной обложки."""
 
     media_id: UUID = Field(alias="mediaId")
     alt: str = Field(default="", max_length=300)
@@ -55,7 +55,7 @@ class ImageReference(CommerceRequest):
 
 
 class CategoryCommand(CommerceRequest):
-    """Category creation or versioned update; deactivation does not delete its cards."""
+    """Создание или обновление категории по версии; деактивация сохраняет карточки."""
 
     name: str = Field(min_length=1, max_length=100)
     kind: str = Field(pattern="^(product|pet)$")
@@ -64,7 +64,7 @@ class CategoryCommand(CommerceRequest):
 
 
 class ProductCommand(CommerceRequest):
-    """Full product card; stock edits use the dedicated adjustment operation."""
+    """Полная карточка товара; остаток меняется отдельной командой."""
 
     sku: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
     name: str = Field(min_length=1, max_length=150)
@@ -93,10 +93,10 @@ class ProductCommand(CommerceRequest):
     @field_validator("life_stages", mode="before")
     @classmethod
     def validate_life_stages(cls, value: object) -> object:
-        """Reject invalid age groups at the field level, including in partial drafts.
+        """Отклоняет недопустимые возрастные группы корма, включая неполные черновики.
 
-        :param value: Submitted age list, before native enum conversion.
-        :return: The valid list, or a value left for native list-shape validation.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :return: Результат операции типа object.
         """
         if not isinstance(value, list):
             return value
@@ -110,13 +110,16 @@ class ProductCommand(CommerceRequest):
 
     @model_validator(mode="after")
     def validate_product_gallery(self) -> Self:
-        """Reject duplicate images and covers without requiring a complete draft."""
+        """Отклоняет дубликаты изображений и обложек без требования заполнить весь черновик.
+
+        :return: Результат операции типа Self.
+        """
         validate_gallery(self.images)
         return self
 
 
 class PetCardCommand(CommerceRequest):
-    """Extended pet card without client-controlled reservations/publication state."""
+    """Расширенная карточка питомца без клиентского управления резервом и публикацией."""
 
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=5000)
@@ -131,7 +134,10 @@ class PetCardCommand(CommerceRequest):
 
     @model_validator(mode="after")
     def validate_pet(self) -> Self:
-        """Reject future birth dates and ambiguous gallery covers."""
+        """Отклоняет будущую дату рождения и неоднозначный выбор обложки питомца.
+
+        :return: Результат операции типа Self.
+        """
         validate_gallery(self.images)
         if self.birth_date is not None and self.birth_date > date.today():
             raise ValueError("Birth date cannot be in the future")
@@ -139,9 +145,10 @@ class PetCardCommand(CommerceRequest):
 
 
 def validate_gallery(images: list[ImageReference]) -> None:
-    """Validate unique IDs and cover selection before acquiring database locks.
+    """Проверяет уникальность изображений и единственную обложку до получения блокировок базы.
 
-    :param images: Ordered gallery references.
+    :param images: Проверенные элементы галереи в порядке отображения.
+    :return: Ничего не возвращает.
     """
     if (
         len({image.media_id for image in images}) != len(images)
@@ -151,20 +158,20 @@ def validate_gallery(images: list[ImageReference]) -> None:
 
 
 class VersionCommand(CommerceRequest):
-    """Expected optimistic version for publication/lifecycle actions."""
+    """Ожидаемая версия для публикации и действий жизненного цикла."""
 
     version: int = Field(ge=0)
 
 
 class StockCommand(VersionCommand):
-    """Audited inventory delta; reserved stock cannot be removed."""
+    """Корректировка остатка с причиной; зарезервированные единицы нельзя убрать."""
 
     delta: int = Field(ge=-1000000, le=1000000)
     reason: str = Field(min_length=1, max_length=300)
 
 
 class CartLineCommand(CommerceRequest):
-    """A soft catalog reference that can remain visible when unavailable."""
+    """Ссылка на позицию, сохраняемая в корзине даже при недоступности."""
 
     kind: str = Field(pattern="^(product|pet)$")
     id: UUID
@@ -172,33 +179,39 @@ class CartLineCommand(CommerceRequest):
 
     @model_validator(mode="after")
     def validate_quantity(self) -> Self:
-        """An individual pet cannot have a quantity other than one."""
+        """Проверяет, что количество отдельного питомца равно единице.
+
+        :return: Результат операции типа Self.
+        """
         if self.kind == "pet" and self.quantity != 1:
             raise ValueError("Quantity must be 1 for an individual pet")
         return self
 
 
 class CartCommand(VersionCommand):
-    """Versioned full replacement; optional idempotency protects guest merging."""
+    """Полная замена корзины по версии с защитой повторного объединения."""
 
     lines: list[CartLineCommand] = Field(max_length=100)
 
     @model_validator(mode="after")
     def validate_lines(self) -> Self:
-        """Reject duplicate identities rather than silently double-counting a merge."""
+        """Отклоняет повторяющиеся позиции вместо суммирования дубликатов при объединении корзины.
+
+        :return: Результат операции типа Self.
+        """
         if len({(line.kind, line.id) for line in self.lines}) != len(self.lines):
             raise ValueError("Cart must contain unique items")
         return self
 
 
 class CheckoutCommand(CommerceRequest):
-    """Snapshot only a known version of the server-side cart."""
+    """Создание снимка известной версии серверной корзины."""
 
     cart_version: int = Field(alias="cartVersion", ge=1)
 
 
 class TelemetryEvent(CommerceRequest):
-    """Allowlisted operational telemetry without arbitrary strings or personal data."""
+    """Разрешённая телеметрия без произвольных строк и личных данных."""
 
     event: str = Field(pattern=r"^[a-z][a-z0-9_]{0,49}$")
     method: str | None = Field(default=None, pattern="^(GET|POST|PUT|DELETE|PATCH)$")
@@ -213,13 +226,16 @@ class TelemetryEvent(CommerceRequest):
 
     @model_validator(mode="after")
     def validate_timestamp(self) -> Self:
-        """Require timezone-aware event times; no arbitrary timestamp text enters logs."""
+        """Проверяет часовой пояс времени события; произвольные строки не попадают в логи.
+
+        :return: Результат операции типа Self.
+        """
         if self.timestamp is not None and self.timestamp.tzinfo is None:
             raise ValueError("Event timestamp must contain a timezone")
         return self
 
 
 class TelemetryCommand(CommerceRequest):
-    """Bounded batch; unknown metadata is rejected instead of logged."""
+    """Ограниченная пачка событий с отклонением неизвестных метаданных."""
 
     events: list[TelemetryEvent] = Field(min_length=1, max_length=100)

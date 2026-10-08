@@ -1,4 +1,4 @@
-"""Owned, versioned cart HTTP handlers."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from typing import cast
 from uuid import UUID
@@ -13,18 +13,30 @@ from petstore.utils.responses import Responses
 
 
 class CartController:
-    """Keep authentication separate from cart availability and replay rules."""
+    """Авторизация HTTP-команд корзины; доступность и повторы проверяет сервис."""
 
     def __init__(self, database: Database) -> None:
-        """Inject the application cart repository."""
+        """Настраивает зависимости операции на общем пуле приложения.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
+        """
         self.cart = CartService(database)
 
     def get(self, context: RequestContext) -> Response:
-        """Read only the authenticated account's cart."""
+        """Возвращает корзину только авторизованного пользователя.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         return Responses(self.cart.get(context.authorize("USER", "ADMIN")))
 
     def replace(self, context: RequestContext) -> Response:
-        """Replace an owned cart using its version and optional replay token."""
+        """Заменяет собственную корзину с проверкой версии и ключа повторного запроса.
+
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
+        """
         assert isinstance(context.body, CartCommand)
         return Responses(
             self.cart.replace(

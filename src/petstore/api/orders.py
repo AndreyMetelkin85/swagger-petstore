@@ -1,4 +1,4 @@
-"""Orders routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -16,7 +16,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> OrderController:
-    """Inject this application's orders controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа OrderController.
+    """
     return cast(OrderController, context.request.app.state.controllers.orders)
 
 
@@ -37,7 +41,13 @@ def get_inventory(
     controller: Controller,
     response: Response,
 ) -> dict[str, int]:
-    """Получение количества заказов по статусам."""
+    """Получение количества заказов по статусам.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа dict[str, int].
+    """
     result = controller.get_inventory(context)
     return decode_response(result, response)
 
@@ -56,7 +66,13 @@ def list_orders(
     controller: Controller,
     response: Response,
 ) -> list[Order]:
-    """Получение списка заказов."""
+    """Получение списка заказов.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа list[Order].
+    """
     result = controller.list_orders(context)
     return decode_response(result, response)
 
@@ -76,7 +92,14 @@ def create_order_draft(
     response: Response,
     body: Annotated[OrderCreateRequest, BeforeValidator(OrderCreateRequest.from_wire), Body()],
 ) -> Order:
-    """Создание черновика заказа."""
+    """Создание черновика заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа Order.
+    """
     context.body = body
     result = controller.create_order_draft(context)
     return decode_response(result, response)
@@ -97,7 +120,14 @@ def get_order_by_id(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Order:
-    """Получение заказа."""
+    """Получение заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа Order.
+    """
     context.parameters = {"orderId": order_id}
     result = controller.get_order_by_id(context)
     return decode_response(result, response)
@@ -119,7 +149,15 @@ def update_order_draft(
     body: Annotated[OrderCreateRequest, BeforeValidator(OrderCreateRequest.from_wire), Body()],
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Order:
-    """Обновление черновика заказа."""
+    """Обновление черновика заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа Order.
+    """
     context.parameters = {"orderId": order_id}
     context.body = body
     result = controller.update_order_draft(context)
@@ -141,7 +179,14 @@ def delete_order(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Response:
-    """Удаление заказа."""
+    """Удаление заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"orderId": order_id}
     result = controller.delete_order(context)
     return result
@@ -162,7 +207,14 @@ def place_order_draft(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Order:
-    """Оформление черновика заказа."""
+    """Оформление черновика заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа Order.
+    """
     context.parameters = {"orderId": order_id}
     result = controller.place_order_draft(context)
     return decode_response(result, response)
@@ -183,7 +235,14 @@ def approve_order(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Order:
-    """Подтверждение заказа."""
+    """Подтверждение заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа Order.
+    """
     context.parameters = {"orderId": order_id}
     result = controller.approve_order(context)
     return decode_response(result, response)
@@ -204,7 +263,14 @@ def ship_order(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Order:
-    """Передача заказа в доставку."""
+    """Передача заказа в доставку.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа Order.
+    """
     context.parameters = {"orderId": order_id}
     result = controller.ship_order(context)
     return decode_response(result, response)
@@ -225,7 +291,14 @@ def deliver_order(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Order:
-    """Завершение доставки заказа."""
+    """Завершение доставки заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа Order.
+    """
     context.parameters = {"orderId": order_id}
     result = controller.deliver_order(context)
     return decode_response(result, response)
@@ -246,7 +319,14 @@ def cancel_order(
     response: Response,
     order_id: Annotated[UUID, Path(alias="orderId")],
 ) -> Order:
-    """Отмена заказа."""
+    """Отмена заказа.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param order_id: UUID заказа.
+    :return: Результат операции типа Order.
+    """
     context.parameters = {"orderId": order_id}
     result = controller.cancel_order(context)
     return decode_response(result, response)

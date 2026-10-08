@@ -1,4 +1,4 @@
-"""Pet SQL operations, including optimistic locking and order-history protection."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 import json
 from typing import Any, cast
@@ -10,20 +10,22 @@ from petstore.service.exceptions import PetException
 
 
 class PetData:
-    """PostgreSQL-backed catalog with the unchanged nested JSON storage format."""
+    """Каталог PostgreSQL с совместимым хранением вложенных JSON-объектов."""
 
     def __init__(self, database: Database) -> None:
-        """Use the application's connection factory.
+        """Сохраняет общий пул соединений для операций репозитория.
 
-        :param database: PostgreSQL pool.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.database = database
 
     @staticmethod
     def public(row: Row) -> Row:
-        """Map persisted pet columns to the original response shape.
+        """Преобразует строку питомца в действующий формат ответа.
 
-        :param row: Persisted pet row.
+        :param row: Строка базы данных для обработки или преобразования.
+        :return: Результат операции типа Row.
         """
         result = {
             "id": row["id"],
@@ -39,9 +41,10 @@ class PetData:
         return {key: value for key, value in result.items() if value is not None}
 
     def get_pet_by_id(self, pet_id: UUID) -> Row:
-        """Read a public pet or return its operation-specific 404.
+        """Возвращает публичного питомца либо ошибку 404 этой операции.
 
-        :param pet_id: Catalog UUID.
+        :param pet_id: UUID питомца.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             row = connection.execute(
@@ -52,9 +55,10 @@ class PetData:
             return self.public(row)
 
     def find_pet_by_status(self, statuses: str) -> list[Row]:
-        """Find pets using the original comma-separated availability filter.
+        """Ищет питомцев по доступности, перечисленной через запятую.
 
-        :param statuses: Validated status list.
+        :param statuses: Разрешённые состояния для фильтра поиска.
+        :return: Результат операции типа list[Row].
         """
         with self.database.connect() as connection:
             rows = connection.execute(
@@ -64,9 +68,10 @@ class PetData:
             return [self.public(row) for row in rows]
 
     def find_pet_by_tags(self, tags: list[str]) -> list[Row]:
-        """Return each matching pet once, in original UUID order.
+        """Возвращает каждого подходящего питомца один раз в порядке UUID.
 
-        :param tags: Requested tag names.
+        :param tags: Теги питомца для поиска.
+        :return: Результат операции типа list[Row].
         """
         with self.database.connect() as connection:
             rows = connection.execute(
@@ -82,9 +87,10 @@ class PetData:
 
     @staticmethod
     def nested(request: PetCreateRequest) -> tuple[str, str, str]:
-        """Assign missing nested UUIDs and serialize the existing text JSON columns.
+        """Назначает отсутствующие UUID вложенным объектам и сериализует JSON-столбцы.
 
-        :param request: Validated pet data.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа tuple[str, str, str].
         """
         category: dict[str, Any] | None = None
         if request.category:
@@ -97,9 +103,10 @@ class PetData:
         )
 
     def create_pet(self, request: PetCreateRequest) -> Row:
-        """Create a pet with a database-generated UUID and version zero.
+        """Создаёт питомца с UUID базы данных и нулевой версией.
 
-        :param request: Validated creation data.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Row.
         """
         category, urls, tags = self.nested(request)
         with self.database.connect() as connection:
@@ -112,10 +119,11 @@ class PetData:
             return self.public(row)
 
     def update_pet(self, pet_id: UUID, request: PetUpdateRequest) -> Row:
-        """Serialize edits and reject stale versions or manual reservation changes.
+        """Согласует изменения и отклоняет старую версию либо ручное изменение резерва.
 
-        :param pet_id: Existing catalog UUID.
-        :param request: Validated full update with expected version.
+        :param pet_id: UUID питомца.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             current = connection.execute("SELECT * FROM pets WHERE id = %s FOR UPDATE", (pet_id,)).fetchone()
@@ -150,9 +158,10 @@ class PetData:
             return self.public(row)
 
     def delete_pet_if_unused(self, pet_id: UUID) -> None:
-        """Delete a pet only if no historical or draft order references it.
+        """Удаляет питомца только при отсутствии ссылок из черновиков и истории заказов.
 
-        :param pet_id: Catalog UUID to delete.
+        :param pet_id: UUID питомца.
+        :return: Ничего не возвращает.
         """
         with self.database.connect() as connection:
             if (

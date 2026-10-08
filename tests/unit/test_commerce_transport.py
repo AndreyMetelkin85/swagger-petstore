@@ -11,6 +11,10 @@ from petstore.service.media_service import MAX_BYTES
 
 @pytest.fixture
 def client():
+    """Предоставляет HTTP-клиент текущего изолированного сценария.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     app = create_app(database=Mock(spec=Database), start_database=False)
     app.state.auth.authorize = Mock(return_value={"id": uuid4(), "role": "ADMIN"})
     with TestClient(app) as client:

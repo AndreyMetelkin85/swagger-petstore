@@ -1,4 +1,4 @@
-"""Health routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 
@@ -13,7 +13,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> HealthController:
-    """Inject this application's health controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа HealthController.
+    """
     return cast(HealthController, context.request.app.state.controllers.health)
 
 
@@ -34,6 +38,12 @@ def health(
     controller: Controller,
     response: Response,
 ) -> HealthResponse:
-    """Проверка состояния сервиса."""
+    """Проверка состояния сервиса.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа HealthResponse.
+    """
     result = controller.health(context)
     return decode_response(result, response)

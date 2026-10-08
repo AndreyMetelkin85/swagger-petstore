@@ -1,4 +1,4 @@
-"""Mixed checkout over the existing order/payment parent, with atomic allocations."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import re
 from datetime import UTC, datetime
@@ -22,20 +22,34 @@ from petstore.utils.responses import public_delivery, public_user
 
 
 class CommerceOrderService:
-    """Order lock precedes all sorted inventory locks; payment uses that same parent."""
+    """Заказ блокируется перед упорядоченными остатками; оплата использует ту же блокировку."""
 
     def __init__(self, database: Database) -> None:
-        """Use one pool and never split inventory changes across transactions."""
+        """Настраивает зависимости операции на общем пуле приложения.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
+        """
         self.database = database
 
     @staticmethod
     def lines(connection: DbConnection, identifier: UUID) -> list[Row]:
-        """Read immutable checkout lines in their display order."""
+        """Возвращает неизменяемые позиции оформления в порядке отображения.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа list[Row].
+        """
         return CommerceOrderData.lines(connection, identifier).fetchall()
 
     @classmethod
     def public(cls, connection: DbConnection, order: Row) -> Row:
-        """Expose a common history DTO, adapting legacy single-pet parents on reads."""
+        """Формирует общий DTO истории, адаптируя сохранённые заказы с одним питомцем.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :return: Результат операции типа Row.
+        """
         lines = cls.lines(connection, order["id"])
         if order["order_kind"] == "LEGACY":
             pet = CommerceOrderData.legacy_pet(connection, order["pet_id"]).fetchone()
@@ -82,7 +96,12 @@ class CommerceOrderService:
         }
 
     def get(self, identifier: UUID, actor: Row) -> Row:
-        """Read only an owned order (or any order as ADMIN), reconciling expiry first."""
+        """Возвращает доступный владельцу либо ADMIN заказ после обработки срока резерва.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
+        """
         self.expire()
         with self.database.connect() as connection:
             order = OrderData.lock_order(connection, identifier)
@@ -90,14 +109,24 @@ class CommerceOrderService:
             return self.public(connection, order)
 
     def find_all(self, actor: Row) -> list[Row]:
-        """Include preserved legacy records in the new order history."""
+        """Включает сохранённые заказы прежнего формата в общую историю.
+
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа list[Row].
+        """
         self.expire()
         with self.database.connect() as connection:
             rows = CommerceOrderData.history(connection, actor).fetchall()
             return [self.public(connection, row) for row in rows]
 
     def create(self, command: CheckoutCommand, actor: Row, key: UUID) -> tuple[Row, bool]:
-        """Snapshot server-side cart quotes without reserving stock."""
+        """Сохраняет серверные цены корзины в черновике без резервирования остатков.
+
+        :param command: Проверенная команда изменения, подготовленная вызывающим слоем.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :return: Результат операции типа tuple[Row, bool].
+        """
         payload = command.model_dump()
         with self.database.connect() as connection:
             replay = IdempotencyData.replay(connection, actor["id"], "order:create", key, payload)
@@ -122,7 +151,7 @@ class CommerceOrderService:
                 identity: next((image for image in gallery if image["isCover"]), None)
                 for identity, gallery in galleries.items()
             }
-            # Inventory always precedes all sorted media locks, including multi-card checkout.
+            # Остатки блокируются перед упорядоченными изображениями, включая смешанное оформление.
             for media_id in sorted({image["mediaId"] for image in covers.values() if image}, key=str):
                 CommerceOrderData.lock_cover(connection, media_id)
             for position, line in enumerate(lines):
@@ -154,7 +183,12 @@ class CommerceOrderService:
 
     @staticmethod
     def inventory_locks(connection: DbConnection, lines: list[Row]) -> dict[tuple[str, UUID], InventoryItem]:
-        """Lock all resources in one deterministic order across checkout/cancel/expiry."""
+        """Блокирует весь состав в едином порядке для оформления, отмены и истечения резерва.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param lines: Проверенные позиции корзины или заказа.
+        :return: Результат операции типа dict[tuple[str, UUID], InventoryItem].
+        """
         return {
             (r["item_type"], r["item_id"]): InventoryItem.from_row(
                 r["item_type"], CatalogData.locked(connection, r["item_type"], r["item_id"])
@@ -163,7 +197,14 @@ class CommerceOrderService:
         }
 
     def place(self, identifier: UUID, actor: Row, version: int, key: UUID) -> Row:
-        """Validate the entire composition before atomically reserving any item."""
+        """Проверяет весь состав до атомарного резервирования любой позиции.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param version: Ожидаемая версия записи для защиты от конкурентного изменения.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :return: Результат операции типа Row.
+        """
         self.expire()
         payload: Row = {"orderId": str(identifier), "version": version}
         with self.database.connect() as connection:
@@ -223,7 +264,13 @@ class CommerceOrderService:
 
     @classmethod
     def release(cls, connection: DbConnection, order: Row, consume: bool = False) -> None:
-        """Release/consume RESERVED allocations exactly once under the parent lock."""
+        """Однократно освобождает или потребляет RESERVED-позиции под блокировкой заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :param consume: Списать резерв вместо простого освобождения.
+        :return: Ничего не возвращает.
+        """
         if order["order_kind"] == "LEGACY":
             CommerceOrderData.lock_pet(connection, order["pet_id"])
             OrderData.update_pet_status(connection, order["pet_id"], "sold" if consume else "available")
@@ -263,7 +310,12 @@ class CommerceOrderService:
 
     @classmethod
     def consume_paid_products(cls, connection: DbConnection, order: Row) -> None:
-        """Debit reserved goods once during successful payment; pets remain reserved until delivery."""
+        """Однократно списывает товары при успешной оплате; питомцы остаются в резерве до доставки.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :return: Ничего не возвращает.
+        """
         if order.get("order_kind", "LEGACY") != "MIXED":
             return
         lines = [
@@ -282,7 +334,12 @@ class CommerceOrderService:
 
     @classmethod
     def expire_locked(cls, connection: DbConnection, order: Row) -> bool:
-        """Reconcile unpaid expiry while the caller holds the same payment/order lock."""
+        """Обрабатывает истечение неоплаченного заказа под общей блокировкой оплаты и заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+        :return: True при выполнении проверяемого условия, иначе False.
+        """
         if (
             order["status"] != "placed"
             or order["payment_status"] != "UNPAID"
@@ -296,14 +353,24 @@ class CommerceOrderService:
         return True
 
     def expire(self) -> int:
-        """Expire only unlocked mixed orders; SKIP LOCKED prevents parallel double release."""
+        """Просрочивает незаблокированные смешанные заказы; SKIP LOCKED исключает двойное освобождение.
+
+        :return: Числовой результат описанной операции.
+        """
         legacy = OrderData(self.database).expire_overdue_orders()
         with self.database.connect() as connection:
             rows = CommerceOrderData.overdue(connection).fetchall()
             return legacy + sum(self.expire_locked(connection, row) for row in rows)
 
     def transition(self, identifier: UUID, target: OrderStatus, actor: Row, version: int) -> Row:
-        """Use the existing state matrix and refund successful payments atomically."""
+        """Применяет матрицу состояний и атомарно возвращает успешную оплату.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param target: Целевое состояние жизненного цикла.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param version: Ожидаемая версия записи для защиты от конкурентного изменения.
+        :return: Результат операции типа Row.
+        """
         with self.database.connect() as connection:
             order = OrderData.lock_order(connection, identifier)
             OrderData.assert_access(order, actor, modifying=True)
@@ -336,7 +403,12 @@ class CommerceOrderService:
             return self.public(connection, row)
 
     def delete(self, identifier: UUID, actor: Row) -> None:
-        """Clean only an owned draft or ADMIN terminal order and its dependent records."""
+        """Удаляет допустимый собственный черновик либо завершённый заказ ADMIN с зависимыми записями.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Ничего не возвращает.
+        """
         with self.database.connect() as connection:
             order = OrderData.lock_order(connection, identifier)
             OrderData.assert_access(order, actor, modifying=True)

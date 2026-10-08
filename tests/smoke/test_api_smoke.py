@@ -30,17 +30,31 @@ CREATED_ORDER_IDS: set[str] = set()
 
 
 def to_email(login: str) -> str:
+    """Преобразует имя начального аккаунта в email.
+
+    :param login: Имя начального учебного аккаунта.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     return KNOWN_EMAILS.get(login, login)
 
 
 @pytest.fixture(scope="session")
 def client() -> httpx.Client:
+    """Предоставляет HTTP-клиент текущего изолированного сценария.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as session:
         yield session
 
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_created_records(client: httpx.Client) -> None:
+    """Удаляет только UUID, сохранённые после успешного создания тестом.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     yield
     try:
         admin_token = login(client, "admin", "admin123")
@@ -91,6 +105,13 @@ def cleanup_created_records(client: httpx.Client) -> None:
 
 
 def login(client: httpx.Client, email_or_demo: str, password: str) -> str:
+    """Авторизует начальный либо созданный тестом аккаунт.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param email_or_demo: Email либо имя начального учебного аккаунта.
+    :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     email = to_email(email_or_demo) if "@" not in email_or_demo else email_or_demo
     response = client.post("/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200, response.text
@@ -102,10 +123,22 @@ def login(client: httpx.Client, email_or_demo: str, password: str) -> str:
 
 
 def bearer(token: str) -> dict[str, str]:
+    """Формирует заголовок Authorization из тестового токена.
+
+    :param token: Строка Bearer-токена для проверки.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     return {"Authorization": f"Bearer {token}"}
 
 
 def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> dict:
+    """Создаёт собственного питомца для проверки контракта.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param admin_token: Тестовый административный токен.
+    :param prefix: Префикс составного имени вложенного поля.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     response = client.post(
         "/pet",
         json={
@@ -129,6 +162,12 @@ def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> d
 
 
 def complete_profile(client: httpx.Client, token: str) -> dict:
+    """Заполняет доставку собственного тестового пользователя.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param token: Строка Bearer-токена для проверки.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     response = client.put(
         "/user/me",
         json={
@@ -151,6 +190,15 @@ def pay_order(
     card_number: str = "4242424242424242",
     key: str | None = None,
 ) -> httpx.Response:
+    """Оплачивает собственный заказ выбранной тестовой картой.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param token: Строка Bearer-токена для проверки.
+    :param order_id: UUID заказа.
+    :param card_number: Номер тестовой карты.
+    :param key: Ключ повторного запроса либо идентификатор операции.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     return client.post(
         f"/store/order/{order_id}/payments",
         headers={**bearer(token), "Idempotency-Key": key or str(uuid4())},
@@ -165,6 +213,13 @@ def pay_order(
 
 
 def create_order_draft(client: httpx.Client, token: str, pet_id: str) -> httpx.Response:
+    """Создаёт черновик для собственного тестового питомца.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param token: Строка Bearer-токена для проверки.
+    :param pet_id: UUID питомца.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     response = client.post(
         "/store/order",
         json={"petId": pet_id, "quantity": 1},
@@ -176,12 +231,24 @@ def create_order_draft(client: httpx.Client, token: str, pet_id: str) -> httpx.R
 
 
 def place_order(client: httpx.Client, token: str, pet_id: str) -> httpx.Response:
+    """Создаёт и размещает собственный заказ с проверкой ответа.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param token: Строка Bearer-токена для проверки.
+    :param pet_id: UUID питомца.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     draft = create_order_draft(client, token, pet_id)
     assert draft.status_code == 201, draft.text
     return client.post(f"/store/order/{draft.json()['id']}/place", headers=bearer(token))
 
 
 def api_path(url: str) -> str:
+    """Извлекает относительный маршрут API из тестовой ссылки.
+
+    :param url: URL ресурса, предоставленный вызывающим кодом.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     parsed = urlsplit(url)
     path = parsed.path
     prefix = "/api/v3"
@@ -191,6 +258,12 @@ def api_path(url: str) -> str:
 
 
 def register_user(client: httpx.Client, prefix: str) -> tuple[dict, str, str, str]:
+    """Создаёт уникальный тестовый аккаунт.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param prefix: Префикс составного имени вложенного поля.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     suffix = uuid4().hex[:10]
     username = f"{prefix}{suffix}"
     email = f"{username}@example.test"
@@ -210,6 +283,13 @@ def register_user(client: httpx.Client, prefix: str) -> tuple[dict, str, str, st
 
 
 def assert_error(response: httpx.Response, status: int, error: str) -> None:
+    """Проверяет общий формат ошибки, статус и машинный код.
+
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param status: Статус ресурса либо HTTP-ответа согласно операции.
+    :param error: Ожидаемый машинный код ошибки.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     assert response.status_code == status, response.text
     body = response.json()
     assert set(body) == {"status", "error", "message", "details"}
@@ -220,7 +300,17 @@ def assert_error(response: httpx.Response, status: int, error: str) -> None:
 
 
 def legacy_admin_token() -> str:
+    """Создаёт совместимый учебный токен прежнего контракта.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
+
     def encode(value: dict) -> str:
+        """Кодирует данные учебного токена в URL-безопасный base64.
+
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :return: Результат описанной проверки или подготовки тестовых данных.
+        """
         raw = json.dumps(value, separators=(",", ":")).encode()
         return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
@@ -1147,7 +1237,7 @@ def test_parallel_resends_leave_only_latest_link_valid(client: httpx.Client) -> 
         responses = list(executor.map(resend, range(2)))
     assert all(response.status_code == 200 for response in responses)
     assert_error(client.get(api_path(registration["confirmationUrl"])), 400, "INVALID_CONFIRMATION_LINK")
-    # Either returned link may be the latest; only that link can activate the account.
+    # Любая из двух ссылок может оказаться последней; аккаунт активирует только она.
     user_id = registration["user"]["id"]
     first_confirmation = client.get(api_path(responses[0].json()["confirmationUrl"]))
     if first_confirmation.status_code == 400:

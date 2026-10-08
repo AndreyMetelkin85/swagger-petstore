@@ -1,4 +1,4 @@
-"""Pets routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from typing import Annotated, cast
 from uuid import UUID
@@ -16,7 +16,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> PetController:
-    """Inject this application's pets controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа PetController.
+    """
     return cast(PetController, context.request.app.state.controllers.pets)
 
 
@@ -38,7 +42,14 @@ def add_pet(
     response: Response,
     body: Annotated[PetCreateRequest, BeforeValidator(PetCreateRequest.from_wire), Body()],
 ) -> Pet:
-    """Добавление питомца."""
+    """Добавление питомца.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа Pet.
+    """
     context.body = body
     result = controller.add_pet(context)
     return decode_response(result, response)
@@ -59,7 +70,14 @@ def find_pets_by_status(
     response: Response,
     status: Annotated[str, Query(alias="status")],
 ) -> list[Pet]:
-    """Поиск питомцев по статусу."""
+    """Поиск питомцев по статусу.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param status: Статус ресурса либо HTTP-ответа согласно операции.
+    :return: Результат операции типа list[Pet].
+    """
     context.parameters = {"status": status}
     result = controller.find_pets_by_status(context)
     return decode_response(result, response)
@@ -80,7 +98,14 @@ def find_pets_by_tags(
     response: Response,
     tags: Annotated[list[str], Query(alias="tags")],
 ) -> list[Pet]:
-    """Поиск питомцев по тегам."""
+    """Поиск питомцев по тегам.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param tags: Теги питомца для поиска.
+    :return: Результат операции типа list[Pet].
+    """
     context.parameters = {"tags": tags and [part for value in tags for part in value.split(",")]}
     result = controller.find_pets_by_tags(context)
     return decode_response(result, response)
@@ -102,7 +127,15 @@ def update_pet(
     body: Annotated[PetUpdateRequest, BeforeValidator(PetUpdateRequest.from_wire), Body()],
     pet_id: Annotated[UUID, Path(alias="petId")],
 ) -> Pet:
-    """Обновление питомца."""
+    """Обновление питомца.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param pet_id: UUID питомца.
+    :return: Результат операции типа Pet.
+    """
     context.parameters = {"petId": pet_id}
     context.body = body
     result = controller.update_pet(context)
@@ -124,7 +157,14 @@ def get_pet_by_id(
     response: Response,
     pet_id: Annotated[UUID, Path(alias="petId")],
 ) -> Pet:
-    """Получение питомца."""
+    """Получение питомца.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param pet_id: UUID питомца.
+    :return: Результат операции типа Pet.
+    """
     context.parameters = {"petId": pet_id}
     result = controller.get_pet_by_id(context)
     return decode_response(result, response)
@@ -145,7 +185,14 @@ def delete_pet(
     response: Response,
     pet_id: Annotated[UUID, Path(alias="petId")],
 ) -> Response:
-    """Удаление питомца."""
+    """Удаление питомца.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param pet_id: UUID питомца.
+    :return: HTTP-ответ с публичными данными и статусом операции.
+    """
     context.parameters = {"petId": pet_id}
     result = controller.delete_pet(context)
     return result

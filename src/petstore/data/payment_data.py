@@ -1,4 +1,4 @@
-"""Simulated card payments with persistent idempotency and transactional order locking."""
+"""Хранение данных PostgreSQL и транзакционные SQL-операции."""
 
 import hashlib
 from uuid import UUID
@@ -10,21 +10,23 @@ from petstore.service.exceptions import PaymentException
 
 
 class PaymentData:
-    """Test-card payment repository; raw card data is never stored or logged."""
+    """Симулятор оплаты; исходные карточные данные не сохраняются и не логируются."""
 
     def __init__(self, database: Database) -> None:
-        """Use the application's connection pool.
+        """Сохраняет общий пул соединений для операций репозитория.
 
-        :param database: PostgreSQL connection factory.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.database = database
 
     @staticmethod
     def request_hash(order_id: UUID, request: PaymentRequest) -> str:
-        """Produce the exact Java canonical request hash for existing idempotency records.
+        """Воспроизводит канонический хеш прежней реализации для сохранённых ключей идемпотентности.
 
-        :param order_id: Parent order UUID.
-        :param request: Validated payment payload.
+        :param order_id: UUID заказа.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Строковый результат описанной операции.
         """
         assert request.cardholder_name is not None
         canonical = f"{order_id}|{request.card_number}|{request.expiry_month}|{request.expiry_year}|{request.cvv}|{request.cardholder_name.strip().upper()}"
@@ -32,18 +34,20 @@ class PaymentData:
 
     @staticmethod
     def advisory_key(key: UUID) -> int:
-        """Reproduce Java UUID most/least-significant-bit XOR as a signed PostgreSQL bigint.
+        """Воспроизводит XOR частей UUID как знаковый bigint PostgreSQL.
 
-        :param key: Idempotency UUID.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :return: Числовой результат описанной операции.
         """
         value = (key.int >> 64) ^ (key.int & ((1 << 64) - 1))
         return value if value < (1 << 63) else value - (1 << 64)
 
     @staticmethod
     def throw_if_declined(payment: Row) -> None:
-        """Return the original 402 error after a declined attempt has been committed.
+        """Формирует прежнюю ошибку 402 после фиксации отклонённой попытки оплаты.
 
-        :param payment: Persisted or replayed attempt.
+        :param payment: Строка попытки оплаты.
+        :return: Ничего не возвращает.
         """
         if payment["status"] == "DECLINED":
             code = payment["failure_code"]
@@ -57,12 +61,13 @@ class PaymentData:
     def create_payment(
         self, order_id: UUID, key: UUID, request: PaymentRequest, actor: Row
     ) -> tuple[Row, bool]:
-        """Serialize idempotency, payment, expiry and deletion on the same parent order lock.
+        """Согласует повтор, оплату, истечение и удаление под общей блокировкой заказа.
 
-        :param order_id: Parent order UUID.
-        :param key: Required idempotency UUID.
-        :param request: Validated test-card data.
-        :param actor: Owner or administrator.
+        :param order_id: UUID заказа.
+        :param key: Ключ повторного запроса либо идентификатор операции.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа tuple[Row, bool].
         """
         request_hash = self.request_hash(order_id, request)
         with self.database.connect() as connection:
@@ -126,16 +131,17 @@ class PaymentData:
                     raise PaymentException(
                         409, "PAYMENT_STATE_CONFLICT", "The order payment state changed concurrently"
                     )
-            # A declined attempt is a saved result, not a transaction failure.
+            # Отклонённая попытка является сохранённым результатом, а не сбоем транзакции.
             connection.commit()
             self.throw_if_declined(payment)
             return payment, False
 
     def find_payments(self, order_id: UUID, actor: Row) -> list[Row]:
-        """Read payment history after checking parent-order ownership.
+        """Возвращает историю платежей после проверки владельца заказа.
 
-        :param order_id: Parent order UUID.
-        :param actor: Owner or administrator.
+        :param order_id: UUID заказа.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа list[Row].
         """
         with self.database.connect() as connection:
             order = OrderData.lock_order(connection, order_id)
@@ -145,11 +151,12 @@ class PaymentData:
             ).fetchall()
 
     def get_payment(self, order_id: UUID, payment_id: UUID, actor: Row) -> Row:
-        """Read a payment belonging to the authorized parent order.
+        """Возвращает платёж, принадлежащий доступному заказу.
 
-        :param order_id: Parent order UUID.
-        :param payment_id: Attempt UUID.
-        :param actor: Owner or administrator.
+        :param order_id: UUID заказа.
+        :param payment_id: UUID попытки оплаты.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
         """
         with self.database.connect() as connection:
             order = OrderData.lock_order(connection, order_id)
@@ -162,10 +169,11 @@ class PaymentData:
             return row
 
     def delete_declined_payment(self, order_id: UUID, payment_id: UUID) -> None:
-        """Delete only a declined attempt under the shared parent-order lock.
+        """Удаляет отклонённую попытку под общей блокировкой заказа.
 
-        :param order_id: Parent order UUID.
-        :param payment_id: Attempt UUID.
+        :param order_id: UUID заказа.
+        :param payment_id: UUID попытки оплаты.
+        :return: Ничего не возвращает.
         """
         with self.database.connect() as connection:
             OrderData.lock_order(connection, order_id)

@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from starlette.responses import Response
 
@@ -12,19 +12,21 @@ from petstore.utils.responses import Responses, public_user
 
 
 class UserController:
-    """Self-service profile and administrator account-management endpoints."""
+    """Собственный профиль и административное управление аккаунтами."""
 
     def get_current_user(self, context: RequestContext) -> Response:
-        """Read the authenticated caller's public profile.
+        """Возвращает публичный профиль авторизованного пользователя.
 
-        :param context: Bearer-authenticated request.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return Responses(public_user(context.authorize("USER", "ADMIN")))
 
     def update_current_user(self, context: RequestContext) -> Response:
-        """Apply a partial self-service profile update.
+        """Применяет частичное изменение собственного профиля.
 
-        :param context: Bearer-authenticated profile changes.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         user = context.authorize("USER", "ADMIN")
         return Responses(
@@ -34,25 +36,28 @@ class UserController:
         )
 
     def list_users(self, context: RequestContext) -> Response:
-        """List public profiles only for an administrator.
+        """Возвращает публичные профили пользователей только администратору.
 
-        :param context: Administrator request.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         return Responses([public_user(user) for user in context.auth.user_data.find_all()])
 
     def get_user_by_id(self, context: RequestContext) -> Response:
-        """Read a target account as an administrator.
+        """Возвращает целевой аккаунт после проверки роли ADMIN.
 
-        :param context: Authorized target UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         return Responses(public_user(context.auth.required_user(context.identifier("userId"))))
 
     def update_user_by_id(self, context: RequestContext) -> Response:
-        """Replace administrator-editable account data.
+        """Заменяет поля аккаунта, разрешённые для редактирования администратором.
 
-        :param context: Authorized target UUID and full profile.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         request = context.validated(AdminUserUpdateRequest, V.admin_update)
@@ -61,9 +66,10 @@ class UserController:
         )
 
     def delete_user_by_id(self, context: RequestContext) -> Response:
-        """Delete an account without bypassing protected-account or order rules.
+        """Удаляет аккаунт с проверкой защищённых пользователей и истории заказов.
 
-        :param context: Administrator and target UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("ADMIN")
         context.auth.user_data.delete_user(actor, context.identifier("userId"))

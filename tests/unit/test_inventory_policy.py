@@ -8,6 +8,11 @@ from petstore.service.exceptions import ApiException
 
 
 def item(**changes):
+    """Создаёт снимок остатков с выбранными изменениями.
+
+    :param changes: Изменения полей тестового снимка.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     return InventoryItem.model_validate(
         {
             "id": uuid4(),

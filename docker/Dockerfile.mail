@@ -1,0 +1,21 @@
+# Отдельный почтовый сервис с исправленным .NET runtime.
+FROM rnwood/smtp4dev:3.15.0@sha256:25c434c1900a9c5b61e17ead0a774d9e81b80554d05cf64719d69e5ea8c66537 AS mail
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4 AS dotnet
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+ARG SECURITY_UPDATE_EPOCH=local
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends tini libicu72 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system petstore && useradd --system --gid petstore petstore \
+    && mkdir -p /smtp4dev && chown petstore:petstore /smtp4dev
+COPY --from=dotnet /usr/share/dotnet /opt/dotnet
+COPY --from=mail /app /opt/smtp4dev
+COPY docker/run_mail.py /app/run_mail.py
+ENV DOTNET_ROOT=/opt/dotnet DOTNET_CLI_HOME=/smtp4dev
+WORKDIR /opt/smtp4dev
+USER petstore
+EXPOSE 8025 2525 1143
+VOLUME ["/smtp4dev"]
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=12 \
+    CMD python -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:8025/api/Mailboxes', timeout=3)"
+ENTRYPOINT ["tini", "--", "python", "/app/run_mail.py"]

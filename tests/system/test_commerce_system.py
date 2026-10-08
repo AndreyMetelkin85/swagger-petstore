@@ -15,15 +15,24 @@ pytestmark = pytest.mark.system
 
 
 def docker(*arguments):
-    """Run a bounded command only against the explicitly selected CI container."""
+    """Выполняет ограниченную по времени команду для собственных Docker-ресурсов.
+
+    :param arguments: Аргументы Docker для собственных тестовых ресурсов.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     return subprocess.run(
         ["docker", *arguments], capture_output=True, text=True, check=True, timeout=60
     ).stdout.strip()
 
 
 def wait_ready(client, container=None):
-    """Wait for the isolated candidate without changing real application data."""
-    # Flyway/JRE startup under ARM emulation can exceed a native one-minute budget.
+    """Ожидает готовность выбранного тестового API.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param container: Разрешённый контейнер изолированного тестового стенда.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
+    # Запуск Flyway под эмуляцией ARM может занять больше минуты.
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         try:
@@ -37,10 +46,20 @@ def wait_ready(client, container=None):
 
 
 def verify_recreation(client, container, media, order, email, password, digest):
-    """Replace only an isolated CI container while retaining its exact DB and media volumes."""
+    """Пересоздаёт тестовый API с сохранением отдельной базы и медиатома.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param container: Разрешённый контейнер изолированного тестового стенда.
+    :param media: Изображение, созданное текущим тестом.
+    :param order: Строка заказа с текущим состоянием и сохранёнными снимками.
+    :param email: Email аккаунта; не включается в диагностические логи.
+    :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+    :param digest: Ожидаемая контрольная сумма изображения.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     original = json.loads(docker("inspect", container))[0]
     mounts = {mount["Destination"]: mount for mount in original["Mounts"]}
-    destinations = ["/var/lib/postgresql/data", "/var/lib/petstore/media"]
+    destinations = ["/var/lib/petstore/media"]
     assert all(mounts[path]["Type"] == "volume" for path in destinations)
     replacement = "petstore-commerce-recreation-" + uuid4().hex[:12]
     owner = uuid4().hex
@@ -58,8 +77,14 @@ def verify_recreation(client, container, media, order, email, password, digest):
     ]
     for destination in destinations:
         args.extend(["--volume", mounts[destination]["Name"] + ":" + destination])
+    # База и почта остаются отдельными сервисами; повторяем окружение и сеть API.
+    for variable in original["Config"]["Env"]:
+        if variable.startswith("PETSTORE_"):
+            args.extend(["--env", variable])
+    network = next(iter(original["NetworkSettings"]["Networks"]))
+    args.extend(["--network", network])
     args.append(original["Image"])
-    docker("stop", "--time", "30", container)
+    docker("stop", "--timeout", "30", container)
     try:
         docker(*args)
         port = docker("port", replacement, "8080/tcp").rsplit(":", 1)[1]
@@ -76,14 +101,20 @@ def verify_recreation(client, container, media, order, email, password, digest):
         if docker("ps", "-aq", "--filter", "name=^/" + replacement + "$"):
             labels = json.loads(docker("inspect", "--format", "{{json .Config.Labels}}", replacement))
             assert labels["petstore.commerce-test"] == owner
-            # Never remove volumes: both belong to the original isolated candidate.
+            # Медиатом принадлежит исходному тестовому кандидату и не удаляется.
             docker("rm", "--force", replacement)
         docker("start", container)
         wait_ready(client, container)
 
 
 def login(client, email, password):
-    """Authenticate a seeded admin or this fixture's own buyer."""
+    """Авторизует начальный либо созданный тестом аккаунт.
+
+    :param client: HTTP-клиент только текущего тестового стенда.
+    :param email: Email аккаунта; не включается в диагностические логи.
+    :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     response = client.post("/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200, response.text
     return {"Authorization": "Bearer " + response.json()["access_token"]}
@@ -91,6 +122,10 @@ def login(client, email, password):
 
 @pytest.fixture
 def shop():
+    """Создаёт полный сценарий магазина с очисткой собственных записей.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     container = os.getenv("PETSTORE_COMMERCE_CONTAINER")
     base = os.getenv("BASE_URL")
     if not container or not base:
@@ -106,6 +141,12 @@ def shop():
         admin = login(client, "admin@example.com", "admin123")
 
         def created(response, kind):
+            """Проверяет создание и сохраняет точный UUID для очистки.
+
+            :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+            :param kind: Тип позиции или категории: товар либо питомец.
+            :return: Результат описанной проверки или подготовки тестовых данных.
+            """
             assert response.status_code == 201, response.text
             data = response.json()
             identifier = data["user"]["id"] if kind == "users" else data["id"]
@@ -255,7 +296,7 @@ def shop():
             assert replay.status_code == 200 and replay.json()["id"] == response.json()["id"]
             yield client, container, product, media, order, email, password
         finally:
-            # Never delete by username/email: UUIDs below were recorded only after successful creation.
+            # UUID записаны после успешного создания; по имени или email записи не удаляем.
             admin = login(client, "admin@example.com", "admin123")
             for identifier in owned["orders"]:
                 current = client.get("/store/orders/" + identifier, headers=admin)
@@ -272,7 +313,7 @@ def shop():
             for identifier in owned["products"]:
                 docker(
                     "exec",
-                    container,
+                    os.environ["PETSTORE_COMMERCE_DB_CONTAINER"],
                     "psql",
                     "-v",
                     "ON_ERROR_STOP=1",
@@ -288,7 +329,7 @@ def shop():
             for identifier in owned["categories"]:
                 docker(
                     "exec",
-                    container,
+                    os.environ["PETSTORE_COMMERCE_DB_CONTAINER"],
                     "psql",
                     "-v",
                     "ON_ERROR_STOP=1",

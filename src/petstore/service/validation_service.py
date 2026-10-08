@@ -1,4 +1,4 @@
-"""Preserve existing validation order, field names and English error messages."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import re
 from datetime import UTC, datetime
@@ -26,7 +26,7 @@ Details = list[dict[str, Any]]
 
 
 class ValidationService:
-    """Business validation shared by transport adapters and unit tests."""
+    """Бизнес-валидация для HTTP-адаптеров и unit-тестов."""
 
     USERNAME = re.compile(r"^[A-Za-z0-9_.-]{3,30}$")
     EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -35,32 +35,35 @@ class ValidationService:
 
     @staticmethod
     def add(errors: Details, field: str, message: str) -> None:
-        """Append an error using the unchanged ErrorDetail shape.
+        """Добавляет ошибку в действующем формате ErrorDetail.
 
-        :param errors: Ordered list to extend.
-        :param field: Public field name.
-        :param message: Safe expected validation message.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :param field: Публичное имя проверяемого поля.
+        :param message: Публичное описание ошибки без исходных значений запроса.
+        :return: Ничего не возвращает.
         """
         errors.append({"field": field, "message": message})
 
     @staticmethod
     def ensure(errors: Details) -> None:
-        """Raise the shared 422 response when validation has failed.
+        """Формирует общую ошибку 422 при наличии ошибок валидации.
 
-        :param errors: Ordered field errors.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :return: Ничего не возвращает.
         """
         if errors:
             raise ApiException(422, "VALIDATION_ERROR", "Request validation failed", errors)
 
     @classmethod
     def text(cls, field: str, value: str | None, limit: int, errors: Details, required: bool = False) -> None:
-        """Validate required or optional text without changing its value.
+        """Проверяет обязательный или необязательный текст без изменения значения.
 
-        :param field: Public field name.
-        :param value: Submitted text.
-        :param limit: Maximum length.
-        :param errors: Destination for errors.
-        :param required: Whether missing text is an error.
+        :param field: Публичное имя проверяемого поля.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :param limit: Серверное ограничение длины или размера обрабатываемой пачки.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :param required: Считать ли отсутствие значения ошибкой.
+        :return: Ничего не возвращает.
         """
         if value is None:
             if required:
@@ -72,10 +75,11 @@ class ValidationService:
 
     @classmethod
     def email(cls, value: str | None, errors: Details) -> None:
-        """Validate an email with the existing server's pattern.
+        """Проверяет email по действующему серверному шаблону.
 
-        :param value: Submitted email.
-        :param errors: Destination for errors.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :return: Ничего не возвращает.
         """
         if value is None or not value.strip():
             cls.add(errors, "email", "Email is required")
@@ -84,11 +88,12 @@ class ValidationService:
 
     @classmethod
     def password(cls, value: str | None, errors: Details, field: str = "password") -> None:
-        """Validate both character and bcrypt UTF-8 byte limits.
+        """Проверяет ограничения длины пароля в символах и UTF-8-байтах для bcrypt.
 
-        :param value: Submitted password, never included in error messages.
-        :param errors: Destination for errors.
-        :param field: Password field name in this operation.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :param field: Публичное имя проверяемого поля.
+        :return: Ничего не возвращает.
         """
         if not value:
             cls.add(errors, field, "Password is required")
@@ -99,20 +104,22 @@ class ValidationService:
 
     @classmethod
     def phone(cls, value: str | None, errors: Details) -> None:
-        """Validate optional phone text.
+        """Проверяет необязательный номер телефона.
 
-        :param value: Submitted phone.
-        :param errors: Destination for errors.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :return: Ничего не возвращает.
         """
         if value is not None and (not 7 <= len(value) <= 30 or not cls.PHONE.fullmatch(value)):
             cls.add(errors, "phone", "Phone must contain 7-30 digits and phone punctuation")
 
     @classmethod
     def address(cls, value: Address | None, errors: Details) -> None:
-        """Validate a non-null Russian delivery address.
+        """Проверяет непустой российский адрес доставки.
 
-        :param value: Submitted address or explicit absence.
-        :param errors: Destination for errors.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :return: Ничего не возвращает.
         """
         if value is None:
             return
@@ -125,22 +132,24 @@ class ValidationService:
 
     @classmethod
     def extras(cls, model: RequestModel, message: str, errors: Details, prefix: str = "") -> None:
-        """Report unsupported fields while preserving their submitted order.
+        """Сообщает о неподдерживаемых полях в порядке их передачи.
 
-        :param model: Parsed request retaining extra fields.
-        :param message: Operation-specific error description.
-        :param errors: Destination for errors.
-        :param prefix: Optional nested field prefix.
+        :param model: Ожидаемая модель разобранного запроса.
+        :param message: Публичное описание ошибки без исходных значений запроса.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :param prefix: Префикс составного имени вложенного поля.
+        :return: Ничего не возвращает.
         """
         for field in model.model_extra or {}:
             cls.add(errors, prefix + field, message)
 
     @classmethod
     def username(cls, value: str | None, errors: Details) -> None:
-        """Validate a username with the original allowed-character rule.
+        """Проверяет имя пользователя по действующему набору разрешённых символов.
 
-        :param value: Submitted username.
-        :param errors: Destination for errors.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :param errors: Список ошибок, который дополняется в порядке проверок.
+        :return: Ничего не возвращает.
         """
         if value is None or not value.strip():
             cls.add(errors, "username", "Username is required")
@@ -153,9 +162,10 @@ class ValidationService:
 
     @classmethod
     def registration(cls, request: RegisterRequest) -> Details:
-        """Validate registration in the same order as Java.
+        """Проверяет регистрацию в порядке, совместимом с прежней реализацией.
 
-        :param request: Parsed registration payload.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         cls.username(request.username, errors)
@@ -169,9 +179,10 @@ class ValidationService:
 
     @classmethod
     def login(cls, request: LoginRequest) -> Details:
-        """Validate login/resend credentials without registration's password limits.
+        """Проверяет вход и повторную отправку ссылки без ограничений регистрации для пароля.
 
-        :param request: Parsed credential payload.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         cls.email(request.email, errors)
@@ -181,9 +192,10 @@ class ValidationService:
 
     @classmethod
     def forgot(cls, request: PasswordForgotRequest) -> Details:
-        """Validate the password-recovery email.
+        """Проверяет email запроса восстановления пароля.
 
-        :param request: Recovery request.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         cls.email(request.email, errors)
@@ -191,9 +203,10 @@ class ValidationService:
 
     @classmethod
     def reset(cls, request: PasswordResetRequest) -> Details:
-        """Validate a replacement password.
+        """Проверяет новый пароль для восстановления аккаунта.
 
-        :param request: New-password payload.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         cls.password(request.new_password, errors, "newPassword")
@@ -201,9 +214,10 @@ class ValidationService:
 
     @classmethod
     def user_update(cls, request: UserUpdateRequest) -> Details:
-        """Validate a partial profile update, including explicit address removal.
+        """Проверяет частичное изменение профиля, включая явное удаление адреса.
 
-        :param request: Profile fields to change.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         cls.extras(request, "Field is not allowed for profile update", errors)
@@ -220,9 +234,10 @@ class ValidationService:
 
     @classmethod
     def admin_update(cls, request: AdminUserUpdateRequest) -> Details:
-        """Validate the full administrator-managed profile.
+        """Проверяет полный профиль, редактируемый администратором.
 
-        :param request: Full account update.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         cls.extras(request, "Field is not allowed for administrator profile update", errors)
@@ -240,9 +255,10 @@ class ValidationService:
 
     @classmethod
     def pet(cls, request: PetCreateRequest) -> Details:
-        """Validate pet values and reject server-managed fields.
+        """Проверяет поля питомца и запрещает изменение серверных полей.
 
-        :param request: Creation or update payload.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         if request.name is None or not request.name.strip():
@@ -308,9 +324,10 @@ class ValidationService:
 
     @classmethod
     def order(cls, request: OrderCreateRequest) -> Details:
-        """Validate the two editable draft fields.
+        """Проверяет два редактируемых поля черновика заказа.
 
-        :param request: Draft payload.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         if request.pet_id is None:
@@ -322,9 +339,10 @@ class ValidationService:
 
     @classmethod
     def missing_order_profile_fields(cls, user: dict[str, Any] | None) -> Details:
-        """Identify missing checkout data using public dotted field names.
+        """Возвращает отсутствующие данные оформления с публичными составными именами полей.
 
-        :param user: Persisted account row, or missing owner.
+        :param user: Строка пользователя, полученная из базы данных.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         if user is None:
@@ -345,9 +363,10 @@ class ValidationService:
 
     @staticmethod
     def passes_luhn(value: str) -> bool:
-        """Check the card checksum without contacting a payment provider.
+        """Проверяет контрольную сумму карты без обращения к платёжному провайдеру.
 
-        :param value: Numeric test-card number.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         if not re.fullmatch(r"[0-9]{13,19}", value):
             return False
@@ -363,9 +382,10 @@ class ValidationService:
 
     @classmethod
     def payment(cls, request: PaymentRequest) -> Details:
-        """Validate documented test cards, expiry and cardholder data.
+        """Проверяет поддерживаемые тестовые карты, срок действия и данные владельца.
 
-        :param request: Simulated payment input.
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :return: Результат операции типа Details.
         """
         errors: Details = []
         if request.card_number is None or not cls.passes_luhn(request.card_number):

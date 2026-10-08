@@ -1,4 +1,4 @@
-"""Content-verified images stored under opaque UUIDs in a dedicated volume."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import io
 import logging
@@ -23,9 +23,10 @@ logger = logging.getLogger("petstore.media")
 
 
 def normalize_image(payload: bytes) -> tuple[bytes, bytes, str, int, int]:
-    """Verify type/frames/pixels, apply orientation and re-encode without metadata.
+    """Проверяет формат, кадры и пиксели, учитывает ориентацию и перекодирует без метаданных.
 
-    :param payload: Bounded uploaded bytes; filenames/content-type are not trusted.
+    :param payload: Тело команды либо ограниченное содержимое загруженного файла.
+    :return: Результат операции типа tuple[bytes, bytes, str, int, int].
     """
     if not payload or len(payload) > MAX_BYTES:
         raise ApiException(413, "IMAGE_TOO_LARGE", "Image must be nonempty and at most 10 MiB")
@@ -69,15 +70,26 @@ def normalize_image(payload: bytes) -> tuple[bytes, bytes, str, int, int]:
 
 
 class MediaService:
-    """Database metadata plus bounded, content-verified local storage."""
+    """Метаданные базы и ограниченное хранилище проверенных изображений."""
 
     def __init__(self, database: Database, settings: Settings) -> None:
-        """Configure storage without touching files or opening connections."""
+        """Настраивает хранилище без чтения файлов и открытия соединений.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :param settings: Настройки приложения и его инфраструктурных подключений.
+        :return: Ничего не возвращает.
+        """
         self.database = database
         self.root = settings.media_root
 
     def path(self, identifier: UUID, mime: str, thumbnail: bool = False) -> Path:
-        """Derive a safe path only from a parsed UUID and persisted MIME."""
+        """Строит безопасный путь только по проверенному UUID и сохранённому MIME.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param mime: Проверенный тип содержимого изображения.
+        :param thumbnail: Запросить миниатюру вместо полного изображения.
+        :return: Результат операции типа Path.
+        """
         extension = next((ext for media_type, ext in FORMATS.values() if media_type == mime), None)
         if extension is None:
             raise ApiException(503, "MEDIA_STORAGE_UNAVAILABLE", "Stored image format is unavailable")
@@ -85,7 +97,11 @@ class MediaService:
 
     @staticmethod
     def public(row: Row) -> Row:
-        """Expose metadata, not filenames, paths, creator identity or raw EXIF."""
+        """Возвращает метаданные без имён файлов, путей, создателя и исходного EXIF.
+
+        :param row: Строка базы данных для обработки или преобразования.
+        :return: Результат операции типа Row.
+        """
         return {
             "id": row["id"],
             "name": "image-" + str(row["id"]),
@@ -101,7 +117,14 @@ class MediaService:
         }
 
     def upload(self, payload: bytes, source_type: str, source_note: str, actor: Row) -> Row:
-        """Write sanitized files and metadata; roll back this upload's files on failure."""
+        """Сохраняет очищенные файлы и метаданные; удаляет файлы этой загрузки при сбое.
+
+        :param payload: Тело команды либо ограниченное содержимое загруженного файла.
+        :param source_type: Источник изображения: OWN, SUPPLIER или DEMO.
+        :param source_note: Описание происхождения изображения.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
+        """
         if source_type not in {"OWN", "SUPPLIER", "DEMO"} or len(source_note) > 1000:
             raise ApiException(422, "VALIDATION_ERROR", "Invalid image source metadata")
         image, thumb, mime, width, height = normalize_image(payload)
@@ -109,7 +132,7 @@ class MediaService:
         paths = [self.path(identifier, mime), self.path(identifier, mime, True)]
         try:
             self.root.mkdir(parents=True, exist_ok=True)
-            # Exclusive creation prevents accidental overwrite; identifiers never come from the client.
+            # Исключительное создание защищает от перезаписи; UUID не поступает от клиента.
             for path, data in zip(paths, [image, thumb], strict=True):
                 with path.open("xb") as target:
                     target.write(data)
@@ -132,7 +155,13 @@ class MediaService:
 
     @staticmethod
     def visible(connection: DbConnection, identifier: UUID, actor: Row | None) -> bool:
-        """Allow public published galleries or the owning order's retained cover."""
+        """Разрешает доступ к опубликованной галерее либо обложке собственного заказа.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: True при выполнении проверяемого условия, иначе False.
+        """
         if actor and actor["role"] == "ADMIN":
             return True
         published = connection.execute(
@@ -156,7 +185,13 @@ class MediaService:
     def get(
         self, identifier: UUID, actor: Row | None, thumbnail: bool | None = None
     ) -> Row | tuple[bytes, str]:
-        """Read authorized metadata or sanitized bytes without following client paths."""
+        """Возвращает доступные метаданные или очищенное изображение без клиентских путей хранения.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :param thumbnail: Запросить миниатюру вместо полного изображения.
+        :return: Результат операции типа Row | tuple[bytes, str].
+        """
         with self.database.connect() as connection:
             row = connection.execute(
                 "SELECT * FROM media WHERE id=%s AND NOT deleted", (identifier,)
@@ -171,7 +206,11 @@ class MediaService:
                 raise ApiException(503, "MEDIA_STORAGE_UNAVAILABLE", "Image storage is unavailable") from exc
 
     def delete(self, identifier: UUID) -> None:
-        """Tombstone only unreferenced media; retained order covers forbid deletion."""
+        """Помечает для удаления только неиспользуемый файл; обложки заказов защищены.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Ничего не возвращает.
+        """
         with self.database.connect() as connection:
             row = connection.execute(
                 "SELECT * FROM media WHERE id=%s AND NOT deleted FOR UPDATE", (identifier,)
@@ -188,7 +227,11 @@ class MediaService:
         self.remove_files(row)
 
     def remove_files(self, row: Row) -> bool:
-        """Remove only a tombstoned UUID's two files; failed removals remain retryable."""
+        """Удаляет два файла помеченного UUID; при сбое операция остаётся доступной для повтора.
+
+        :param row: Строка базы данных для обработки или преобразования.
+        :return: True при выполнении проверяемого условия, иначе False.
+        """
         for thumbnail in (False, True):
             try:
                 self.path(row["id"], row["mime_type"], thumbnail).unlink(missing_ok=True)
@@ -200,12 +243,14 @@ class MediaService:
         return True
 
     def cleanup(self, limit: int = 100) -> int:
-        """Tombstone unlinked uploads older than 24 hours, then retry safe file removals.
+        """Помечает несвязанные загрузки старше 24 часов и повторяет безопасное удаление файлов.
 
-        Gallery writers share the media row lock. SKIP LOCKED never delays a save;
-        links are rechecked after locking, including drafts and immutable order covers.
-        :param limit: Bounded batch size, never a client-provided filesystem path.
-        :return: Number of completed file removals in this batch.
+        Изменение галереи использует ту же блокировку изображения. SKIP LOCKED не задерживает
+        сохранение карточки. После блокировки связи проверяются повторно, включая черновики
+        и неизменяемые обложки заказов.
+
+        :param limit: Серверное ограничение длины или размера обрабатываемой пачки.
+        :return: Числовой результат описанной операции.
         """
         if not 1 <= limit <= 1000:
             raise ValueError("Cleanup batch must be between 1 and 1000")
@@ -233,7 +278,11 @@ class MediaService:
         return removed
 
     def cleanup_orphan_files(self, limit: int = 100) -> int:
-        """Remove aged UUID files left before metadata commit, never arbitrary files or directories."""
+        """Удаляет старые UUID-файлы незавершённых загрузок, не затрагивая произвольные файлы или папки.
+
+        :param limit: Серверное ограничение длины или размера обрабатываемой пачки.
+        :return: Числовой результат описанной операции.
+        """
         if not self.root.is_dir():
             return 0
         cutoff = datetime.now(UTC).timestamp() - 86400

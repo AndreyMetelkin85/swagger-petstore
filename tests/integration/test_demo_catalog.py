@@ -17,6 +17,12 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def photo_catalog(integration_database, tmp_path):
+    """Подготавливает фотокаталог в выделенной базе и временном каталоге.
+
+    :param integration_database: Настройки и соединение только выделенной тестовой базы.
+    :param tmp_path: Временный каталог текущего теста.
+    :return: Результат подготовленного тестового действия; фикстура предоставляет его через yield.
+    """
     settings, database = integration_database
     settings = replace(settings, media_root=tmp_path, demo_catalog=False)
     with TestClient(create_app(settings, database), base_url="http://testserver/api/v3") as client:
@@ -29,7 +35,7 @@ def photo_catalog(integration_database, tmp_path):
             ).fetchone()
         states = []
         yield settings, database, client, counts, states
-        # Only this package's records in the dedicated test database, not existing catalog data.
+        # Удаляем только записи этого пакета в отдельной тестовой базе, не существующий каталог.
         with database.connect() as connection:
             for state in states:
                 for key, identifier in state.entries.items():
@@ -65,7 +71,7 @@ def test_repeat_and_journal_recovery_preserve_edits_and_archives(photo_catalog):
         assert media.get(image_id, None, True)[0][:2] == b"\xff\xd8"
         assert media.get(image_id, None)["sourceType"] == "DEMO"
     product = service.get("product", state.entries["cat-food"], False)
-    # Request aliases are explicit: server-only fields do not enter the command.
+    # Внешние имена полей явные; серверные поля не входят в команду.
     command = {
         "name": "Изменено учеником",
         "sku": product["sku"],

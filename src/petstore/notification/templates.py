@@ -1,4 +1,4 @@
-"""Small, dependency-free email templates with an equivalent plain-text body."""
+"""Тестовые письма: шаблоны и безопасная SMTP-отправка."""
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -7,7 +7,7 @@ from html import escape
 
 @dataclass(frozen=True)
 class EmailContent:
-    """A localized subject and two MIME representations of the same notification."""
+    """Русская тема, HTML и текст одного уведомления."""
 
     subject: str
     text: str
@@ -15,12 +15,13 @@ class EmailContent:
 
 
 def render_email(username: str, action_url: str, expires_at: datetime, reset: bool = False) -> EmailContent:
-    """Render a confirmation or recovery message without passwords or embedded scripts.
+    """Формирует письмо подтверждения или восстановления без паролей и встроенных скриптов.
 
-    :param username: Account name, escaped in HTML.
-    :param action_url: Application-generated action URL.
-    :param expires_at: Link deadline.
-    :param reset: Select password recovery instead of registration confirmation.
+    :param username: Имя пользователя.
+    :param action_url: Ссылка подтверждения или восстановления для письма.
+    :param expires_at: Время окончания действия ссылки с часовым поясом.
+    :param reset: Формировать письмо восстановления вместо подтверждения регистрации.
+    :return: Результат операции типа EmailContent.
     """
     title = "Сброс пароля" if reset else "Подтвердите регистрацию"
     button = "Установить новый пароль" if reset else "Подтвердить регистрацию"

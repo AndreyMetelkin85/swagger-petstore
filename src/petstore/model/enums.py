@@ -1,17 +1,17 @@
-"""Values match existing PostgreSQL enums and the public OpenAPI contract."""
+"""Типизированные модели и правила действующего контракта API."""
 
 from enum import StrEnum
 
 
 class Role(StrEnum):
-    """Permissions assigned to a user account."""
+    """Роль аккаунта и его права."""
 
     USER = "USER"
     ADMIN = "ADMIN"
 
 
 class AccountStatus(StrEnum):
-    """Account confirmation and blocking states."""
+    """Состояние подтверждения и блокировки аккаунта."""
 
     PENDING = "PENDING"
     ACTIVE = "ACTIVE"
@@ -19,7 +19,7 @@ class AccountStatus(StrEnum):
 
 
 class PetStatus(StrEnum):
-    """Catalog availability independent of request validation."""
+    """Доступность питомца, независимая от публикации карточки."""
 
     AVAILABLE = "available"
     PENDING = "pending"
@@ -28,7 +28,7 @@ class PetStatus(StrEnum):
 
 
 class OrderStatus(StrEnum):
-    """Order states with the same explicit transition matrix as Java."""
+    """Состояния заказа и явная матрица разрешённых переходов."""
 
     DRAFT = "draft"
     PLACED = "placed"
@@ -39,9 +39,10 @@ class OrderStatus(StrEnum):
     EXPIRED = "expired"
 
     def can_transition_to(self, target: "OrderStatus") -> bool:
-        """Check a requested transition; expiration is handled separately.
+        """Проверяет разрешённый переход; истечение резерва обрабатывается отдельно.
 
-        :param target: Requested destination state.
+        :param target: Целевое состояние жизненного цикла.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         return target in {
             self.DRAFT: {self.PLACED},
@@ -52,17 +53,23 @@ class OrderStatus(StrEnum):
 
     @property
     def is_active(self) -> bool:
-        """Whether an order prevents deletion and holds a pet reservation."""
+        """Определяет, удерживает ли заказ резерв и запрещает ли удаление.
+
+        :return: True при выполнении проверяемого условия, иначе False.
+        """
         return self in {self.PLACED, self.APPROVED, self.SHIPPED}
 
     @property
     def is_complete(self) -> bool:
-        """Whether the order is terminal."""
+        """Определяет, завершён ли жизненный цикл заказа.
+
+        :return: True при выполнении проверяемого условия, иначе False.
+        """
         return self in {self.DELIVERED, self.CANCELLED, self.EXPIRED}
 
 
 class PaymentStatus(StrEnum):
-    """Aggregate payment state stored on an order."""
+    """Общее состояние оплаты заказа."""
 
     NOT_STARTED = "NOT_STARTED"
     NOT_REQUIRED = "NOT_REQUIRED"
@@ -73,7 +80,7 @@ class PaymentStatus(StrEnum):
 
 
 class PaymentAttemptStatus(StrEnum):
-    """Outcome of an individual simulated payment attempt."""
+    """Результат отдельной попытки тестовой оплаты."""
 
     SUCCEEDED = "SUCCEEDED"
     DECLINED = "DECLINED"

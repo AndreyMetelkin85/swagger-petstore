@@ -15,6 +15,11 @@ spec.loader.exec_module(artifacts)
 
 
 def opener(payloads):
+    """Создаёт управляемый ответ загрузки без сетевого запроса.
+
+    :param payloads: Управляемые ответы загрузки.
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     response = MagicMock()
     response.__enter__.return_value = response
     response.read.side_effect = payloads

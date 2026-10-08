@@ -1,4 +1,4 @@
-"""Add bundled photographs through catalog services, without resetting existing data."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import hashlib
 import json
@@ -23,7 +23,7 @@ PREFIX = "lapki-photo-catalog-v1:"
 
 
 class PhotoCard(BaseModel):
-    """Validate the trusted package manifest before making database changes."""
+    """Проверенный элемент учебного фотокаталога перед изменением базы."""
 
     model_config = ConfigDict(extra="forbid")
     key: str = Field(pattern="^[a-z][a-z0-9-]+$")
@@ -36,7 +36,7 @@ class PhotoCard(BaseModel):
 
 
 class SeedState(BaseModel):
-    """Persistent references only; no credentials or customer information."""
+    """Журнал ссылок учебного каталога без учётных и личных данных."""
 
     model_config = ConfigDict(extra="forbid")
     namespace: str
@@ -46,19 +46,33 @@ class SeedState(BaseModel):
 
 
 class _TransactionDatabase(Database):
-    """Bind existing services to the bootstrap transaction, including the row locks."""
+    """Привязка сервисов к существующей транзакции начальной загрузки."""
 
     def __init__(self, connection: DbConnection) -> None:
+        """Привязывает сервисы загрузки каталога к уже открытой транзакции.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :return: Ничего не возвращает.
+        """
         self.connection = connection
 
     @override
     @contextmanager
     def connect(self) -> Generator[DbConnection, None, None]:
+        """Предоставляет существующее соединение без открытия или фиксации отдельной транзакции.
+
+        :yield: Значение текущего шага управляемого контекстом жизненного цикла.
+        """
         yield self.connection
 
 
 def save_state(path: Path, state: SeedState) -> None:
-    """Atomically replace a journal located inside the existing media volume."""
+    """Атомарно заменяет журнал загрузки внутри существующего медиатома.
+
+    :param path: Путь ресурса или файла, сформированный вызывающим кодом.
+    :param state: Журнал состояния учебного каталога.
+    :return: Ничего не возвращает.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + "." + uuid4().hex + ".tmp")
     try:
@@ -69,7 +83,11 @@ def save_state(path: Path, state: SeedState) -> None:
 
 
 def load_package(settings: Settings) -> list[tuple[PhotoCard, bytes]]:
-    """Reject damaged images or commands before creating any card."""
+    """Проверяет изображения и команды пакета до создания карточек.
+
+    :param settings: Настройки приложения и его инфраструктурных подключений.
+    :return: Результат операции типа list[tuple[PhotoCard, bytes]].
+    """
     root = settings.resources / "demo-catalog"
     records = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     result: list[tuple[PhotoCard, bytes]] = []
@@ -92,11 +110,15 @@ def load_package(settings: Settings) -> list[tuple[PhotoCard, bytes]]:
 
 
 def populate_demo_catalog(database: Database, settings: Settings) -> SeedState:
-    """Create the agreed sample once; retain sales, edits, archives and deliberate deletions.
+    """Однократно добавляет учебный каталог, сохраняя продажи, изменения, архивы и намеренные удаления.
 
-    The whole package uses one database transaction. A durable file journal records pending
-    uploads so a killed startup can remove only its own rolled-back files on the next attempt.
-    The media provenance recovers committed cards if journal finalization was interrupted.
+    Весь пакет загружается одной транзакцией. Журнал в медиатоме отмечает незавершённые
+    загрузки; после сбоя удаляются только собственные файлы отменённой транзакции.
+    Сохранённое происхождение изображений восстанавливает состояние после фиксации базы.
+
+    :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+    :param settings: Настройки приложения и его инфраструктурных подключений.
+    :return: Результат операции типа SeedState.
     """
     package = load_package(settings)
     state_path = settings.media_root / STATE_FILE
@@ -170,7 +192,7 @@ def populate_demo_catalog(database: Database, settings: Settings) -> SeedState:
         logger.info("demo_catalog_ready cards=%s", len(state.entries))
         return state
     except Exception:
-        # Only paths for uploads made by this attempt; never remove pre-existing records or files.
+        # Удаляем только загрузки этой попытки; существующие записи и файлы не затрагиваем.
         if media is not None:
             with database.connect() as connection:
                 for identifier in created_media:

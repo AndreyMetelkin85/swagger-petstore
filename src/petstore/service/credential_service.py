@@ -1,4 +1,4 @@
-"""Compatible bcrypt passwords and SHA-256 one-time-code hashes."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import hashlib
 import hmac
@@ -8,13 +8,14 @@ import bcrypt
 
 
 class CredentialService:
-    """Password hashing and one-time code generation without exposing raw values."""
+    """Хеширование паролей и генерация одноразовых кодов без раскрытия значений."""
 
     @staticmethod
     def hash_password(password: str) -> str:
-        """Create a bcrypt hash at the original cost of ten.
+        """Создаёт bcrypt-хеш со стоимостью 10, совместимый с существующими аккаунтами.
 
-        :param password: Password; new inputs are validated, legacy logins retain jBCrypt truncation.
+        :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+        :return: Строковый результат описанной операции.
         """
         return bcrypt.hashpw(password.encode("utf-8")[:72], bcrypt.gensalt(rounds=10, prefix=b"2a")).decode(
             "ascii"
@@ -22,22 +23,24 @@ class CredentialService:
 
     @staticmethod
     def is_bcrypt(value: str) -> bool:
-        """Recognize the existing bcrypt variants.
+        """Определяет поддерживаемый вариант сохранённого bcrypt-хеша.
 
-        :param value: Persisted password representation.
+        :param value: Значение, проверяемое или преобразуемое текущей операцией.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         return value.startswith(("$2a$", "$2b$", "$2y$"))
 
     @classmethod
     def password_matches(cls, password: str, stored: str) -> bool:
-        """Verify existing hashes or legacy plaintext without timing-sensitive equality.
+        """Проверяет хеш либо прежний открытый пароль без обычного сравнения секретов.
 
-        :param password: Submitted password.
-        :param stored: Existing database value.
+        :param password: Пароль для проверки или хеширования; не сохраняется в логах.
+        :param stored: Сохранённое значение для сравнения.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         if cls.is_bcrypt(stored):
             try:
-                # jBCrypt truncates legacy login inputs to the bcrypt byte limit.
+                # jBCrypt обрезал прежние пароли входа до ограничения bcrypt в байтах.
                 return bcrypt.checkpw(password.encode("utf-8")[:72], stored.encode("ascii"))
             except (ValueError, UnicodeError):
                 return False
@@ -45,22 +48,27 @@ class CredentialService:
 
     @staticmethod
     def new_one_time_code() -> str:
-        """Generate the same 32-byte, URL-safe code format without padding."""
+        """Создаёт URL-безопасный код из 32 случайных байтов без padding.
+
+        :return: Строковый результат описанной операции.
+        """
         return secrets.token_urlsafe(32)
 
     @staticmethod
     def hash_one_time_code(code: str) -> str:
-        """Hash a code using the original lowercase SHA-256 hex representation.
+        """Возвращает SHA-256 одноразового кода в нижнем шестнадцатеричном регистре.
 
-        :param code: Raw one-time code.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :return: Строковый результат описанной операции.
         """
         return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
     @classmethod
     def code_matches(cls, code: str, stored: str | None) -> bool:
-        """Compare a supplied code to its persisted hash.
+        """Сравнивает переданный одноразовый код с сохранённым хешем.
 
-        :param code: Supplied one-time code.
-        :param stored: Persisted hash, if any.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :param stored: Сохранённое значение для сравнения.
+        :return: True при выполнении проверяемого условия, иначе False.
         """
         return stored is not None and hmac.compare_digest(cls.hash_one_time_code(code), stored)

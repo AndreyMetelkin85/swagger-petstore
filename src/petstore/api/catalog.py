@@ -1,4 +1,4 @@
-"""Catalog routes with native typed FastAPI parameters and preserved operation IDs."""
+"""HTTP-маршруты, зависимости FastAPI и публичные DTO."""
 
 from decimal import Decimal
 from typing import Annotated, cast
@@ -23,7 +23,11 @@ router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
 
 def get_controller(context: Context) -> CatalogController:
-    """Inject this application's catalog controller without module-global dependencies."""
+    """Возвращает контроллер этого экземпляра приложения через зависимость FastAPI.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :return: Результат операции типа CatalogController.
+    """
     return cast(CatalogController, context.request.app.state.controllers.catalog)
 
 
@@ -55,7 +59,24 @@ def list_products(
     product_type: Annotated[str | None, Query(alias="productType")] = None,
     feed_form: Annotated[str | None, Query(alias="feedForm")] = None,
 ) -> ProductPage:
-    """Публичный каталог."""
+    """Публичный каталог.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param page: Номер страницы, начиная с первой.
+    :param page_size: Число записей страницы с серверным ограничением.
+    :param q: Строка поиска каталога.
+    :param sort: Разрешённый способ сортировки.
+    :param category_id: UUID категории для фильтра или связи карточки.
+    :param min_price: Нижняя граница цены в рублях.
+    :param max_price: Верхняя граница цены в рублях.
+    :param animal_type: Вид животного для фильтра каталога.
+    :param brand: Бренд товара для фильтра.
+    :param product_type: Тип товара для фильтра.
+    :param feed_form: Форма корма для фильтра.
+    :return: Результат операции типа ProductPage.
+    """
     context.parameters = {
         "page": page,
         "pageSize": page_size,
@@ -88,7 +109,14 @@ def create_product(
     response: Response,
     body: Annotated[ProductCommand, BeforeValidator(ProductCommand.from_wire), Body()],
 ) -> ProductCard:
-    """Создать черновик карточки."""
+    """Создать черновик карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа ProductCard.
+    """
     context.body = body
     result = controller.save_card(context, "product", None)
     return decode_response(result, response)
@@ -109,7 +137,14 @@ def get_product(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> ProductCard:
-    """Карточка каталога."""
+    """Карточка каталога.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа ProductCard.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get_card(context, "product", True)
     return decode_response(result, response)
@@ -131,7 +166,15 @@ def update_product(
     body: Annotated[ProductCommand, BeforeValidator(ProductCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> ProductCard:
-    """Обновить карточку по версии."""
+    """Обновить карточку по версии.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа ProductCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.save_card(context, "product", resource_id)
@@ -164,7 +207,25 @@ def list_admin_products(
     feed_form: Annotated[str | None, Query(alias="feedForm")] = None,
     publication_status: Annotated[str | None, Query(alias="publicationStatus")] = None,
 ) -> ProductPage:
-    """Каталог администратора."""
+    """Каталог администратора.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param page: Номер страницы, начиная с первой.
+    :param page_size: Число записей страницы с серверным ограничением.
+    :param q: Строка поиска каталога.
+    :param sort: Разрешённый способ сортировки.
+    :param category_id: UUID категории для фильтра или связи карточки.
+    :param min_price: Нижняя граница цены в рублях.
+    :param max_price: Верхняя граница цены в рублях.
+    :param animal_type: Вид животного для фильтра каталога.
+    :param brand: Бренд товара для фильтра.
+    :param product_type: Тип товара для фильтра.
+    :param feed_form: Форма корма для фильтра.
+    :param publication_status: Состояние публикации карточки.
+    :return: Результат операции типа ProductPage.
+    """
     context.parameters = {
         "page": page,
         "pageSize": page_size,
@@ -198,7 +259,14 @@ def get_admin_product(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> ProductCard:
-    """Карточка администратора."""
+    """Карточка администратора.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа ProductCard.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get_card(context, "product", False)
     return decode_response(result, response)
@@ -220,7 +288,15 @@ def publish_product(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> ProductCard:
-    """Изменить публикацию карточки."""
+    """Изменить публикацию карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа ProductCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.publish(context, "product", "PUBLISHED")
@@ -243,7 +319,15 @@ def unpublish_product(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> ProductCard:
-    """Изменить публикацию карточки."""
+    """Изменить публикацию карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа ProductCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.publish(context, "product", "DRAFT")
@@ -266,7 +350,15 @@ def archive_product(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> ProductCard:
-    """Изменить публикацию карточки."""
+    """Изменить публикацию карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа ProductCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.publish(context, "product", "ARCHIVED")
@@ -296,7 +388,22 @@ def list_catalog_pets(
     animal_type: Annotated[str | None, Query(alias="animalType")] = None,
     status: Annotated[str | None, Query(alias="status")] = None,
 ) -> PetPage:
-    """Публичный каталог."""
+    """Публичный каталог.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param page: Номер страницы, начиная с первой.
+    :param page_size: Число записей страницы с серверным ограничением.
+    :param q: Строка поиска каталога.
+    :param sort: Разрешённый способ сортировки.
+    :param category_id: UUID категории для фильтра или связи карточки.
+    :param min_price: Нижняя граница цены в рублях.
+    :param max_price: Верхняя граница цены в рублях.
+    :param animal_type: Вид животного для фильтра каталога.
+    :param status: Статус ресурса либо HTTP-ответа согласно операции.
+    :return: Результат операции типа PetPage.
+    """
     context.parameters = {
         "page": page,
         "pageSize": page_size,
@@ -327,7 +434,14 @@ def get_catalog_pet(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> PetCard:
-    """Карточка каталога."""
+    """Карточка каталога.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа PetCard.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get_card(context, "pet", True)
     return decode_response(result, response)
@@ -357,7 +471,23 @@ def list_admin_pets(
     status: Annotated[str | None, Query(alias="status")] = None,
     publication_status: Annotated[str | None, Query(alias="publicationStatus")] = None,
 ) -> PetPage:
-    """Каталог администратора."""
+    """Каталог администратора.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param page: Номер страницы, начиная с первой.
+    :param page_size: Число записей страницы с серверным ограничением.
+    :param q: Строка поиска каталога.
+    :param sort: Разрешённый способ сортировки.
+    :param category_id: UUID категории для фильтра или связи карточки.
+    :param min_price: Нижняя граница цены в рублях.
+    :param max_price: Верхняя граница цены в рублях.
+    :param animal_type: Вид животного для фильтра каталога.
+    :param status: Статус ресурса либо HTTP-ответа согласно операции.
+    :param publication_status: Состояние публикации карточки.
+    :return: Результат операции типа PetPage.
+    """
     context.parameters = {
         "page": page,
         "pageSize": page_size,
@@ -389,7 +519,14 @@ def create_pet_card(
     response: Response,
     body: Annotated[PetCardCommand, BeforeValidator(PetCardCommand.from_wire), Body()],
 ) -> PetCard:
-    """Создать черновик карточки."""
+    """Создать черновик карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа PetCard.
+    """
     context.body = body
     result = controller.save_card(context, "pet", None)
     return decode_response(result, response)
@@ -410,7 +547,14 @@ def get_admin_pet(
     response: Response,
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> PetCard:
-    """Карточка администратора."""
+    """Карточка администратора.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа PetCard.
+    """
     context.parameters = {"id": resource_id}
     result = controller.get_card(context, "pet", False)
     return decode_response(result, response)
@@ -432,7 +576,15 @@ def update_pet_card(
     body: Annotated[PetCardCommand, BeforeValidator(PetCardCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> PetCard:
-    """Обновить карточку по версии."""
+    """Обновить карточку по версии.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа PetCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.save_card(context, "pet", resource_id)
@@ -455,7 +607,15 @@ def publish_pet_card(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> PetCard:
-    """Изменить публикацию карточки."""
+    """Изменить публикацию карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа PetCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.publish(context, "pet", "PUBLISHED")
@@ -478,7 +638,15 @@ def unpublish_pet_card(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> PetCard:
-    """Изменить публикацию карточки."""
+    """Изменить публикацию карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа PetCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.publish(context, "pet", "DRAFT")
@@ -501,7 +669,15 @@ def archive_pet_card(
     body: Annotated[VersionCommand, BeforeValidator(VersionCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> PetCard:
-    """Изменить публикацию карточки."""
+    """Изменить публикацию карточки.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа PetCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.publish(context, "pet", "ARCHIVED")
@@ -524,7 +700,15 @@ def adjust_product_stock(
     body: Annotated[StockCommand, BeforeValidator(StockCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> ProductCard:
-    """Корректировка остатков."""
+    """Корректировка остатков.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа ProductCard.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.adjust_stock(context)
@@ -546,7 +730,14 @@ def list_categories(
     response: Response,
     kind: Annotated[str | None, Query(alias="kind")] = None,
 ) -> list[CatalogCategory]:
-    """Активные категории."""
+    """Активные категории.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param kind: Тип позиции или категории: товар либо питомец.
+    :return: Результат операции типа list[CatalogCategory].
+    """
     context.parameters = {"kind": kind}
     result = controller.categories(context, True)
     return decode_response(result, response)
@@ -566,7 +757,13 @@ def list_admin_categories(
     controller: Controller,
     response: Response,
 ) -> list[CatalogCategory]:
-    """Все категории."""
+    """Все категории.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :return: Результат операции типа list[CatalogCategory].
+    """
     result = controller.categories(context, False)
     return decode_response(result, response)
 
@@ -586,7 +783,14 @@ def create_category(
     response: Response,
     body: Annotated[CategoryCommand, BeforeValidator(CategoryCommand.from_wire), Body()],
 ) -> CatalogCategory:
-    """Создать категорию."""
+    """Создать категорию.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :return: Результат операции типа CatalogCategory.
+    """
     context.body = body
     result = controller.save_category(context, None)
     return decode_response(result, response)
@@ -608,7 +812,15 @@ def update_category(
     body: Annotated[CategoryCommand, BeforeValidator(CategoryCommand.from_wire), Body()],
     resource_id: Annotated[UUID, Path(alias="id")],
 ) -> CatalogCategory:
-    """Обновить или деактивировать категорию."""
+    """Обновить или деактивировать категорию.
+
+    :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+    :param controller: Контроллер соответствующей операции, предоставленный зависимостью FastAPI.
+    :param response: Ответ FastAPI, в который переносится HTTP-статус результата контроллера.
+    :param body: Модель тела запроса после разбора JSON и проверки FastAPI.
+    :param resource_id: UUID ресурса из параметра пути.
+    :return: Результат операции типа CatalogCategory.
+    """
     context.parameters = {"id": resource_id}
     context.body = body
     result = controller.save_category(context, resource_id)

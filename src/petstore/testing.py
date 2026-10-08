@@ -1,4 +1,4 @@
-"""Opt-in CLI for dedicated training/test databases; never a public reset endpoint."""
+"""Явно включаемые команды только для изолированной учебной базы."""
 
 import argparse
 import io
@@ -25,7 +25,11 @@ PET_ID = UUID(int=20)
 
 
 def require_test_database(settings: Settings) -> None:
-    """Require both explicit opt-in and a dedicated name; reject the normal petstore database."""
+    """Разрешает учебную операцию только после явного включения и выбора отдельной базы.
+
+    :param settings: Настройки приложения и его инфраструктурных подключений.
+    :return: Ничего не возвращает.
+    """
     name = urlsplit(settings.db_url).path.removeprefix("/")
     dedicated = name in {"petstore_python_test", "petstore_training"} or re.fullmatch(
         r"petstore_training_[a-f0-9]{12}", name
@@ -35,14 +39,25 @@ def require_test_database(settings: Settings) -> None:
 
 
 def verify_connected_database(connection: DbConnection, settings: Settings) -> None:
-    """Do not trust a claimed URL: the actual connection must point at that isolated database."""
+    """Проверяет фактическую базу соединения, а не только заявленный URL.
+
+    :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+    :param settings: Настройки приложения и его инфраструктурных подключений.
+    :return: Ничего не возвращает.
+    """
     row = connection.execute("SELECT current_database() AS name").fetchone()
     if row is None or row["name"] != urlsplit(settings.db_url).path.removeprefix("/"):
         raise ValueError("Actual connection is not the requested isolated database")
 
 
 def expire_order(database: Database, settings: Settings, identifier: UUID) -> None:
-    """Expire only an unpaid placed order in the isolated lab, using the real stock reconciliation."""
+    """Просрочивает неоплаченный размещённый заказ в изолированном стенде и освобождает резерв.
+
+    :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+    :param settings: Настройки приложения и его инфраструктурных подключений.
+    :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+    :return: Ничего не возвращает.
+    """
     require_test_database(settings)
     with database.connect() as connection:
         verify_connected_database(connection, settings)
@@ -58,10 +73,12 @@ def expire_order(database: Database, settings: Settings, identifier: UUID) -> No
 
 
 def reset_lab(database: Database, settings: Settings, confirmed: bool = False) -> Row:
-    """Restore a known lab dataset; preserve Flyway history and invalidate old demo sessions.
+    """Восстанавливает учебные данные, сохраняет историю Flyway и отзывает прежние сессии.
 
-    :param confirmed: Explicit destructive-reset acknowledgment for this isolated database only.
-    :return: Fixed IDs for examples, without credentials, tokens or personal data.
+    :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+    :param settings: Настройки приложения и его инфраструктурных подключений.
+    :param confirmed: Явное разрешение сброса только изолированной учебной базы.
+    :return: Результат операции типа Row.
     """
     require_test_database(settings)
     if not confirmed:
@@ -150,7 +167,10 @@ def reset_lab(database: Database, settings: Settings, confirmed: bool = False) -
 
 
 def main() -> None:
-    """Run only a requested isolated-lab action; fail closed without echoing database settings."""
+    """Выполняет выбранную операцию изолированного стенда без вывода настроек базы.
+
+    :return: Ничего не возвращает.
+    """
     parser = argparse.ArgumentParser(description="Isolated Petstore test support")
     commands = parser.add_subparsers(dest="command", required=True)
     reset = commands.add_parser("reset")

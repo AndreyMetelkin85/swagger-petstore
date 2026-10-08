@@ -1,4 +1,4 @@
-"""Categories, product/pet cards, publication and versioned inventory."""
+"""Бизнес-правила и согласование операций приложения."""
 
 import json
 from typing import Any
@@ -21,15 +21,25 @@ from petstore.service.exceptions import ApiException
 
 
 class CatalogService:
-    """Coordinate catalog rules and writes using one transaction per command."""
+    """Правила каталога и запись в одной транзакции на команду."""
 
     def __init__(self, database: Database) -> None:
-        """Use the application pool without opening independent transactions."""
+        """Настраивает зависимости операции на общем пуле приложения.
+
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
+        """
         self.database = database
 
     @staticmethod
     def version(row: Row, expected: int | None, code: str = "PRODUCT_VERSION_CONFLICT") -> None:
-        """Reject missing/stale optimistic versions before any mutation."""
+        """Отклоняет отсутствующую или устаревшую версию до изменения данных.
+
+        :param row: Строка базы данных для обработки или преобразования.
+        :param expected: Ожидаемый SHA-256 загружаемой библиотеки.
+        :param code: Одноразовый код ссылки либо машинный код ошибки согласно операции.
+        :return: Ничего не возвращает.
+        """
         if expected is None:
             raise ApiException(
                 422,
@@ -41,7 +51,12 @@ class CatalogService:
             raise ApiException(409, code, "Reload the current record before updating")
 
     def categories(self, public: bool, kind: str | None = None) -> list[Row]:
-        """List active public categories or all administrator categories."""
+        """Возвращает активные публичные категории либо все категории для администратора.
+
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :return: Результат операции типа list[Row].
+        """
         with self.database.connect() as connection:
             rows = CatalogData.categories(connection, public, kind).fetchall()
             return [
@@ -57,7 +72,12 @@ class CatalogService:
             ]
 
     def save_category(self, request: CategoryCommand, identifier: UUID | None = None) -> Row:
-        """Create/update a category without deleting associated cards."""
+        """Создаёт или меняет категорию без удаления связанных карточек.
+
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Row.
+        """
         try:
             with self.database.connect() as connection:
                 if identifier is None:
@@ -90,7 +110,14 @@ class CatalogService:
     def category(
         connection: DbConnection, identifier: UUID | None, kind: str, required: bool = False
     ) -> None:
-        """Validate category kind/activity under a shared row lock."""
+        """Проверяет тип и активность категории под совместной блокировкой строки.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param required: Считать ли отсутствие значения ошибкой.
+        :return: Ничего не возвращает.
+        """
         if identifier is None:
             if required:
                 raise ApiException(
@@ -112,7 +139,15 @@ class CatalogService:
     def set_gallery(
         connection: DbConnection, kind: str, identifier: UUID, images: list[ImageReference], name: str
     ) -> None:
-        """Lock all referenced media before replacing gallery entries."""
+        """Блокирует все используемые изображения перед заменой связей галереи.
+
+        :param connection: Открытое соединение текущей транзакции; повторная транзакция не создаётся.
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param images: Проверенные элементы галереи в порядке отображения.
+        :param name: Имя поля, параметра или ресурса текущей операции.
+        :return: Ничего не возвращает.
+        """
         for media_id in sorted({image.media_id for image in images}, key=str):
             if CatalogData.lock_media(connection, media_id).fetchone() is None:
                 raise ApiException(404, "MEDIA_NOT_FOUND", "Gallery media was not found")
@@ -130,7 +165,12 @@ class CatalogService:
             )
 
     def save(self, request: ProductCommand | PetCardCommand, identifier: UUID | None = None) -> Row:
-        """Save a full versioned card; stock/publication remain dedicated operations."""
+        """Сохраняет полную карточку по версии; остаток и публикация меняются отдельными операциями.
+
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :return: Результат операции типа Row.
+        """
         kind = "product" if isinstance(request, ProductCommand) else "pet"
         try:
             with self.database.connect() as connection:
@@ -198,7 +238,13 @@ class CatalogService:
             ) from exc
 
     def get(self, kind: str, identifier: UUID, public: bool) -> Row:
-        """Return an admin card or only a published public card."""
+        """Возвращает административную карточку либо только опубликованную публичную.
+
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :return: Результат операции типа Row.
+        """
         with self.database.connect() as connection:
             row = CatalogData.get(connection, kind, identifier).fetchone()
             if row is None or (public and row["publication_status"] != "PUBLISHED"):
@@ -210,7 +256,14 @@ class CatalogService:
             return CatalogData.public(connection, kind, row)
 
     def publish(self, kind: str, identifier: UUID, version: int, target: str) -> Row:
-        """Versioned publication; availability/stock is not changed."""
+        """Меняет публикацию по версии, не изменяя доступность и остаток.
+
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param version: Ожидаемая версия записи для защиты от конкурентного изменения.
+        :param target: Целевое состояние жизненного цикла.
+        :return: Результат операции типа Row.
+        """
         with self.database.connect() as connection:
             row = CatalogData.locked(connection, kind, identifier)
             self.version(
@@ -270,11 +323,21 @@ class CatalogService:
 
     @staticmethod
     def publication_fields(request: ProductCommand | PetCardCommand, has_images: bool) -> None:
-        """Reject incomplete publication/replacement with field errors, without changing the draft."""
+        """Отклоняет неполную публикацию или замену с ошибками полей, не меняя черновик.
+
+        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
+        :param has_images: Есть ли у карточки изображения.
+        :return: Ничего не возвращает.
+        """
         errors: list[dict[str, str]] = []
 
         def require(field: str, present: bool) -> None:
-            """Append a safe public field error without submitted values."""
+            """Добавляет безопасную ошибку поля без переданных клиентом значений.
+
+            :param field: Публичное имя проверяемого поля.
+            :param present: Передано ли поле явно, включая null.
+            :return: Ничего не возвращает.
+            """
             if not present:
                 errors.append({"field": field, "message": "Field is required for publication"})
 
@@ -302,7 +365,13 @@ class CatalogService:
             raise ApiException(422, code, "Complete the required fields before publishing", errors)
 
     def adjust_stock(self, identifier: UUID, command: StockCommand, actor: Row) -> Row:
-        """Keep available inventory nonnegative and append an immutable adjustment audit."""
+        """Сохраняет неотрицательный доступный остаток и неизменяемую запись корректировки.
+
+        :param identifier: UUID целевой записи, уже проверенный вызывающим кодом.
+        :param command: Проверенная команда изменения, подготовленная вызывающим слоем.
+        :param actor: Авторизованный пользователь, выполняющий операцию.
+        :return: Результат операции типа Row.
+        """
         with self.database.connect() as connection:
             row = CatalogData.locked(connection, "product", identifier)
             self.version(row, command.version)
@@ -317,7 +386,13 @@ class CatalogService:
             return CatalogData.public(connection, "product", updated)
 
     def find_all(self, kind: str, public: bool, query: dict[str, Any]) -> Row:
-        """Filter/search/sort with bound values and a bounded page size."""
+        """Применяет поиск, фильтры и сортировку с параметрами SQL и ограниченным размером страницы.
+
+        :param kind: Тип позиции или категории: товар либо питомец.
+        :param public: Ограничивать ли выборку опубликованными и активными данными.
+        :param query: Текст запроса или разобранные фильтры текущей операции.
+        :return: Результат операции типа Row.
+        """
         try:
             page, size = int(query.get("page", 1)), int(query.get("pageSize", 24))
             if not 1 <= page <= 1000000 or not 1 <= size <= 100:

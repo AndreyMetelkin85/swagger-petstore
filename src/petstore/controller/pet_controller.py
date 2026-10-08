@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from starlette.responses import Response
 
@@ -15,19 +15,21 @@ from petstore.utils.responses import Responses
 
 
 class PetController:
-    """Public catalog reads and administrator-managed pet writes."""
+    """Публичный просмотр питомцев и административные изменения каталога."""
 
     def __init__(self, database: Database) -> None:
-        """Configure the pet repository.
+        """Настраивает зависимости операции на общем пуле приложения.
 
-        :param database: Application pool.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.data = PetData(database)
 
     def find_pets_by_status(self, context: RequestContext) -> Response:
-        """Search the original comma-separated status filter.
+        """Ищет питомцев по статусам, перечисленным через запятую.
 
-        :param context: Public search request.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         status = context.parameters["status"]
         if not status or not status.strip():
@@ -37,9 +39,10 @@ class PetController:
         return Responses(self.data.find_pet_by_status(status))
 
     def find_pets_by_tags(self, context: RequestContext) -> Response:
-        """Search pets by their tag names.
+        """Ищет питомцев по названиям тегов.
 
-        :param context: Public tag query.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         tags = context.parameters["tags"]
         if not tags:
@@ -47,24 +50,27 @@ class PetController:
         return Responses(self.data.find_pet_by_tags(tags))
 
     def get_pet_by_id(self, context: RequestContext) -> Response:
-        """Read one public pet by UUID.
+        """Возвращает публичную карточку питомца по UUID.
 
-        :param context: Catalog path parameter.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return Responses(self.data.get_pet_by_id(context.identifier("petId")))
 
     def add_pet(self, context: RequestContext) -> Response:
-        """Create a pet only as an administrator.
+        """Создаёт питомца только по запросу администратора.
 
-        :param context: Authorized creation request.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         return Responses(self.data.create_pet(context.validated(PetCreateRequest, V.pet)), status_code=201)
 
     def update_pet(self, context: RequestContext) -> Response:
-        """Update a pet only with the current optimistic version.
+        """Обновляет питомца с проверкой текущей версии.
 
-        :param context: Authorized full update.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         return Responses(
@@ -72,9 +78,10 @@ class PetController:
         )
 
     def delete_pet(self, context: RequestContext) -> Response:
-        """Delete an unused pet as an administrator.
+        """Удаляет неиспользуемого питомца только как ADMIN.
 
-        :param context: Authorized deletion request.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         self.data.delete_pet_if_unused(context.identifier("petId"))

@@ -15,6 +15,10 @@ from petstore.service.exceptions import ApiException
 
 @pytest.fixture
 def client():
+    """Предоставляет HTTP-клиент текущего изолированного сценария.
+
+    :return: Результат описанной проверки или подготовки тестовых данных.
+    """
     database = Mock(spec=Database)
     database.is_healthy.return_value = True
     app = create_app(database=database, start_database=False)

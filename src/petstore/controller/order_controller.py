@@ -1,4 +1,4 @@
-"""Controllers preserve operation IDs, roles, response codes and service boundaries."""
+"""Авторизация и передача HTTP-команд сервисам приложения."""
 
 from starlette.responses import Response
 
@@ -14,44 +14,49 @@ from petstore.utils.responses import Responses, public_order
 
 
 class OrderController:
-    """Drafts, checkout, lifecycle actions and role-aware deletion."""
+    """Черновики, оформление, состояния и удаление заказов с проверкой ролей."""
 
     def __init__(self, database: Database) -> None:
-        """Configure the order repository.
+        """Настраивает зависимости операции на общем пуле приложения.
 
-        :param database: Application pool.
+        :param database: Общий пул соединений PostgreSQL этого экземпляра приложения.
+        :return: Ничего не возвращает.
         """
         self.data = OrderData(database)
 
     def get_inventory(self, context: RequestContext) -> Response:
-        """Read order inventory totals only as an administrator.
+        """Возвращает сводку заказов только администратору.
 
-        :param context: Administrator request.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         context.authorize("ADMIN")
         return Responses(self.data.get_count_by_status())
 
     def list_orders(self, context: RequestContext) -> Response:
-        """List all orders for administrators or only the caller's orders.
+        """Возвращает все заказы ADMIN или только заказы текущего покупателя.
 
-        :param context: Authenticated list request.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return Responses(
             [public_order(row) for row in self.data.find_all(context.authorize("USER", "ADMIN"))]
         )
 
     def get_order_by_id(self, context: RequestContext) -> Response:
-        """Read an order after checking ownership.
+        """Возвращает заказ после проверки владельца.
 
-        :param context: Authenticated order UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("USER", "ADMIN")
         return Responses(public_order(self.data.get_order_by_id(context.identifier("orderId"), actor)))
 
     def create_order_draft(self, context: RequestContext) -> Response:
-        """Create a draft without reserving a pet.
+        """Создаёт черновик без резервирования питомца.
 
-        :param context: Authenticated draft payload.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("USER", "ADMIN")
         return Responses(
@@ -60,9 +65,10 @@ class OrderController:
         )
 
     def update_order_draft(self, context: RequestContext) -> Response:
-        """Replace editable fields of an owned draft.
+        """Заменяет редактируемые поля собственного черновика.
 
-        :param context: Authenticated draft UUID and payload.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize("USER", "ADMIN")
         return Responses(
@@ -74,9 +80,10 @@ class OrderController:
         )
 
     def place_order_draft(self, context: RequestContext) -> Response:
-        """Capture snapshots and reserve the draft's pet.
+        """Сохраняет снимки оформления и резервирует питомца из черновика.
 
-        :param context: Authenticated draft UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return Responses(
             public_order(
@@ -85,47 +92,53 @@ class OrderController:
         )
 
     def delete_order(self, context: RequestContext) -> Response:
-        """Delete only a draft or an administrator-deletable terminal order.
+        """Удаляет только черновик либо завершённый заказ, доступный для удаления ADMIN.
 
-        :param context: Authenticated order UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         self.data.delete_order(context.identifier("orderId"), context.authorize("USER", "ADMIN"))
         return Response(status_code=204)
 
     def transition(self, context: RequestContext, target: OrderStatus, admin_only: bool) -> Response:
-        """Apply an authorized lifecycle action.
+        """Проверяет права и выполняет разрешённый переход состояния заказа.
 
-        :param context: Order UUID and Bearer token.
-        :param target: Destination state.
-        :param admin_only: Whether the action is restricted to ADMIN.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :param target: Целевое состояние жизненного цикла.
+        :param admin_only: Требуется ли административный доступ к неопубликованным данным.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         actor = context.authorize(*(("ADMIN",) if admin_only else ("USER", "ADMIN")))
         return Responses(public_order(self.data.transition(context.identifier("orderId"), target, actor)))
 
     def approve_order(self, context: RequestContext) -> Response:
-        """Approve a payable or preserved legacy order as ADMIN.
+        """Подтверждает допустимый заказ с проверкой роли ADMIN.
 
-        :param context: Authenticated order UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return self.transition(context, OrderStatus.APPROVED, True)
 
     def ship_order(self, context: RequestContext) -> Response:
-        """Ship an approved order as ADMIN.
+        """Переводит подтверждённый заказ в отправленный с проверкой ADMIN.
 
-        :param context: Authenticated order UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return self.transition(context, OrderStatus.SHIPPED, True)
 
     def deliver_order(self, context: RequestContext) -> Response:
-        """Deliver a shipped order and mark its pet sold.
+        """Завершает доставку отправленного заказа и отмечает питомца проданным.
 
-        :param context: Authenticated order UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return self.transition(context, OrderStatus.DELIVERED, True)
 
     def cancel_order(self, context: RequestContext) -> Response:
-        """Cancel an owned eligible order and refund if paid.
+        """Отменяет допустимый собственный заказ и возвращает успешную оплату.
 
-        :param context: Authenticated order UUID.
+        :param context: Контекст текущего HTTP-запроса с сервисом авторизации и разобранными данными.
+        :return: HTTP-ответ с публичными данными и статусом операции.
         """
         return self.transition(context, OrderStatus.CANCELLED, False)

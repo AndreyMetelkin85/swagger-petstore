@@ -1,6 +1,34 @@
+# Изолированный стенд только для тестов бэкенда.
 name: petstore-python-preview
-
 services:
+  postgres:
+    image: postgres:16.15-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    container_name: petstore-python-db
+    environment:
+      POSTGRES_DB: petstore
+      POSTGRES_USER: petstore
+      POSTGRES_PASSWORD: petstore
+    command: [postgres, -c, log_min_error_statement=panic, -c, log_error_verbosity=terse]
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - python-preview-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U petstore -d petstore]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  migrations:
+    image: swagger-petstore-python:preview
+    entrypoint: [/opt/flyway/flyway]
+    command: [-locations=filesystem:/app/resources/db/migration, migrate]
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/petstore
+      FLYWAY_USER: petstore
+      FLYWAY_PASSWORD: petstore
+    depends_on:
+      postgres:
+        condition: service_healthy
   api:
     build:
       context: ..
@@ -8,26 +36,65 @@ services:
     image: swagger-petstore-python:preview
     container_name: petstore-python-preview
     environment:
+      PETSTORE_DB_URL: postgresql://postgres:5432/petstore
+      PETSTORE_DB_USER: petstore
+      PETSTORE_DB_PASSWORD: petstore
+      PETSTORE_TOKEN_SECRET: isolated-backend-test-secret-not-for-production-2026
       PETSTORE_PUBLIC_BASE_URL: http://localhost:8081/api/v3
       PETSTORE_EXPOSE_TEST_LINKS: "true"
       PETSTORE_DEMO_CATALOG: "false"
-      PETSTORE_SMTP_HOST: 127.0.0.1
+      PETSTORE_SMTP_HOST: mail
       PETSTORE_SMTP_PORT: "2525"
       PETSTORE_SMTP_FROM: noreply@petstore.test
     ports:
       - "127.0.0.1:8081:8080"
-      - "127.0.0.1:5433:5432"
-      - "127.0.0.1:8091:8090"
+    volumes:
+      - python-preview-media:/var/lib/petstore/media
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      mail:
+        condition: service_healthy
+  mail:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mail
+    image: swagger-petstore-mail:preview
+    container_name: petstore-mail
+    environment:
+      ServerOptions__Urls: http://0.0.0.0:8025
+      ServerOptions__Port: "2525"
+      ServerOptions__ImapPort: "1143"
+      ServerOptions__HostName: mail.petstore.test
+      ServerOptions__TlsMode: None
+      ServerOptions__DisableIPv6: "true"
+      ServerOptions__AuthenticationRequired: "false"
+      ServerOptions__WebAuthenticationRequired: "false"
+      ServerOptions__DeliverMessagesToUsersDefaultMailbox: "false"
+      ServerOptions__Mailboxes__0__Name: User1
+      ServerOptions__Mailboxes__0__Recipients: user1@petstore.test
+      ServerOptions__Mailboxes__1__Name: User2
+      ServerOptions__Mailboxes__1__Recipients: user2@petstore.test
+      ServerOptions__Mailboxes__2__Name: Tests
+      ServerOptions__Mailboxes__2__Recipients: "*"
+      ServerOptions__Users__0__Username: user1
+      ServerOptions__Users__0__Password: mail-test-only
+      ServerOptions__Users__0__DefaultMailbox: User1
+      ServerOptions__Users__1__Username: user2
+      ServerOptions__Users__1__Password: mail-test-only
+      ServerOptions__Users__1__DefaultMailbox: User2
+      ServerOptions__Users__2__Username: tests
+      ServerOptions__Users__2__Password: mail-test-only
+      ServerOptions__Users__2__DefaultMailbox: Tests
+      RelayOptions__SmtpServer: ""
+      RelayOptions__AutomaticRelayExpression: ""
+      Serilog__MinimumLevel__Default: Warning
+    ports:
       - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_HTTP_PORT:-8025}:8025"
       - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_SMTP_PORT:-2525}:2525"
       - "127.0.0.1:${PETSTORE_PREVIEW_MAIL_IMAP_PORT:-1143}:1143"
     volumes:
-      - python-preview-data:/var/lib/postgresql/data
-      - python-preview-media:/var/lib/petstore/media
       - mail-data:/smtp4dev
-    restart: unless-stopped
-
-
 volumes:
   python-preview-media:
     name: ${PETSTORE_PREVIEW_MEDIA_VOLUME:-petstore-python-preview-media-data}
