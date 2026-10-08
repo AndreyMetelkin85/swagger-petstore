@@ -13,7 +13,7 @@ def test_api_container_has_only_api_process_and_media_volume():
         pytest.skip("Укажите контейнер изолированного API-стенда")
     assert container == "petstore-python-preview"
     processes = subprocess.run(
-        ["docker", "top", container, "-eo", "args"],
+        ["docker", "top", container, "-eo", "pid,args"],
         check=True,
         capture_output=True,
         text=True,
