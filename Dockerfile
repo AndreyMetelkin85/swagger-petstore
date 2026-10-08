@@ -29,7 +29,7 @@ ARG SECURITY_UPDATE_EPOCH=local
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     tini util-linux \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system petstore && useradd --system --gid petstore --home-dir /app petstore
+    && groupadd --system --gid 998 petstore && useradd --system --uid 998 --gid petstore --home-dir /app petstore
 
 LABEL org.opencontainers.image.title="Lapki FastAPI backend" \
       org.opencontainers.image.description="Python API and compatible Flyway migration tools" \
