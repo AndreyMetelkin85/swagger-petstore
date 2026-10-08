@@ -176,7 +176,7 @@ def test_registration_resend_and_hidden_reset_link_arrive_in_local_mail(mail_lab
     body = httpx.get(ui + f"/api/Messages/{first['id']}/plaintext", timeout=5).text
     assert "24 часа" in body
     assert request["password"] not in body
-    # Read the same MIME message through IMAP using its unique recipient marker.
+    # Читаем то же MIME-письмо по IMAP с уникальной меткой получателя.
     with imaplib.IMAP4("127.0.0.1", int(os.getenv("PETSTORE_MAIL_IMAP_PORT", "1143")), timeout=5) as mailbox:
         assert mailbox.login("tests", "mail-test-only")[0] == "OK"
         assert mailbox.select("INBOX", readonly=True)[0] == "OK"

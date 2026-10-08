@@ -32,7 +32,7 @@ def wait_ready(client, container=None):
     :param container: Разрешённый контейнер изолированного тестового стенда.
     :return: Результат описанной проверки или подготовки тестовых данных.
     """
-    # Flyway/JRE startup under ARM emulation can exceed a native one-minute budget.
+    # Запуск Flyway под эмуляцией ARM может занять больше минуты.
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         try:
@@ -101,7 +101,7 @@ def verify_recreation(client, container, media, order, email, password, digest):
         if docker("ps", "-aq", "--filter", "name=^/" + replacement + "$"):
             labels = json.loads(docker("inspect", "--format", "{{json .Config.Labels}}", replacement))
             assert labels["petstore.commerce-test"] == owner
-            # Never remove volumes: both belong to the original isolated candidate.
+            # Медиатом принадлежит исходному тестовому кандидату и не удаляется.
             docker("rm", "--force", replacement)
         docker("start", container)
         wait_ready(client, container)
@@ -296,7 +296,7 @@ def shop():
             assert replay.status_code == 200 and replay.json()["id"] == response.json()["id"]
             yield client, container, product, media, order, email, password
         finally:
-            # Never delete by username/email: UUIDs below were recorded only after successful creation.
+            # UUID записаны после успешного создания; по имени или email записи не удаляем.
             admin = login(client, "admin@example.com", "admin123")
             for identifier in owned["orders"]:
                 current = client.get("/store/orders/" + identifier, headers=admin)

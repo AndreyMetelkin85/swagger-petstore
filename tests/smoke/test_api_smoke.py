@@ -1237,7 +1237,7 @@ def test_parallel_resends_leave_only_latest_link_valid(client: httpx.Client) -> 
         responses = list(executor.map(resend, range(2)))
     assert all(response.status_code == 200 for response in responses)
     assert_error(client.get(api_path(registration["confirmationUrl"])), 400, "INVALID_CONFIRMATION_LINK")
-    # Either returned link may be the latest; only that link can activate the account.
+    # Любая из двух ссылок может оказаться последней; аккаунт активирует только она.
     user_id = registration["user"]["id"]
     first_confirmation = client.get(api_path(responses[0].json()["confirmationUrl"]))
     if first_confirmation.status_code == 400:
