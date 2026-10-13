@@ -144,8 +144,26 @@ def test_main_compose_healthcheck_works_without_curl_and_keeps_volume():
     assert compose["services"]["mail"]["volumes"] == ["mail-data:/smtp4dev"]
     assert compose["volumes"]["petstore-data"]["name"] == "${PETSTORE_DB_VOLUME:-swagger-petstore-db-data}"
     assert api["environment"]["PETSTORE_SMTP_HOST"] == "mail"
-    assert set(compose["services"]) == {"backend", "frontend", "postgres", "mail", "migrations"}
+    assert set(compose["services"]) == {"backend", "frontend", "postgres", "mail", "migrations", "mobile"}
     assert compose["volumes"]["mail-data"]["name"] == "${PETSTORE_MAIL_VOLUME:-swagger-petstore-mail-data}"
+
+
+def test_mobile_compose_delivers_apk_without_privileged_android_or_shared_data():
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    mobile = compose["services"]["mobile"]
+    assert mobile["image"] == "${MOBILE_IMAGE:-andymentor/lapki-mobile:latest}"
+    assert mobile["ports"] == ["127.0.0.1:${MOBILE_PORT:-8091}:8080"]
+    assert mobile["depends_on"] == {"backend": {"condition": "service_healthy"}}
+    assert mobile["read_only"] is True
+    assert mobile["tmpfs"] == ["/tmp"]
+    assert mobile["cap_drop"] == ["ALL"]
+    assert mobile["security_opt"] == ["no-new-privileges:true"]
+    assert not mobile.get("privileged")
+    assert not mobile.get("volumes")
+    assert not mobile.get("build")
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "MOBILE_IMAGE=andymentor/lapki-mobile:latest" in example
+    assert "MOBILE_PORT=8091" in example
 
 
 def test_separate_mail_is_loopback_only_and_has_no_external_relay():

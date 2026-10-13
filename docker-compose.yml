@@ -1,4 +1,4 @@
-# Общий запуск готовых образов; исходники фронтенда находятся в lapki-frontend.
+# Общий запуск готовых образов API, веба и доставки Android APK.
 x-api-image: &api-image ${PETSTORE_IMAGE:-andymentor/swagger-petstore}:${PETSTORE_IMAGE_TAG:-latest}
 x-database: &database
   PETSTORE_DB_URL: postgresql://postgres:5432/${POSTGRES_DB:-petstore}
@@ -71,6 +71,22 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
+
+  mobile:
+    image: ${MOBILE_IMAGE:-andymentor/lapki-mobile:latest}
+    ports:
+      - "127.0.0.1:${MOBILE_PORT:-8091}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   mail:
