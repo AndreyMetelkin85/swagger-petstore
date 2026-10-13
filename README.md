@@ -6,8 +6,9 @@ Python/FastAPI API для обучения ручному и автоматиз�
 
 - **Этот репозиторий:** API, бизнес-правила, SQL-миграции, Swagger, серверные тесты и инфраструктура общего стенда.
 - **[lapki-frontend](https://github.com/AndreyMetelkin85/lapki-frontend):** React, UI, DTO-адаптеры, браузерные тесты, сборка и отдельный образ фронтенда.
+- **[lapki-mobile](https://github.com/AndreyMetelkin85/lapki-mobile):** нативный Android-клиент, APK и отдельный образ его доставки. Приложение запускается в Android Studio, контейнер выдаёт APK.
 
-Исходники фронтенда не копируются в бэкенд. Каждый проект имеет собственный Dockerfile и CI. Общий `docker-compose.yml` запускает готовые образы обоих проектов; клонировать фронтенд для запуска не нужно.
+Исходники клиентов не копируются в бэкенд. Общий `docker-compose.yml` запускает готовые образы трёх проектов; клонировать клиентские репозитории для запуска не нужно.
 
 ## Запуск опубликованного стенда
 
@@ -27,6 +28,7 @@ docker compose up -d --wait --wait-timeout 180
 | Приложение | Адрес по умолчанию |
 | --- | --- |
 | Магазин | http://localhost:8090 |
+| Android APK | http://localhost:8091 |
 | Swagger и API | http://localhost:8080 |
 | Тестовая почта | http://localhost:8025 |
 | PostgreSQL | localhost:5432 |
@@ -39,6 +41,7 @@ docker compose up -d --wait --wait-timeout 180
 | Сервис Compose | Ответственность |
 | --- | --- |
 | `frontend` | React и проксирование `/api/v3` в API |
+| `mobile` | Страница скачивания проверенного APK для Android-эмулятора x86_64 |
 | `backend` | FastAPI, без встроенных PostgreSQL, React и SMTP |
 | `postgres` | Постоянная база данных |
 | `mail` | smtp4dev: просмотр писем, SMTP и IMAP |
