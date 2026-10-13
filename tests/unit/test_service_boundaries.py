@@ -25,7 +25,7 @@ def test_backend_does_not_contain_frontend_sources_or_node_build():
 def test_shared_compose_separates_processes_and_preserves_data_volumes():
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
-    assert set(services) == {"frontend", "backend", "postgres", "migrations", "mail"}
+    assert set(services) == {"frontend", "backend", "postgres", "migrations", "mail", "mobile"}
     assert all("build" not in service for service in services.values())
     assert services["migrations"]["image"] == services["backend"]["image"]
     assert services["migrations"]["entrypoint"] == ["/opt/flyway/flyway"]
