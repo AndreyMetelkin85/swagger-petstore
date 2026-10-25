@@ -43,7 +43,7 @@ def test_every_openapi_operation_is_registered_once(client):
         if route.path not in {"/api/v3/openapi.json", "/api/v3/openapi.yaml"}
     }
     assert actual == expected
-    assert len(expected) == 78
+    assert len(expected) == 79
 
 
 def test_original_schema_security_and_operation_ids_are_preserved(client):

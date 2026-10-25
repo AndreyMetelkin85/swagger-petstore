@@ -10,6 +10,7 @@ from petstore.model.requests import (
     PetUpdateRequest,
 )
 from petstore.service.exceptions import ApiException
+from petstore.service.pet_tag_service import PetTagService
 from petstore.service.validation_service import ValidationService as V
 from petstore.utils.responses import Responses
 
@@ -24,6 +25,14 @@ class PetController:
         :return: Ничего не возвращает.
         """
         self.data = PetData(database)
+
+    def list_pet_tags(self, context: RequestContext) -> Response:
+        """Возвращает публичный справочник допустимых тегов без авторизации и обращения к БД.
+
+        :param context: Контекст публичного запроса справочника тегов.
+        :return: HTTP-ответ со списком названий тегов и русских подписей.
+        """
+        return Responses(PetTagService.list_tags())
 
     def find_pets_by_status(self, context: RequestContext) -> Response:
         """Ищет питомцев по статусам, перечисленным через запятую.

@@ -10,7 +10,7 @@ from starlette.responses import Response
 from petstore.api.dependencies import Context, ContractRoute, decode_response
 from petstore.controller.pet_controller import PetController
 from petstore.model.requests import PetCreateRequest, PetUpdateRequest
-from petstore.model.responses import Pet
+from petstore.model.responses import Pet, PetTagOption
 
 router = APIRouter(prefix="/api/v3", route_class=ContractRoute)
 
@@ -25,6 +25,26 @@ def get_controller(context: Context) -> PetController:
 
 
 Controller = Annotated[PetController, Depends(get_controller)]
+
+
+@router.get(
+    "/catalog/pet-tags",
+    name="listPetTags",
+    operation_id="listPetTags",
+    tags=["legacy"],
+    response_model=list[PetTagOption],
+    response_model_exclude_unset=True,
+    status_code=200,
+)
+def list_pet_tags(context: Context, controller: Controller, response: Response) -> list[PetTagOption]:
+    """Возвращает фиксированные названия тегов для выбора перед созданием питомца.
+
+    :param context: Контекст публичного запроса без обязательной авторизации.
+    :param controller: Контроллер операций с питомцами текущего приложения.
+    :param response: Ответ FastAPI, в который переносится статус контроллера.
+    :return: Список разрешённых названий и русских подписей без UUID.
+    """
+    return decode_response(controller.list_pet_tags(context), response)
 
 
 @router.post(

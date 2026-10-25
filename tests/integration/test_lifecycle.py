@@ -347,13 +347,13 @@ def test_admin_demo_and_users_with_orders_are_protected(scenario):
 def test_pet_version_searches_and_history_protection(scenario):
     _, _, headers = scenario.user()
     pet = scenario.pet()
-    update = {"name": "Edited", "price": "12.99", "version": pet["version"], "tags": [{"name": "python"}]}
+    update = {"name": "Edited", "price": "12.99", "version": pet["version"], "tags": [{"name": "friendly"}]}
     assert scenario.client.put(f"/pet/{pet['id']}", headers=scenario.admin, json=update).status_code == 200
     assert (
         scenario.client.put(f"/pet/{pet['id']}", headers=scenario.admin, json=update).json()["error"]
         == "PET_VERSION_CONFLICT"
     )
-    assert scenario.client.get("/pet/findByTags", params={"tags": "python"}).status_code == 200
+    assert scenario.client.get("/pet/findByTags", params={"tags": "friendly"}).status_code == 200
     assert scenario.client.get("/pet/findByStatus", params={"status": "available,pending"}).status_code == 200
     scenario.draft(pet, headers)
     assert (

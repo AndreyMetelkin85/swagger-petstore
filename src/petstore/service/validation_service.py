@@ -18,9 +18,11 @@ from petstore.model.requests import (
     PetUpdateRequest,
     RegisterRequest,
     RequestModel,
+    TagUpdateRequest,
     UserUpdateRequest,
 )
 from petstore.service.exceptions import ApiException
+from petstore.service.pet_tag_service import UNKNOWN_TAG_MESSAGE, PetTagService
 
 Details = list[dict[str, Any]]
 
@@ -254,7 +256,7 @@ class ValidationService:
         return errors
 
     @classmethod
-    def pet(cls, request: PetCreateRequest) -> Details:
+    def pet(cls, request: PetCreateRequest | PetUpdateRequest) -> Details:
         """Проверяет поля питомца и запрещает изменение серверных полей.
 
         :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
@@ -297,6 +299,14 @@ class ValidationService:
                     cls.add(
                         errors, field, "Tag name may contain only letters, digits, dot, underscore or hyphen"
                     )
+                elif not PetTagService.is_known(tag.name) and not (
+                    isinstance(request, PetUpdateRequest)
+                    and isinstance(tag, TagUpdateRequest)
+                    and tag.id is not None
+                ):
+                    cls.add(errors, field, UNKNOWN_TAG_MESSAGE)
+                if tag is not None and isinstance(request, PetCreateRequest):
+                    cls.extras(tag, "Field is not allowed for this operation", errors, f"tags[{index}].")
         if request.photo_urls is not None:
             if len(request.photo_urls) > 20:
                 cls.add(errors, "photoUrls", "No more than 20 photo URLs are allowed")

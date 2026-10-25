@@ -595,6 +595,33 @@ paths:
                 internalError:
                   value: {status: 500, error: INTERNAL_SERVER_ERROR, message: An unexpected error occurred, details: []}
 
+  /catalog/pet-tags:
+    get:
+      tags: [Pets]
+      summary: Справочник тегов питомцев
+      description: Возвращает фиксированные названия и русские подписи. Выберите name из списка и передайте его в tags при создании питомца; UUID передавать не нужно.
+      operationId: listPetTags
+      security: []
+      responses:
+        '200':
+          description: Разрешённые теги. Список не зависит от наличия питомцев и не требует авторизации.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PetTagOption'
+              example:
+                - {name: friendly, label: Дружелюбный}
+                - {name: vaccinated, label: Привит}
+                - {name: sterilized, label: Стерилизован}
+                - {name: microchipped, label: Чипирован}
+        '500':
+          description: Не удалось получить справочник тегов.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+
   /pet:
     post:
       tags: [Pets]
@@ -606,7 +633,7 @@ paths:
         - bearerAuth: []
       requestBody:
         required: true
-        description: Данные нового питомца. Идентификатор создаётся сервером.
+        description: Данные нового питомца. UUID питомца и тегов создаёт сервер; в tags передаются только name из GET /catalog/pet-tags.
         content:
           application/json:
             schema:
@@ -621,8 +648,7 @@ paths:
                   photoUrls:
                     - https://example.com/pets/luna.jpg
                   tags:
-                    - id: f0c2308f-19f2-4689-a395-7926a5825cd0
-                      name: friendly
+                    - name: friendly
                   status: available
                   price: 15000.00
       responses:
@@ -675,6 +701,20 @@ paths:
                     message: Request validation failed
                     details:
                       - {field: name, message: Pet name is required}
+                clientTagId:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: 'tags[0].id', message: Field is not allowed for this operation}
+                unknownTag:
+                  value:
+                    status: 422
+                    error: VALIDATION_ERROR
+                    message: Request validation failed
+                    details:
+                      - {field: 'tags[0].name', message: Tag name must be selected from the pet tag catalog}
         '500':
           description: Не удалось создать питомца.
           content:
@@ -9209,15 +9249,62 @@ components:
           maxLength: 50
           example: Dogs
 
+    PetTagName:
+      type: string
+      description: Фиксированное название из GET /catalog/pet-tags; регистр имеет значение.
+      enum: [friendly, vaccinated, sterilized, microchipped]
+      example: friendly
+
+    PetTagOption:
+      type: object
+      additionalProperties: false
+      required: [name, label]
+      properties:
+        name:
+          $ref: '#/components/schemas/PetTagName'
+        label:
+          type: string
+          description: Русская подпись для отображения; в запрос питомца передаётся name, а не label.
+          example: Дружелюбный
+
     Tag:
       x-swagger-router-model: io.swagger.petstore.model.Tag
       type: object
       additionalProperties: false
+      description: Тег в ответе API. UUID назначается сервером при создании питомца.
       required: [name]
       properties:
         id:
           type: string
           format: uuid
+          readOnly: true
+          example: f0c2308f-19f2-4689-a395-7926a5825cd0
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.-]+$'
+          example: friendly
+
+    TagCreateRequest:
+      type: object
+      additionalProperties: false
+      description: Тег из фиксированного справочника GET /catalog/pet-tags. Передавайте name из списка; UUID передавать нельзя.
+      required: [name]
+      properties:
+        name:
+          $ref: '#/components/schemas/PetTagName'
+
+    TagUpdateRequest:
+      type: object
+      additionalProperties: false
+      description: Новые метки выбираются из GET /catalog/pet-tags. Переданный UUID сохраняется; историческая метка вне справочника принимается только с прежними UUID и названием того же питомца.
+      required: [name]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Необязательный UUID тега из ранее полученной карточки питомца.
           example: f0c2308f-19f2-4689-a395-7926a5825cd0
         name:
           type: string
@@ -9317,8 +9404,9 @@ components:
           type: array
           maxItems: 20
           nullable: true
+          description: Необязательные метки из GET /catalog/pet-tags. Передавайте только name; UUID создаёт сервер и возвращает в ответе.
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/TagCreateRequest'
         status:
           type: string
           description: Начальный статус питомца. Статус reserved назначается только заказом.
@@ -9368,7 +9456,7 @@ components:
           maxItems: 20
           nullable: true
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/TagUpdateRequest'
         status:
           type: string
           description: Новый статус питомца. Статус reserved назначается только заказом.

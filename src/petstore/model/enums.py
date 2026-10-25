@@ -27,6 +27,15 @@ class PetStatus(StrEnum):
     SOLD = "sold"
 
 
+class PetTagName(StrEnum):
+    """Фиксированные названия тегов, разрешённые для новых меток питомца."""
+
+    FRIENDLY = "friendly"
+    VACCINATED = "vaccinated"
+    STERILIZED = "sterilized"
+    MICROCHIPPED = "microchipped"
+
+
 class OrderStatus(StrEnum):
     """Состояния заказа и явная матрица разрешённых переходов."""
 

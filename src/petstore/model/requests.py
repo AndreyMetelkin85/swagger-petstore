@@ -91,24 +91,38 @@ class Category(RequestModel):
     name: str | None = None
 
 
-class Tag(Category):
-    """Поисковый тег питомца."""
+class TagCreateRequest(RequestModel):
+    """Название тега из фиксированного справочника; UUID и неизвестные поля задавать нельзя."""
+
+    name: str | None = None
 
 
-class PetCreateRequest(RequestModel):
-    """Данные создания питомца администратором."""
+class TagUpdateRequest(TagCreateRequest):
+    """Тег при обновлении питомца с необязательным UUID из ранее полученного ответа."""
+
+    id: UUID | None = None
+
+
+class PetRequest(RequestModel):
+    """Общие поля создания и полного обновления питомца без привязки к DTO тегов."""
 
     name: str | None = None
     category: Category | None = None
-    tags: list[Tag | None] | None = None
     photo_urls: list[str | None] | None = Field(None, alias="photoUrls")
     status: str | None = None
     price: Decimal | None = None
 
 
-class PetUpdateRequest(PetCreateRequest):
+class PetCreateRequest(PetRequest):
+    """Создание питомца с названиями тегов без клиентских идентификаторов."""
+
+    tags: list[TagCreateRequest | None] | None = None
+
+
+class PetUpdateRequest(PetRequest):
     """Полное изменение питомца с защитой ожидаемой версией."""
 
+    tags: list[TagUpdateRequest | None] | None = None
     version: int | None = None
 
 

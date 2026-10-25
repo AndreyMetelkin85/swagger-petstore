@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swagger-petstore"
-version = "1.0.29"
+version = "1.0.30"
 description = "Contract-compatible Python implementation of Swagger Petstore"
 requires-python = ">=3.12"
 dependencies = [

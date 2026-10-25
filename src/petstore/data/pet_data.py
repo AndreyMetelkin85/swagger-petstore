@@ -5,8 +5,9 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 from petstore.data.database import Database, Row
-from petstore.model.requests import PetCreateRequest, PetUpdateRequest
+from petstore.model.requests import PetCreateRequest, PetUpdateRequest, TagUpdateRequest
 from petstore.service.exceptions import PetException
+from petstore.service.pet_tag_service import PetTagService
 
 
 class PetData:
@@ -86,16 +87,24 @@ class PetData:
             return result
 
     @staticmethod
-    def nested(request: PetCreateRequest) -> tuple[str, str, str]:
-        """Назначает отсутствующие UUID вложенным объектам и сериализует JSON-столбцы.
+    def nested(request: PetCreateRequest | PetUpdateRequest) -> tuple[str, str, str]:
+        """Назначает UUID новым тегам и сериализует вложенные поля питомца.
 
-        :param request: Разобранный запрос операции; исходные секреты не записываются в логи.
-        :return: Результат операции типа tuple[str, str, str].
+        При создании UUID тегов всегда генерирует сервер; при обновлении сохраняются переданные UUID.
+
+        :param request: Данные создания либо полного обновления питомца.
+        :return: JSON-строки категории, ссылок на фотографии и тегов для сохранения в БД.
         """
         category: dict[str, Any] | None = None
         if request.category:
             category = {"id": str(request.category.id or uuid4()), "name": request.category.name}
-        tags = [{"id": str(tag.id or uuid4()), "name": tag.name} for tag in request.tags or [] if tag]
+        tags: list[dict[str, str | None]] = []
+        is_update = isinstance(request, PetUpdateRequest)
+        for tag in request.tags or []:
+            if tag is None:
+                continue
+            tag_id = tag.id if is_update and isinstance(tag, TagUpdateRequest) else None
+            tags.append({"id": str(tag_id or uuid4()), "name": tag.name})
         return (
             json.dumps(category, ensure_ascii=False),
             json.dumps(request.photo_urls or [], ensure_ascii=False),
@@ -133,6 +142,7 @@ class PetData:
                 raise PetException(
                     409, "PET_VERSION_CONFLICT", "Pet was changed by another request; reload it and retry"
                 )
+            PetTagService.validate_existing_tags(request, json.loads(current["tags_json"]) or [])
             from petstore.data.order_data import OrderData
 
             active = OrderData.has_active_order(connection, pet_id)

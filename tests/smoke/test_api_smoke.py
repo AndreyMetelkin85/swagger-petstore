@@ -144,7 +144,7 @@ def create_pet(client: httpx.Client, admin_token: str, prefix: str = "AQA") -> d
         json={
             "name": f"{prefix} Pet {uuid4().hex[:8]}",
             "category": {"name": "Automated tests"},
-            "tags": [{"name": "aqa"}],
+            "tags": [{"name": "friendly"}],
             "photoUrls": [],
             "status": "available",
             "price": 15000.00,

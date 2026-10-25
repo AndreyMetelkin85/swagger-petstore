@@ -55,7 +55,7 @@ def test_all_operations_have_native_dependencies_and_response_validation(client)
         assert (route.response_field is not None) == json_response
         assert route.response_model_exclude_unset
         checked.append(route.operation_id)
-    assert len(checked) == len(set(checked)) == 78
+    assert len(checked) == len(set(checked)) == 79
 
 
 @pytest.mark.parametrize(

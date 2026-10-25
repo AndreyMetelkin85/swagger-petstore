@@ -95,7 +95,7 @@ class Scenario:
                 "name": "Python test pet",
                 "price": price,
                 "category": {"name": "Tests"},
-                "tags": [{"name": "python"}],
+                "tags": [{"name": "friendly"}],
                 "photoUrls": [],
             },
         )

@@ -14,6 +14,7 @@ from petstore.model.enums import (
     PaymentAttemptStatus,
     PaymentStatus,
     PetStatus,
+    PetTagName,
     Role,
 )
 from petstore.utils.responses import json_default
@@ -46,10 +47,17 @@ class Category(ResponseModel):
 
 
 class Tag(ResponseModel):
-    """Поисковый тег питомца."""
+    """Тег в ответе API с UUID, назначенным при создании питомца."""
 
     id: UUID | None = None
     name: str | None = None
+
+
+class PetTagOption(ResponseModel):
+    """Допустимое название тега и русская подпись для выбора в интерфейсе."""
+
+    name: PetTagName
+    label: str
 
 
 class User(ResponseModel):
