@@ -66,7 +66,7 @@ def test_create_pet_rejects_names_outside_catalog_even_if_format_is_valid(client
     client.app.state.database.connect.assert_not_called()
 
 
-@pytest.mark.parametrize("value", [str(uuid4()), None, "invalid-uuid", 123, {}])
+@pytest.mark.parametrize("value", ["10000000-0000-4000-8000-000000000099", None, "invalid-uuid", 123, {}])
 def test_create_pet_rejects_client_tag_id_before_writing_to_database(client, value):
     response = client.post(
         "/api/v3/pet",

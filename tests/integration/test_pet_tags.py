@@ -24,7 +24,7 @@ def test_created_tag_can_be_read_found_and_kept_on_pet_update(scenario):
     assert scenario.client.get(f"/pet/{pet['id']}").json()["tags"] == [original_tag]
 
 
-@pytest.mark.parametrize("tag_id", [str(uuid4()), None, "invalid-uuid"])
+@pytest.mark.parametrize("tag_id", ["10000000-0000-4000-8000-000000000099", None, "invalid-uuid"])
 def test_client_cannot_assign_tag_uuid_when_creating_pet(scenario, tag_id):
     response = scenario.client.post(
         "/pet",
